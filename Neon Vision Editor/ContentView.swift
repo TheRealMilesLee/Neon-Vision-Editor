@@ -729,16 +729,17 @@ struct ContentView: View {
                     }
                 }
                 .labelsHidden()
+                .help("Language")
                 .controlSize(.large)
                 .frame(width: 140)
                 .padding(.vertical, 2)
-                .hoverPopover(delay: 1.0) { Text("Language") }
 
                 Button(action: {
                     showAISelectorPopover.toggle()
                 }) {
                     Image(systemName: "brain.head.profile")
                 }
+                .help("AI Model & Settings")
                 // Click popover to choose provider and open API settings.
                 .popover(isPresented: $showAISelectorPopover) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -766,49 +767,43 @@ struct ContentView: View {
                     }
                     .padding(12)
                 }
-                .hoverPopover(delay: 1.0) { Text("AI Model & Settings") }
 
                 Button(action: { showAPISettings = true }) {
                     Image(systemName: "gearshape")
                 }
                 .help("API Settings")
-                .hoverPopover(delay: 1.0) { Text("API Settings") }
 
                 Button(action: { showFindReplace = true }) {
                     Image(systemName: "magnifyingglass")
                 }
-                .help("Find/Replace")
-                .hoverPopover(delay: 1.0) { Text("Find/Replace") }
+                .help("Find & Replace")
 
                 Button(action: { editorFontSize = max(8, editorFontSize - 1) }) {
                     Image(systemName: "textformat.size.smaller")
                 }
                 .help("Decrease Font Size")
-                .hoverPopover(delay: 1.0) { Text("Decrease Font Size") }
 
                 Button(action: { editorFontSize = min(48, editorFontSize + 1) }) {
                     Image(systemName: "textformat.size.larger")
                 }
                 .help("Increase Font Size")
-                .hoverPopover(delay: 1.0) { Text("Increase Font Size") }
 
                 Button(action: {
-    // Clear the SwiftUI binding
-    currentContentBinding.wrappedValue = ""
-    // Also clear the underlying NSTextView immediately so UI reflects the change
-    if let tv = NSApp.keyWindow?.firstResponder as? NSTextView {
-        tv.string = ""
-        tv.didChangeText()
-        tv.setSelectedRange(NSRange(location: 0, length: 0))
-        tv.scrollRangeToVisible(NSRange(location: 0, length: 0))
-    }
-    // Reset caret status
-    caretStatus = "Ln 1, Col 1"
-}) {
-    Image(systemName: "trash")
-}
+                    // Clear the SwiftUI binding
+                    currentContentBinding.wrappedValue = ""
+                    // Also clear the underlying NSTextView immediately so UI reflects the change
+                    if let tv = NSApp.keyWindow?.firstResponder as? NSTextView {
+                        tv.string = ""
+                        tv.didChangeText()
+                        tv.setSelectedRange(NSRange(location: 0, length: 0))
+                        tv.scrollRangeToVisible(NSRange(location: 0, length: 0))
+                    }
+                    // Reset caret status
+                    caretStatus = "Ln 1, Col 1"
+                }) {
+                    Image(systemName: "trash")
+                }
                 .help("Clear Editor")
-                .hoverPopover(delay: 1.0) { Text("Clear Editor") }
 
                 Button(action: {
                     isAutoCompletionEnabled.toggle()
@@ -816,13 +811,11 @@ struct ContentView: View {
                     Image(systemName: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
                 }
                 .help(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion")
-                .hoverPopover(delay: 1.0) { Text(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion") }
 
                 Button(action: { viewModel.openFile() }) {
                     Image(systemName: "folder")
                 }
                 .help("Open File…")
-                .hoverPopover(delay: 1.0) { Text("Open File…") }
 
                 Button(action: {
                     if let tab = viewModel.selectedTab { viewModel.saveFile(tab: tab) }
@@ -831,7 +824,6 @@ struct ContentView: View {
                 }
                 .disabled(viewModel.selectedTab == nil)
                 .help("Save File")
-                .hoverPopover(delay: 1.0) { Text("Save File") }
 
                 Button(action: {
                     viewModel.showSidebar.toggle()
@@ -839,19 +831,16 @@ struct ContentView: View {
                     Image(systemName: viewModel.showSidebar ? "sidebar.left" : "sidebar.right")
                 }
                 .help("Toggle Sidebar")
-                .hoverPopover(delay: 1.0) { Text(viewModel.showSidebar ? "Hide Sidebar" : "Show Sidebar") }
 
                 Button(action: { viewModel.isBrainDumpMode.toggle() }) {
                     Image(systemName: "note.text")
                 }
                 .help("Brain Dump Mode")
-                .hoverPopover(delay: 1.0) { Text("Brain Dump Mode") }
 
                 Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
                     Image(systemName: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
                 }
                 .help(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap")
-                .hoverPopover(delay: 1.0) { Text(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap") }
             }
         }
         .toolbarBackground(.visible, for: .windowToolbar)
@@ -2089,43 +2078,6 @@ extension Notification.Name {
     static let pastedText = Notification.Name("pastedText")
 }
 
-// MARK: - Hover-triggered popover helper
-private struct HoverPopoverModifier<PopoverContent: View>: ViewModifier {
-    let delay: TimeInterval
-    let popoverContent: () -> PopoverContent
-
-    @State private var isHovering = false
-    @State private var isPresented = false
-
-    func body(content base: Content) -> some View {
-        base
-            .onHover { hovering in
-                isHovering = hovering
-                if hovering {
-                    // Show after a short delay to avoid flicker.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        if isHovering {
-                            isPresented = true
-                        }
-                    }
-                } else {
-                    isPresented = false
-                }
-            }
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-                popoverContent()
-                    .padding(8)
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
-            }
-    }
-}
-
-private extension View {
-    func hoverPopover<Content: View>(delay: TimeInterval = 0.5, @ViewBuilder _ content: @escaping () -> Content) -> some View {
-        modifier(HoverPopoverModifier(delay: delay, popoverContent: content))
-    }
-}
 private extension NSRange {
     func toOptional() -> NSRange? { self.location == NSNotFound ? nil : self }
 }
