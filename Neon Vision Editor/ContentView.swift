@@ -59,6 +59,10 @@ struct ContentView: View {
     @State private var showAISelectorPopover: Bool = false
     @State private var showAPISettings: Bool = false
 
+    @State private var showFindReplace: Bool = false
+    @State private var findQuery: String = ""
+    @State private var replaceQuery: String = ""
+
     /// Prompts the user for a Grok token if none is saved. Persists to UserDefaults.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGrokTokenIfNeeded() -> Bool {
@@ -500,6 +504,10 @@ struct ContentView: View {
                 anthropicAPIToken: $anthropicAPIToken
             )
         }
+        .sheet(isPresented: $showFindReplace) {
+            FindReplacePanel(findQuery: $findQuery, replaceQuery: $replaceQuery, onFindNext: { findNext() }, onReplace: { replaceSelection() }, onReplaceAll: { replaceAll() })
+                .frame(width: 420)
+        }
         .onAppear {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
@@ -552,7 +560,7 @@ struct ContentView: View {
     /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
-        let supported = ["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown", "bash", "zsh", "powershell"]
+        let supported = ["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "c", "cpp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "plain"]
 
         // Try on-device Foundation Model first
         #if USE_FOUNDATION_MODELS
@@ -581,6 +589,54 @@ struct ContentView: View {
         }
         if lower.contains("function ") || lower.contains("const ") || lower.contains("let ") || lower.contains("=>") {
             return "javascript"
+        }
+        // XML
+        if lower.contains("<?xml") || (lower.contains("</") && lower.contains(">")) {
+            return "xml"
+        }
+        // YAML
+        if lower.contains(": ") && (lower.contains("- ") || lower.contains("\n  ")) && !lower.contains(";") {
+            return "yaml"
+        }
+        // TOML / INI
+        if lower.range(of: #"^\[[^\]]+\]"#, options: [.regularExpression, .anchored]) != nil || (lower.contains("=") && lower.contains("\n[")) {
+            return lower.contains("toml") ? "toml" : "ini"
+        }
+        // SQL
+        if lower.range(of: #"\b(select|insert|update|delete|create\s+table|from|where|join)\b"#, options: .regularExpression) != nil {
+            return "sql"
+        }
+        // Go
+        if lower.contains("package ") && lower.contains("func ") {
+            return "go"
+        }
+        // Java
+        if lower.contains("public class") || lower.contains("public static void main") {
+            return "java"
+        }
+        // Kotlin
+        if (lower.contains("fun ") || lower.contains("val ")) || (lower.contains("var ") && lower.contains(":")) {
+            return "kotlin"
+        }
+        // TypeScript
+        if lower.contains("interface ") || (lower.contains("type ") && lower.contains(":")) || lower.contains(": string") {
+            return "typescript"
+        }
+        // Ruby
+        if lower.contains("def ") || (lower.contains("end") && lower.contains("class ")) {
+            return "ruby"
+        }
+        // Rust
+        if lower.contains("fn ") || lower.contains("let mut ") || lower.contains("pub struct") {
+            return "rust"
+        }
+        // Objective-C
+        if lower.contains("@interface") || lower.contains("@implementation") || lower.contains("#import ") {
+            return "objective-c"
+        }
+        // INI
+        if lower.range(of: #"^;.*$"#, options: .regularExpression) != nil || lower.range(of: #"^\w+\s*=\s*.*$"#, options: .regularExpression) != nil {
+            return "ini"
         }
         if lower.contains("<html") || lower.contains("<div") || lower.contains("</") {
             return "html"
@@ -668,7 +724,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Picker("Language", selection: currentLanguageBinding) {
-                    ForEach(["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown", "bash", "zsh", "powershell"], id: \.self) { lang in
+                    ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "c", "cpp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "plain"], id: \.self) { lang in
                         Text(lang.capitalized).tag(lang)
                     }
                 }
@@ -717,6 +773,12 @@ struct ContentView: View {
                 }
                 .help("API Settings")
                 .hoverPopover(delay: 1.0) { Text("API Settings") }
+
+                Button(action: { showFindReplace = true }) {
+                    Image(systemName: "magnifyingglass")
+                }
+                .help("Find/Replace")
+                .hoverPopover(delay: 1.0) { Text("Find/Replace") }
 
                 Button(action: { editorFontSize = max(8, editorFontSize - 1) }) {
                     Image(systemName: "textformat.size.smaller")
@@ -808,6 +870,43 @@ struct ContentView: View {
                 .padding(.trailing, 16)
         }
     }
+
+    private func findNext() {
+        guard let tv = NSApp.keyWindow?.firstResponder as? NSTextView, !findQuery.isEmpty else { return }
+        let ns = tv.string as NSString
+        let start = tv.selectedRange().upperBound
+        let searchRange = NSRange(location: start, length: max(0, ns.length - start))
+        if let range = ns.range(of: findQuery, options: [], range: searchRange).toOptional() ?? ns.range(of: findQuery, options: [], range: NSRange(location: 0, length: start)).toOptional() {
+            tv.setSelectedRange(range)
+            tv.scrollRangeToVisible(range)
+        }
+    }
+
+    private func replaceSelection() {
+        guard let tv = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
+        let sel = tv.selectedRange()
+        guard sel.length > 0 else { return }
+        tv.insertText(replaceQuery, replacementRange: sel)
+    }
+
+    private func replaceAll() {
+        guard let tv = NSApp.keyWindow?.firstResponder as? NSTextView, !findQuery.isEmpty else { return }
+        let ns = tv.string as NSString
+        var ranges: [NSRange] = []
+        var searchLocation = 0
+        while searchLocation < ns.length {
+            let searchRange = NSRange(location: searchLocation, length: ns.length - searchLocation)
+            let r = ns.range(of: findQuery, options: [], range: searchRange)
+            if r.location != NSNotFound {
+                ranges.append(r)
+                searchLocation = r.upperBound
+            } else { break }
+        }
+        // Replace from end to start to keep indices valid
+        for r in ranges.reversed() {
+            tv.insertText(replaceQuery, replacementRange: r)
+        }
+    }
 }
 
 // SidebarView: Generates a simple TOC per language and supports jumping to lines.
@@ -876,6 +975,62 @@ private func jump(to item: String) {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if trimmed.hasPrefix("function ") || trimmed.hasPrefix("class ") {
                     return "\(trimmed) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "java":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("class ") || (t.contains(" void ") || (t.contains(" public ") && t.contains("(") && t.contains(")"))) {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "kotlin":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("class ") || t.hasPrefix("object ") || t.hasPrefix("fun ") {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "go":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("func ") || t.hasPrefix("type ") {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "ruby":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("def ") || t.hasPrefix("class ") || t.hasPrefix("module ") {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "rust":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("fn ") || t.hasPrefix("struct ") || t.hasPrefix("enum ") || t.hasPrefix("impl ") {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "typescript":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("function ") || t.hasPrefix("class ") || t.hasPrefix("interface ") || t.hasPrefix("type ") {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "objective-c":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("@interface") || t.hasPrefix("@implementation") || t.contains(")\n{") {
+                    return "\(t) (Line \(index + 1))"
                 }
                 return nil
             }
@@ -1748,6 +1903,88 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             // Comments
             #"#.*"#: colors.comment
         ]
+    case "java":
+        return [
+            #"\b(class|interface|enum|public|private|protected|static|final|void|int|double|float|boolean|new|return|if|else|for|while|switch|case)\b"#: colors.keyword,
+            #"\"[^\"]*\""#: colors.string,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "kotlin":
+        return [
+            #"\b(class|object|fun|val|var|when|if|else|for|while|return|import|package|interface)\b"#: colors.keyword,
+            #"\"[^\"]*\"|`[^`]*`"#: colors.string,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "go":
+        return [
+            #"\b(package|import|func|var|const|type|struct|interface|if|else|for|switch|case|return|go|defer)\b"#: colors.keyword,
+            #"\"[^\"]*\"|`[^`]*`"#: colors.string,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "ruby":
+        return [
+            #"\b(def|class|module|if|else|elsif|end|do|while|until|case|when|begin|rescue|ensure|return)\b"#: colors.keyword,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"#.*"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "rust":
+        return [
+            #"\b(fn|let|mut|struct|enum|impl|trait|pub|use|mod|if|else|match|loop|while|for|return)\b"#: colors.keyword,
+            #"\"[^\"]*\""#: colors.string,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "typescript":
+        return [
+            #"\b(function|class|interface|type|enum|const|let|var|if|else|for|while|do|try|catch|return|extends|implements)\b"#: colors.keyword,
+            #"\"[^\"]*\"|'[^']*'|`[^`]*`"#: colors.string,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "objective-c":
+        return [
+            #"@\w+"#: colors.attribute,
+            #"\b(if|else|for|while|switch|case|return)\b"#: colors.keyword,
+            #"\"[^\"]*\""#: colors.string,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "sql":
+        return [
+            #"\b(SELECT|INSERT|UPDATE|DELETE|CREATE|TABLE|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|GROUP|BY|ORDER|LIMIT|VALUES|INTO)\b"#: colors.keyword,
+            #"'[^']*'|\"[^\"]*\""#: colors.string,
+            #"--.*"#: colors.comment,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
+        ]
+    case "xml":
+        return [
+            #"<[^>]+>"#: colors.tag,
+            #"\"[^\"]*\""#: colors.string
+        ]
+    case "yaml":
+        return [
+            #"^\s*-[\s\S]*$"#: colors.keyword,
+            #"\b(true|false|null)\b"#: colors.keyword,
+            #"\b[0-9]+\b"#: colors.number
+        ]
+    case "toml":
+        return [
+            #"^\[[^\]]+\]"#: colors.meta,
+            #"\b[0-9]+\b"#: colors.number,
+            #"\"[^\"]*\""#: colors.string
+        ]
+    case "ini":
+        return [
+            #"^\[[^\]]+\]"#: colors.meta,
+            #"^;.*$"#: colors.comment,
+            #"^\w+\s*=\s*.*$"#: colors.property
+        ]
+    case "plain":
+        return [:]
     default:
         return [:]
     }
@@ -1813,6 +2050,38 @@ struct APISupportSettingsView: View {
     }
 }
 
+struct FindReplacePanel: View {
+    @Binding var findQuery: String
+    @Binding var replaceQuery: String
+    var onFindNext: () -> Void
+    var onReplace: () -> Void
+    var onReplaceAll: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Find & Replace").font(.headline)
+            LabeledContent("Find") {
+                TextField("Search text", text: $findQuery)
+                    .textFieldStyle(.roundedBorder)
+            }
+            LabeledContent("Replace") {
+                TextField("Replacement", text: $replaceQuery)
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack {
+                Button("Find Next") { onFindNext() }
+                Button("Replace") { onReplace() }.disabled(findQuery.isEmpty)
+                Button("Replace All") { onReplaceAll() }.disabled(findQuery.isEmpty)
+                Spacer()
+                Button("Close") { dismiss() }
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 380)
+    }
+}
+
 // MARK: - Notifications used within the editor
 extension Notification.Name {
     static let moveCursorToLine = Notification.Name("moveCursorToLine")
@@ -1857,3 +2126,7 @@ private extension View {
         modifier(HoverPopoverModifier(delay: delay, popoverContent: content))
     }
 }
+private extension NSRange {
+    func toOptional() -> NSRange? { self.location == NSNotFound ? nil : self }
+}
+
