@@ -342,7 +342,6 @@ struct ContentView: View {
                 openAIAPIToken: $openAIAPIToken,
                 geminiAPIToken: $geminiAPIToken
             )
-            .frame(width: 420)
         }
         .onAppear {
             // Start with sidebar collapsed by default
@@ -1564,6 +1563,8 @@ struct APISupportSettingsView: View {
     @Binding var openAIAPIToken: String
     @Binding var geminiAPIToken: String
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("AI Provider API Keys").font(.headline)
@@ -1571,6 +1572,7 @@ struct APISupportSettingsView: View {
                 LabeledContent("Grok") {
                     SecureField("sk-…", text: $grokAPIToken)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
                         .onChange(of: grokAPIToken) { _, new in
                             UserDefaults.standard.set(new, forKey: "GrokAPIToken")
                         }
@@ -1578,6 +1580,7 @@ struct APISupportSettingsView: View {
                 LabeledContent("OpenAI") {
                     SecureField("sk-…", text: $openAIAPIToken)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
                         .onChange(of: openAIAPIToken) { _, new in
                             UserDefaults.standard.set(new, forKey: "OpenAIAPIToken")
                         }
@@ -1585,6 +1588,7 @@ struct APISupportSettingsView: View {
                 LabeledContent("Gemini") {
                     SecureField("AIza…", text: $geminiAPIToken)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
                         .onChange(of: geminiAPIToken) { _, new in
                             UserDefaults.standard.set(new, forKey: "GeminiAPIToken")
                         }
@@ -1595,10 +1599,12 @@ struct APISupportSettingsView: View {
             HStack {
                 Spacer()
                 Button("Close") {
-                    NSApp.keyWindow?.endSheet(NSApp.keyWindow!)
+                    dismiss()
                 }
             }
         }
+        .padding(20)
+        .frame(minWidth: 460)
     }
 }
 
