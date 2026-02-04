@@ -277,6 +277,9 @@ struct AIClientFactory {
                 return GeminiAIClient(apiKey: key)
             }
             return nil
+        case .anthropic:
+            // Anthropic client not wired here; inline completion uses direct call in ContentView.
+            return nil
         }
     }
 }

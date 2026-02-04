@@ -16,6 +16,7 @@ enum AIModel: String, CaseIterable, Identifiable {
     case grok
     case openAI
     case gemini
+    case anthropic
     var id: String { rawValue }
 }
 
@@ -48,6 +49,7 @@ struct ContentView: View {
     @State private var grokAPIToken: String = UserDefaults.standard.string(forKey: "GrokAPIToken") ?? ""
     @State private var openAIAPIToken: String = UserDefaults.standard.string(forKey: "OpenAIAPIToken") ?? ""
     @State private var geminiAPIToken: String = UserDefaults.standard.string(forKey: "GeminiAPIToken") ?? ""
+    @State private var anthropicAPIToken: String = UserDefaults.standard.string(forKey: "AnthropicAPIToken") ?? ""
 
     // Debounce handle for inline completion
     @State private var lastCompletionWorkItem: DispatchWorkItem?
@@ -124,6 +126,30 @@ struct ContentView: View {
             if token.isEmpty { return false }
             geminiAPIToken = token
             UserDefaults.standard.set(token, forKey: "GeminiAPIToken")
+            return true
+        }
+        return false
+    }
+
+    /// Prompts the user for an Anthropic API token if none is saved. Persists to UserDefaults.
+    /// Returns true if a token is present/was saved; false if cancelled or empty.
+    private func promptForAnthropicTokenIfNeeded() -> Bool {
+        if !anthropicAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        let alert = NSAlert()
+        alert.messageText = "Anthropic API Token Required"
+        alert.informativeText = "Enter your Anthropic API token to enable suggestions."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.placeholderString = "sk-ant-..."
+        alert.accessoryView = input
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let token = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if token.isEmpty { return false }
+            anthropicAPIToken = token
+            UserDefaults.standard.set(token, forKey: "AnthropicAPIToken")
             return true
         }
         return false
@@ -239,8 +265,47 @@ struct ContentView: View {
             return ""
             #endif
         case .grok:
-            // Grok model support is not implemented in this snippet
-            return ""
+            guard !grokAPIToken.isEmpty else { return "" }
+            do {
+                let url = URL(string: "https://api.x.ai/v1/chat/completions")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+
+                let body: [String: Any] = [
+                    "model": "grok-2-latest",
+                    "messages": [
+                        ["role": "user", "content": prompt]
+                    ],
+                    "temperature": 0.5,
+                    "max_tokens": 64,
+                    "n": 1,
+                    "stop": [""]
+                ]
+
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+                let (data, _) = try await URLSession.shared.data(for: request)
+
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let choices = json["choices"] as? [[String: Any]],
+                   let message = choices.first?["message"] as? [String: Any],
+                   let content = message["content"] as? String {
+                    return sanitizeCompletion(content)
+                }
+                return ""
+            } catch {
+                return ""
+            }
         case .openAI:
             guard !openAIAPIToken.isEmpty else { return "" }
             do {
@@ -284,8 +349,99 @@ struct ContentView: View {
                 return ""
             }
         case .gemini:
-            // Gemini model support is not implemented in this snippet
-            return ""
+            guard !geminiAPIToken.isEmpty else { return "" }
+            do {
+                let model = "gemini-1.5-flash-latest"
+                let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(geminiAPIToken)"
+                guard let url = URL(string: endpoint) else { return "" }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+
+                let body: [String: Any] = [
+                    "contents": [
+                        [
+                            "parts": [["text": prompt]]
+                        ]
+                    ],
+                    "generationConfig": [
+                        "temperature": 0.5,
+                        "maxOutputTokens": 64
+                    ]
+                ]
+
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+                let (data, _) = try await URLSession.shared.data(for: request)
+
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let candidates = json["candidates"] as? [[String: Any]],
+                   let first = candidates.first,
+                   let content = first["content"] as? [String: Any],
+                   let parts = content["parts"] as? [[String: Any]],
+                   let text = parts.first?["text"] as? String {
+                    return sanitizeCompletion(text)
+                }
+                return ""
+            } catch {
+                return ""
+            }
+        case .anthropic:
+            guard !anthropicAPIToken.isEmpty else { return "" }
+            do {
+                let url = URL(string: "https://api.anthropic.com/v1/messages")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")
+                request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+
+                let body: [String: Any] = [
+                    "model": "claude-3-5-haiku-latest",
+                    "max_tokens": 64,
+                    "temperature": 0.5,
+                    "messages": [
+                        ["role": "user", "content": prompt]
+                    ]
+                ]
+
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                let (data, _) = try await URLSession.shared.data(for: request)
+
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let contentArr = json["content"] as? [[String: Any]],
+                   let first = contentArr.first,
+                   let text = first["text"] as? String {
+                    return sanitizeCompletion(text)
+                }
+                // Some Anthropic responses may nest differently; try messages -> content -> text
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let message = json["message"] as? [String: Any],
+                   let contentArr = message["content"] as? [[String: Any]],
+                   let first = contentArr.first,
+                   let text = first["text"] as? String {
+                    return sanitizeCompletion(text)
+                }
+                return ""
+            } catch {
+                return ""
+            }
         }
     }
 
@@ -340,7 +496,8 @@ struct ContentView: View {
             APISupportSettingsView(
                 grokAPIToken: $grokAPIToken,
                 openAIAPIToken: $openAIAPIToken,
-                geminiAPIToken: $geminiAPIToken
+                geminiAPIToken: $geminiAPIToken,
+                anthropicAPIToken: $anthropicAPIToken
             )
         }
         .onAppear {
@@ -395,7 +552,7 @@ struct ContentView: View {
     /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
-        let supported = ["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown", "bash", "zsh"]
+        let supported = ["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown", "bash", "zsh", "powershell"]
 
         // Try on-device Foundation Model first
         #if USE_FOUNDATION_MODELS
@@ -454,6 +611,10 @@ struct ContentView: View {
         if lower.contains("#!/bin/sh") || lower.contains("#!/usr/bin/env sh") || lower.contains(" fi") || lower.contains(" do") || lower.contains(" done") || lower.contains(" esac") {
             return "bash"
         }
+        // PowerShell detection
+        if lower.contains("write-host") || lower.contains("param(") || lower.contains("$psversiontable") || lower.range(of: #"\b(Get|Set|New|Remove|Add|Clear|Write)-[A-Za-z]+\b"#, options: .regularExpression) != nil {
+            return "powershell"
+        }
         return "swift"
     }
 
@@ -507,7 +668,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Picker("Language", selection: currentLanguageBinding) {
-                    ForEach(["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown", "bash", "zsh"], id: \.self) { lang in
+                    ForEach(["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown", "bash", "zsh", "powershell"], id: \.self) { lang in
                         Text(lang.capitalized).tag(lang)
                     }
                 }
@@ -535,6 +696,7 @@ struct ContentView: View {
                             Text("Grok").tag(AIModel.grok)
                             Text("OpenAI").tag(AIModel.openAI)
                             Text("Gemini").tag(AIModel.gemini)
+                            Text("Anthropic").tag(AIModel.anthropic)
                         }
                         .labelsHidden()
                         .frame(width: 170)
@@ -731,6 +893,15 @@ private func jump(to item: String) {
                 // Simple function detection: name() { or function name { or name()\n{
                 if trimmed.range(of: "^([A-Za-z_][A-Za-z0-9_]*)\\s*\\(\\)\\s*\\{", options: .regularExpression) != nil ||
                    trimmed.range(of: "^function\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\{", options: .regularExpression) != nil {
+                    return "\(trimmed) (Line \(index + 1))"
+                }
+                return nil
+            }
+        case "powershell":
+            toc = lines.enumerated().compactMap { index, line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.range(of: #"^function\s+[A-Za-z_][A-Za-z0-9_\-]*\s*\{"#, options: .regularExpression) != nil ||
+                   trimmed.hasPrefix("param(") {
                     return "\(trimmed) (Line \(index + 1))"
                 }
                 return nil
@@ -1538,11 +1709,21 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         ]
     case "bash":
         return [
-            "\\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|in)\\b": colors.keyword,
-            "\\$[A-Za-z_][A-Za-z0-9_]*|\\${[^}]+}": colors.variable,
-            "\\b[0-9]+\\b": colors.number,
-            "\\\"[^\\\"]*\\\"|'[^']*'": colors.string,
-            "#.*": colors.comment
+            // Keywords and flow control
+            #"\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|in|select|until|time)\b"#: colors.keyword,
+            // Variables and parameter expansions
+            #"\$[A-Za-z_][A-Za-z0-9_]*|\${[^}]+}"#: colors.variable,
+            // Command substitution and arithmetic
+            #"\$\([^)]*\)|`[^`]*`|\$\(\([^)]*\)\)"#: colors.builtin,
+            // Strings
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            // Numbers
+            #"\b[0-9]+\b"#: colors.number,
+            // Comments
+            #"#.*"#: colors.comment,
+            // Here-doc markers and redirections/pipes
+            #"<<-?\s*[A-Za-z_][A-Za-z0-9_]*"#: colors.meta,
+            #"\|\||\|\s|>>?|<<?|2>\&1|2>>?"#: colors.meta
         ]
     case "zsh":
         return [
@@ -1551,6 +1732,21 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             "\\b[0-9]+\\b": colors.number,
             "\\\"[^\\\"]*\\\"|'[^']*'": colors.string,
             "#.*": colors.comment
+        ]
+    case "powershell":
+        return [
+            // Keywords and statements
+            #"\b(function|param|if|else|elseif|foreach|for|while|switch|break|continue|return|try|catch|finally)\b"#: colors.keyword,
+            // Cmdlets (Get-*, Set-*, Write-*, etc.)
+            #"\b(Get|Set|New|Remove|Add|Clear|Write|Read|Start|Stop|Enable|Disable|Invoke|Test|Out|Select|Where|ForEach)-[A-Za-z][A-Za-z0-9]*\b"#: colors.builtin,
+            // Variables
+            #"\$[A-Za-z_][A-Za-z0-9_:]*"#: colors.variable,
+            // Strings (single, double)
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            // Numbers
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            // Comments
+            #"#.*"#: colors.comment
         ]
     default:
         return [:]
@@ -1562,6 +1758,7 @@ struct APISupportSettingsView: View {
     @Binding var grokAPIToken: String
     @Binding var openAIAPIToken: String
     @Binding var geminiAPIToken: String
+    @Binding var anthropicAPIToken: String
 
     @Environment(\.dismiss) private var dismiss
 
@@ -1591,6 +1788,14 @@ struct APISupportSettingsView: View {
                         .frame(maxWidth: .infinity)
                         .onChange(of: geminiAPIToken) { _, new in
                             UserDefaults.standard.set(new, forKey: "GeminiAPIToken")
+                        }
+                }
+                LabeledContent("Anthropic") {
+                    SecureField("sk-ant-…", text: $anthropicAPIToken)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        .onChange(of: anthropicAPIToken) { _, new in
+                            UserDefaults.standard.set(new, forKey: "AnthropicAPIToken")
                         }
                 }
             }
