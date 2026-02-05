@@ -20,6 +20,8 @@ struct NeonVisionEditorApp: App {
     @State private var showGrokError: Bool = false
     @State private var grokErrorMessage: String = ""
     @State private var useAppleIntelligence: Bool = true
+    @State private var appleAIStatus: String = "Apple Intelligence: Checking…"
+    @State private var appleAIRoundTripMS: Double? = nil
     
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
@@ -32,9 +34,20 @@ struct NeonVisionEditorApp: App {
                 .environment(\.grokErrorMessage, $grokErrorMessage)
                 .frame(minWidth: 600, minHeight: 400)
                 .task {
-                    // Pre-warm Apple Intelligence model
-                    let session = LanguageModelSession(model: SystemLanguageModel())
-                    session.prewarm()
+                    #if USE_FOUNDATION_MODELS
+                    do {
+                        let start = Date()
+                        _ = try await AppleFM.appleFMHealthCheck()
+                        let end = Date()
+                        appleAIStatus = "Apple Intelligence: Ready"
+                        appleAIRoundTripMS = end.timeIntervalSince(start) * 1000.0
+                    } catch {
+                        appleAIStatus = "Apple Intelligence: Error — \(error.localizedDescription)"
+                        appleAIRoundTripMS = nil
+                    }
+                    #else
+                    appleAIStatus = "Apple Intelligence: Unavailable (build without USE_FOUNDATION_MODELS)"
+                    #endif
                 }
         }
         .defaultSize(width: 1000, height: 600)
@@ -81,7 +94,7 @@ struct NeonVisionEditorApp: App {
             }
             
             CommandMenu("Language") {
-                ForEach(["swift", "python", "javascript", "html", "css", "c", "cpp", "json", "markdown"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "html", "css", "cpp", "csharp", "json", "markdown", "standard", "plain"], id: \.self) { lang in
                     Button(lang.capitalized) {
                         if let tab = viewModel.selectedTab {
                             viewModel.updateTabLanguage(tab: tab, language: lang)
@@ -106,7 +119,7 @@ struct NeonVisionEditorApp: App {
                 Button("Suggest Code") {
                     Task {
                         if let tab = viewModel.selectedTab {
-                            // Choose provider by available tokens (Grok > OpenAI > Gemini), else use Apple Intelligence
+                            // Choose provider by available tokens (Apple Intelligence preferred) then others
                             let contentPrefix = String(tab.content.prefix(1000))
                             let prompt = "Suggest improvements for this \(tab.language) code: \(contentPrefix)"
 
@@ -115,10 +128,21 @@ struct NeonVisionEditorApp: App {
                             let geminiToken = UserDefaults.standard.string(forKey: "GeminiAPIToken") ?? ""
 
                             let client: AIClient? = {
+                                #if USE_FOUNDATION_MODELS
+                                // Prefer Apple Intelligence by default
+                                if useAppleIntelligence {
+                                    return AIClientFactory.makeClient(for: .appleIntelligence)
+                                }
+                                #endif
+                                // Fallback order: Grok -> OpenAI -> Gemini -> Apple (if compiled) -> nil
                                 if !grokToken.isEmpty { return AIClientFactory.makeClient(for: .grok, grokAPITokenProvider: { grokToken }) }
                                 if !openAIToken.isEmpty { return AIClientFactory.makeClient(for: .openAI, openAIKeyProvider: { openAIToken }) }
                                 if !geminiToken.isEmpty { return AIClientFactory.makeClient(for: .gemini, geminiKeyProvider: { geminiToken }) }
+                                #if USE_FOUNDATION_MODELS
                                 return AIClientFactory.makeClient(for: .appleIntelligence)
+                                #else
+                                return nil
+                                #endif
                             }()
 
                             guard let client else { grokErrorMessage = "No AI provider configured."; showGrokError = true; return }
@@ -134,6 +158,36 @@ struct NeonVisionEditorApp: App {
                 .disabled(viewModel.selectedTab == nil)
                 
                 Toggle("Use Apple Intelligence", isOn: $useAppleIntelligence)
+            }
+            
+            CommandMenu("Diagnostics") {
+                Text(appleAIStatus)
+                Divider()
+                Button("Re-run Apple Intelligence Health Check") {
+                    Task {
+                        #if USE_FOUNDATION_MODELS
+                        do {
+                            let start = Date()
+                            _ = try await AppleFM.appleFMHealthCheck()
+                            let end = Date()
+                            appleAIStatus = "Apple Intelligence: Ready"
+                            appleAIRoundTripMS = end.timeIntervalSince(start) * 1000.0
+                        } catch {
+                            appleAIStatus = "Apple Intelligence: Error — \(error.localizedDescription)"
+                            appleAIRoundTripMS = nil
+                        }
+                        #else
+                        appleAIStatus = "Apple Intelligence: Unavailable (build without USE_FOUNDATION_MODELS)"
+                        appleAIRoundTripMS = nil
+                        #endif
+                    }
+                }
+                .disabled(false)
+
+                if let ms = appleAIRoundTripMS {
+                    Text(String(format: "Last round-trip: %.1f ms", ms))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -158,3 +212,4 @@ extension EnvironmentValues {
         set { self[GrokErrorMessageKey.self] = newValue }
     }
 }
+    

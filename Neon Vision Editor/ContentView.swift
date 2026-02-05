@@ -44,6 +44,7 @@ struct ContentView: View {
     @State private var singleLanguage: String = "swift"
     @State private var caretStatus: String = "Ln 1, Col 1"
     @State private var editorFontSize: CGFloat = 14
+    @State private var lastProviderUsed: String = "Apple"
 
     // Persisted API tokens for external providers
     @State private var grokAPIToken: String = UserDefaults.standard.string(forKey: "GrokAPIToken") ?? ""
@@ -62,6 +63,14 @@ struct ContentView: View {
     @State private var showFindReplace: Bool = false
     @State private var findQuery: String = ""
     @State private var replaceQuery: String = ""
+
+#if USE_FOUNDATION_MODELS
+    private var appleModelAvailable: Bool { true }
+#else
+    private var appleModelAvailable: Bool { false }
+#endif
+
+    private var activeProviderName: String { lastProviderUsed }
 
     /// Prompts the user for a Grok token if none is saved. Persists to UserDefaults.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
@@ -247,36 +256,15 @@ struct ContentView: View {
         }
     }
 
-    private func generateModelCompletion(prefix: String, language: String) async -> String {
-        switch selectedModel {
-        case .appleIntelligence:
-            #if USE_FOUNDATION_MODELS
-            do {
-                let model = try FMTextModel(.small)
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
-                let response = try await model.generate(prompt)
-                return sanitizeCompletion(response)
-            } catch {
-                return ""
-            }
-            #else
-            return ""
-            #endif
-        case .grok:
-            guard !grokAPIToken.isEmpty else { return "" }
+    private func externalModelCompletion(prefix: String, language: String) async -> String {
+        // Try Grok
+        if !grokAPIToken.isEmpty {
             do {
                 let url = URL(string: "https://api.x.ai/v1/chat/completions")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
                 let prompt = """
                 Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
 
@@ -284,41 +272,32 @@ struct ContentView: View {
 
                 Completion:
                 """
-
                 let body: [String: Any] = [
                     "model": "grok-2-latest",
-                    "messages": [
-                        ["role": "user", "content": prompt]
-                    ],
+                    "messages": [["role": "user", "content": prompt]],
                     "temperature": 0.5,
                     "max_tokens": 64,
                     "n": 1,
                     "stop": [""]
                 ]
-
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-
                 let (data, _) = try await URLSession.shared.data(for: request)
-
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let choices = json["choices"] as? [[String: Any]],
                    let message = choices.first?["message"] as? [String: Any],
                    let content = message["content"] as? String {
                     return sanitizeCompletion(content)
                 }
-                return ""
-            } catch {
-                return ""
-            }
-        case .openAI:
-            guard !openAIAPIToken.isEmpty else { return "" }
+            } catch { print("[Completion][Fallback][Grok] error: \(error)") }
+        }
+        // Try OpenAI
+        if !openAIAPIToken.isEmpty {
             do {
                 let url = URL(string: "https://api.openai.com/v1/chat/completions")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
                 let prompt = """
                 Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
 
@@ -326,34 +305,26 @@ struct ContentView: View {
 
                 Completion:
                 """
-
                 let body: [String: Any] = [
                     "model": "gpt-4o-mini",
-                    "messages": [
-                        ["role": "user", "content": prompt]
-                    ],
+                    "messages": [["role": "user", "content": prompt]],
                     "temperature": 0.5,
                     "max_tokens": 64,
                     "n": 1,
                     "stop": [""]
                 ]
-
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-
                 let (data, _) = try await URLSession.shared.data(for: request)
-
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let choices = json["choices"] as? [[String: Any]],
                    let message = choices.first?["message"] as? [String: Any],
                    let content = message["content"] as? String {
                     return sanitizeCompletion(content)
                 }
-                return ""
-            } catch {
-                return ""
-            }
-        case .gemini:
-            guard !geminiAPIToken.isEmpty else { return "" }
+            } catch { print("[Completion][Fallback][OpenAI] error: \(error)") }
+        }
+        // Try Gemini
+        if !geminiAPIToken.isEmpty {
             do {
                 let model = "gemini-1.5-flash-latest"
                 let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(geminiAPIToken)"
@@ -361,7 +332,6 @@ struct ContentView: View {
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
                 let prompt = """
                 Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
 
@@ -369,23 +339,12 @@ struct ContentView: View {
 
                 Completion:
                 """
-
                 let body: [String: Any] = [
-                    "contents": [
-                        [
-                            "parts": [["text": prompt]]
-                        ]
-                    ],
-                    "generationConfig": [
-                        "temperature": 0.5,
-                        "maxOutputTokens": 64
-                    ]
+                    "contents": [["parts": [["text": prompt]]]],
+                    "generationConfig": ["temperature": 0.5, "maxOutputTokens": 64]
                 ]
-
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-
                 let (data, _) = try await URLSession.shared.data(for: request)
-
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let candidates = json["candidates"] as? [[String: Any]],
                    let first = candidates.first,
@@ -394,12 +353,10 @@ struct ContentView: View {
                    let text = parts.first?["text"] as? String {
                     return sanitizeCompletion(text)
                 }
-                return ""
-            } catch {
-                return ""
-            }
-        case .anthropic:
-            guard !anthropicAPIToken.isEmpty else { return "" }
+            } catch { print("[Completion][Fallback][Gemini] error: \(error)") }
+        }
+        // Try Anthropic
+        if !anthropicAPIToken.isEmpty {
             do {
                 let url = URL(string: "https://api.anthropic.com/v1/messages")!
                 var request = URLRequest(url: url)
@@ -407,7 +364,6 @@ struct ContentView: View {
                 request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")
                 request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
                 let prompt = """
                 Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
 
@@ -415,26 +371,20 @@ struct ContentView: View {
 
                 Completion:
                 """
-
                 let body: [String: Any] = [
                     "model": "claude-3-5-haiku-latest",
                     "max_tokens": 64,
                     "temperature": 0.5,
-                    "messages": [
-                        ["role": "user", "content": prompt]
-                    ]
+                    "messages": [["role": "user", "content": prompt]]
                 ]
-
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
-
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let contentArr = json["content"] as? [[String: Any]],
                    let first = contentArr.first,
                    let text = first["text"] as? String {
                     return sanitizeCompletion(text)
                 }
-                // Some Anthropic responses may nest differently; try messages -> content -> text
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let message = json["message"] as? [String: Any],
                    let contentArr = message["content"] as? [[String: Any]],
@@ -442,9 +392,222 @@ struct ContentView: View {
                    let text = first["text"] as? String {
                     return sanitizeCompletion(text)
                 }
-                return ""
+            } catch { print("[Completion][Fallback][Anthropic] error: \(error)") }
+        }
+        return ""
+    }
+
+    private func appleModelCompletion(prefix: String, language: String) async -> String {
+        let client = AppleIntelligenceAIClient()
+        var aggregated = ""
+        var firstChunk: String?
+        for await chunk in client.streamSuggestions(prompt: "Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.\n\n\(prefix)\n\nCompletion:") {
+            if firstChunk == nil, !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                firstChunk = chunk
+                break
+            } else {
+                aggregated += chunk
+            }
+        }
+        let candidate = sanitizeCompletion((firstChunk ?? aggregated))
+        await MainActor.run { lastProviderUsed = "Apple" }
+        return candidate
+    }
+
+    private func generateModelCompletion(prefix: String, language: String) async -> String {
+        switch selectedModel {
+        case .appleIntelligence:
+            return await appleModelCompletion(prefix: prefix, language: language)
+        case .grok:
+            if grokAPIToken.isEmpty {
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Grok (fallback to Apple)" }
+                return res
+            }
+            do {
+                let url = URL(string: "https://api.x.ai/v1/chat/completions")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+                let body: [String: Any] = [
+                    "model": "grok-2-latest",
+                    "messages": [["role": "user", "content": prompt]],
+                    "temperature": 0.5,
+                    "max_tokens": 64,
+                    "n": 1,
+                    "stop": [""]
+                ]
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                let (data, _) = try await URLSession.shared.data(for: request)
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let choices = json["choices"] as? [[String: Any]],
+                   let message = choices.first?["message"] as? [String: Any],
+                   let content = message["content"] as? String {
+                    await MainActor.run { lastProviderUsed = "Grok" }
+                    return sanitizeCompletion(content)
+                }
+                // If no content, fallback to Apple
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Grok (fallback to Apple)" }
+                return res
             } catch {
-                return ""
+                print("[Completion][Grok] request failed: \(error)")
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Grok (fallback to Apple)" }
+                return res
+            }
+        case .openAI:
+            if openAIAPIToken.isEmpty {
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "OpenAI (fallback to Apple)" }
+                return res
+            }
+            do {
+                let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+                let body: [String: Any] = [
+                    "model": "gpt-4o-mini",
+                    "messages": [["role": "user", "content": prompt]],
+                    "temperature": 0.5,
+                    "max_tokens": 64,
+                    "n": 1,
+                    "stop": [""]
+                ]
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                let (data, _) = try await URLSession.shared.data(for: request)
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let choices = json["choices"] as? [[String: Any]],
+                   let message = choices.first?["message"] as? [String: Any],
+                   let content = message["content"] as? String {
+                    await MainActor.run { lastProviderUsed = "OpenAI" }
+                    return sanitizeCompletion(content)
+                }
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "OpenAI (fallback to Apple)" }
+                return res
+            } catch {
+                print("[Completion][OpenAI] request failed: \(error)")
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "OpenAI (fallback to Apple)" }
+                return res
+            }
+        case .gemini:
+            if geminiAPIToken.isEmpty {
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
+                return res
+            }
+            do {
+                let model = "gemini-1.5-flash-latest"
+                let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(geminiAPIToken)"
+                guard let url = URL(string: endpoint) else {
+                    let res = await appleModelCompletion(prefix: prefix, language: language)
+                    await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
+                    return res
+                }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+                let body: [String: Any] = [
+                    "contents": [["parts": [["text": prompt]]]],
+                    "generationConfig": ["temperature": 0.5, "maxOutputTokens": 64]
+                ]
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                let (data, _) = try await URLSession.shared.data(for: request)
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let candidates = json["candidates"] as? [[String: Any]],
+                   let first = candidates.first,
+                   let content = first["content"] as? [String: Any],
+                   let parts = content["parts"] as? [[String: Any]],
+                   let text = parts.first?["text"] as? String {
+                    await MainActor.run { lastProviderUsed = "Gemini" }
+                    return sanitizeCompletion(text)
+                }
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
+                return res
+            } catch {
+                print("[Completion][Gemini] request failed: \(error)")
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
+                return res
+            }
+        case .anthropic:
+            if anthropicAPIToken.isEmpty {
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Anthropic (fallback to Apple)" }
+                return res
+            }
+            do {
+                let url = URL(string: "https://api.anthropic.com/v1/messages")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")
+                request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                let prompt = """
+                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
+
+                \(prefix)
+
+                Completion:
+                """
+                let body: [String: Any] = [
+                    "model": "claude-3-5-haiku-latest",
+                    "max_tokens": 64,
+                    "temperature": 0.5,
+                    "messages": [["role": "user", "content": prompt]]
+                ]
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                let (data, _) = try await URLSession.shared.data(for: request)
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let contentArr = json["content"] as? [[String: Any]],
+                   let first = contentArr.first,
+                   let text = first["text"] as? String {
+                    await MainActor.run { lastProviderUsed = "Anthropic" }
+                    return sanitizeCompletion(text)
+                }
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let message = json["message"] as? [String: Any],
+                   let contentArr = message["content"] as? [[String: Any]],
+                   let first = contentArr.first,
+                   let text = first["text"] as? String {
+                    await MainActor.run { lastProviderUsed = "Anthropic" }
+                    return sanitizeCompletion(text)
+                }
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Anthropic (fallback to Apple)" }
+                return res
+            } catch {
+                print("[Completion][Anthropic] request failed: \(error)")
+                let res = await appleModelCompletion(prefix: prefix, language: language)
+                await MainActor.run { lastProviderUsed = "Anthropic (fallback to Apple)" }
+                return res
             }
         }
     }
@@ -560,27 +723,33 @@ struct ContentView: View {
     /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
-        let supported = ["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "c", "cpp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "plain"]
+        let supported = ["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
 
-        // Try on-device Foundation Model first
         #if USE_FOUNDATION_MODELS
+        // Attempt a lightweight model-based detection via AppleIntelligenceAIClient if available
         do {
-            // Create a small, fast model suitable for classification
-            // NOTE: Adjust the initializer and enum cases to match your SDK.
-            let model = try FMTextModel(.small)
-            let prompt = "Detect the programming or markup language of the following snippet and answer with one of: \(supported.joined(separator: ", ")). If none match, reply with 'swift'.\n\nSnippet:\n\n\(text)\n\nAnswer:"
-            let response = try await model.generate(prompt)
+            let client = AppleIntelligenceAIClient()
+            var response = ""
+            for await chunk in client.streamSuggestions(prompt: "Detect the programming or markup language of the following snippet and answer with one of: \(supported.joined(separator: ", ")). If none match, reply with 'swift'.\n\nSnippet:\n\n\(text)\n\nAnswer:") {
+                response += chunk
+            }
             let detectedRaw = response.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).lowercased()
             if let match = supported.first(where: { detectedRaw.contains($0) }) {
                 return match
             }
-        } catch {
-            // Fall through to heuristic
         }
         #endif
 
         // Heuristic fallback
         let lower = text.lowercased()
+        // Normalize common C# indicators to "csharp" to ensure the picker has a matching tag
+        if lower.contains("c#") || lower.contains("c sharp") || lower.range(of: #"\bcs\b"#, options: .regularExpression) != nil || lower.contains(".cs") {
+            return "csharp"
+        }
+        // C# strong heuristic
+        if lower.contains("using system") || lower.contains("namespace ") || lower.contains("public class") || lower.contains("public static void main") || lower.contains("static void main") || lower.contains("console.writeline") || lower.contains("console.readline") || lower.contains("class program") || lower.contains("get; set;") || lower.contains("list<") || lower.contains("dictionary<") || lower.contains("ienumerable<") || lower.range(of: #"\[[A-Za-z_][A-Za-z0-9_]*\]"#, options: .regularExpression) != nil {
+            return "csharp"
+        }
         if lower.contains("import swift") || lower.contains("struct ") || lower.contains("func ") {
             return "swift"
         }
@@ -641,14 +810,9 @@ struct ContentView: View {
         if lower.contains("<html") || lower.contains("<div") || lower.contains("</") {
             return "html"
         }
-        if lower.contains("{") && lower.contains("}") && lower.contains(":") && !lower.contains(";") && !lower.contains("function") {
-            return "json"
-        }
-        if lower.contains("# ") || lower.contains("## ") {
-            return "markdown"
-        }
-        if lower.contains("#include") || lower.contains("int ") || lower.contains("void ") {
-            return "c"
+        // Stricter C-family detection to avoid misclassifying C#
+        if lower.contains("#include") || lower.range(of: #"^\s*(int|void)\s+main\s*\("#, options: .regularExpression) != nil {
+            return "cpp"
         }
         if lower.contains("class ") && (lower.contains("::") || lower.contains("template<")) {
             return "cpp"
@@ -657,7 +821,7 @@ struct ContentView: View {
             return "css"
         }
         // Shell detection (bash/zsh)
-        if lower.contains("#!/bin/bash") || lower.contains("#!/usr/bin/env bash") || lower.contains("declare -a") || lower.contains("[[ ") || lower.contains(" ]] ") || lower.contains("$((") {
+        if lower.contains("#!/bin/bash") || lower.contains("#!/usr/bin/env bash") || lower.contains("declare -a") || lower.contains("[[ ") || lower.contains(" ]] ") || lower.contains("$(") {
             return "bash"
         }
         if lower.contains("#!/bin/zsh") || lower.contains("#!/usr/bin/env zsh") || lower.contains("typeset ") || lower.contains("autoload -Uz") || lower.contains("setopt ") {
@@ -671,7 +835,7 @@ struct ContentView: View {
         if lower.contains("write-host") || lower.contains("param(") || lower.contains("$psversiontable") || lower.range(of: #"\b(Get|Set|New|Remove|Add|Clear|Write)-[A-Za-z]+\b"#, options: .regularExpression) != nil {
             return "powershell"
         }
-        return "swift"
+        return "standard"
     }
 
     // MARK: Main editor stack: hosts the NSTextView-backed editor, status line, and toolbar.
@@ -724,8 +888,25 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Picker("Language", selection: currentLanguageBinding) {
-                    ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "c", "cpp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "plain"], id: \.self) { lang in
-                        Text(lang.capitalized).tag(lang)
+                    ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                        let label: String = {
+                            switch lang {
+                            case "objective-c": return "Objective‑C"
+                            case "csharp": return "C#"
+                            case "cpp": return "C++"
+                            case "json": return "JSON"
+                            case "xml": return "XML"
+                            case "yaml": return "YAML"
+                            case "toml": return "TOML"
+                            case "ini": return "INI"
+                            case "sql": return "SQL"
+                            case "html": return "HTML"
+                            case "css": return "CSS"
+                            case "standard": return "Standard"
+                            default: return lang.capitalized
+                            }
+                        }()
+                        Text(label).tag(lang)
                     }
                 }
                 .labelsHidden()
@@ -767,6 +948,14 @@ struct ContentView: View {
                     }
                     .padding(12)
                 }
+
+                Text(activeProviderName)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12), in: Capsule())
+                    .help("Active provider")
 
                 Button(action: { showAPISettings = true }) {
                     Image(systemName: "gearshape")
@@ -1058,8 +1247,21 @@ private func jump(to item: String) {
                 }
                 return nil
             }
+        case "csharp":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("class ") || t.hasPrefix("interface ") || t.hasPrefix("enum ") || t.contains(" static void Main(") || (t.contains(" void ") && t.contains("(") && t.contains(")") && t.contains("{")) {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
         default:
-            return ["Unsupported language"]
+            // For unknown or standard/plain, show first non-empty lines as headings
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if !t.isEmpty && t.count < 120 { return "\(t) (Line \(index + 1))" }
+                return nil
+            }
         }
 
         return toc.isEmpty ? ["No headers found"] : toc
@@ -1971,6 +2173,25 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             #"^\[[^\]]+\]"#: colors.meta,
             #"^;.*$"#: colors.comment,
             #"^\w+\s*=\s*.*$"#: colors.property
+        ]
+    case "csharp":
+        return [
+            #"\b(class|interface|enum|struct|namespace|using|public|private|protected|internal|static|readonly|sealed|abstract|virtual|override|async|await|new|return|if|else|for|foreach|while|do|switch|case|break|continue|try|catch|finally|throw)\b"#: colors.keyword,
+            #"\b(string|int|double|float|bool|decimal|char|void|object|var|List<[^>]+>|Dictionary<[^>]+>)\b"#: colors.type,
+            #"\"[^\"]*\""#: colors.string,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment
+        ]
+    case "standard":
+        return [
+            // Strings (double/single/backtick)
+            #"\"[^\"]*\"|'[^']*'|`[^`]*`"#: colors.string,
+            // Numbers
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            // Line and block comments for C-like and hash comments
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/|#.*"#: colors.comment,
+            // Common keywords from several languages
+            #"\b(if|else|for|while|do|switch|case|return|class|struct|enum|func|function|var|let|const|import|from|using|namespace|public|private|protected|static|void|new|try|catch|finally|throw)\b"#: colors.keyword
         ]
     case "plain":
         return [:]

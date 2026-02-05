@@ -24,33 +24,12 @@ public struct AppleIntelligenceAIClient: AIClient {
 
     public func streamSuggestions(prompt: String) -> AsyncStream<String> {
 #if USE_FOUNDATION_MODELS
-        if let fmModel = try? FMTextModel(configuration: .init()) {
-            return AsyncStream { continuation in
-                Task {
-                    do {
-                        let response = try await fmModel.generate(prompt)
-                        continuation.yield(response)
-                    } catch { }
-                    continuation.finish()
-                }
-            }
-        } else {
-            // Fall back to simulated streamed chunks
-            return AsyncStream { continuation in
-                Task {
-                    continuation.yield("Here is a suggestion:")
-                    try? await Task.sleep(nanoseconds: 200 * 1_000_000)
-                    continuation.yield(" the quick brown fox")
-                    try? await Task.sleep(nanoseconds: 200 * 1_000_000)
-                    continuation.yield(" jumps over the lazy dog.")
-                    continuation.finish()
-                }
-            }
-        }
+        // Delegate to the centralized Apple Foundation Models streaming helper.
+        return AppleFM.appleFMStream(prompt: prompt)
 #else
-        // Simulated streaming for non-FoundationModels environment
         return AsyncStream { continuation in
             Task {
+                // Simulated on-device response; replace with real on-device API when available
                 continuation.yield("Here is a suggestion:")
                 try? await Task.sleep(nanoseconds: 200 * 1_000_000)
                 continuation.yield(" the quick brown fox")
@@ -260,26 +239,29 @@ struct AIClientFactory {
                            geminiKeyProvider: () -> String? = { nil }) -> AIClient? {
         switch model {
         case .appleIntelligence:
+            // Default to Apple Intelligence client
             return AppleIntelligenceAIClient()
         case .grok:
             if let token = grokAPITokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
-                // Use streaming GrokAIClient
                 return GrokAIClientStreaming(apiKey: token)
             }
-            return nil
+            // Fallback to Apple Intelligence when no Grok key
+            return AppleIntelligenceAIClient()
         case .openAI:
             if let key = openAIKeyProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty {
                 return OpenAIAIClient(apiKey: key)
             }
-            return nil
+            // Fallback to Apple Intelligence when no OpenAI key
+            return AppleIntelligenceAIClient()
         case .gemini:
             if let key = geminiKeyProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty {
                 return GeminiAIClient(apiKey: key)
             }
-            return nil
+            // Fallback to Apple Intelligence when no Gemini key
+            return AppleIntelligenceAIClient()
         case .anthropic:
-            // Anthropic client not wired here; inline completion uses direct call in ContentView.
-            return nil
+            // Anthropic client not wired here; fallback to Apple Intelligence
+            return AppleIntelligenceAIClient()
         }
     }
 }

@@ -34,6 +34,7 @@ class EditorViewModel: ObservableObject {
         "c": "c",
         "cpp": "cpp",
         "h": "c",
+        "cs": "csharp",
         "json": "json",
         "md": "markdown",
         "sh": "bash",
@@ -96,7 +97,18 @@ class EditorViewModel: ObservableObject {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = tabs[index].name
         let mdType = UTType(filenameExtension: "md") ?? .plainText
-        panel.allowedContentTypes = [.text, .swiftSource, .pythonScript, .javaScript, .html, .css, .cSource, .json, mdType]
+        panel.allowedContentTypes = [
+            .text,
+            .swiftSource,
+            .pythonScript,
+            .javaScript,
+            .html,
+            .css,
+            .cSource,
+            .json,
+            mdType,
+            (UTType(filenameExtension: "cs") ?? .text)
+        ]
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
