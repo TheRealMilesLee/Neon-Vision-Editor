@@ -1,0 +1,131 @@
+#if USE_FOUNDATION_MODELS
+import Foundation
+import FoundationModels
+
+@Generable(description: "Plain generated text")
+public struct GeneratedText { public var text: String }
+
+public enum AppleFM {
+    /// Perform a simple health check by requesting a short completion using the system model.
+    /// - Returns: A string indicating the model is responsive ("pong").
+    /// - Throws: Any error thrown by the Foundation Models API or availability checks.
+    public static func appleFMHealthCheck() async throws -> String {
+        if #available(iOS 18.0, macOS 15.0, *) {
+            // Ensure the system model is available before attempting to respond
+            let model = SystemLanguageModel.default
+            guard case .available = model.availability else {
+                throw NSError(domain: "AppleFM", code: -2, userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence model unavailable: \(String(describing: model.availability))"]) 
+            }
+            let session = LanguageModelSession()
+            _ = try await session.respond(to: "ping")
+            return "pong"
+        } else {
+            throw NSError(domain: "AppleFM", code: -3, userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence requires iOS 18 / macOS 15 or later."])
+        }
+    }
+
+    /// Generate a completion from the given prompt using the system language model.
+    /// - Parameter prompt: The prompt string to complete.
+    /// - Returns: The completion text from the model.
+    /// - Throws: Any error thrown by the Foundation Models API or availability checks.
+    public static func appleFMComplete(prompt: String) async throws -> String {
+        if #available(iOS 18.0, macOS 15.0, *) {
+            let model = SystemLanguageModel.default
+            guard case .available = model.availability else {
+                throw NSError(domain: "AppleFM", code: -2, userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence model unavailable: \(String(describing: model.availability))"]) 
+            }
+            let session = LanguageModelSession()
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } else {
+            throw NSError(domain: "AppleFM", code: -3, userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence requires iOS 18 / macOS 15 or later."])
+        }
+    }
+
+    /// Stream a completion from the given prompt, yielding partial updates as the model generates them.
+    /// - Parameter prompt: The prompt string to complete.
+    /// - Returns: An AsyncStream of incremental text deltas.
+    public static func appleFMStream(prompt: String) -> AsyncStream<String> {
+        if #available(iOS 18.0, macOS 15.0, *) {
+            let model = SystemLanguageModel.default
+            guard case .available = model.availability else {
+                return AsyncStream { $0.finish() }
+            }
+
+            return AsyncStream { continuation in
+                Task {
+                    do {
+                        let session = LanguageModelSession()
+
+                        var last = ""
+                        for try await partial in session.streamResponse(to: prompt, generating: GeneratedText.self) {
+                            // Extract the full current text from the partially generated content
+                            let currentOptional = partial.content.text
+
+                            // If the model hasn't produced any text yet, skip this iteration
+                            guard let current = currentOptional else { continue }
+
+                            // Compute the delta from the last full content we saw using String indices
+                            let lastCount = last.count
+                            let currentCount = current.count
+                            let prefixCount = min(lastCount, currentCount)
+
+                            let startIdx = current.index(current.startIndex, offsetBy: prefixCount)
+                            let delta = String(current[startIdx...])
+
+                            if !delta.isEmpty {
+                                continuation.yield(delta)
+                            }
+                            last = current
+                        }
+                    } catch {
+                        // Fallback to single-shot completion if streaming fails
+                        do {
+                            let response = try await LanguageModelSession().respond(to: prompt)
+                            continuation.yield(response.content)
+                        } catch {
+                            // Swallow secondary errors
+                        }
+                    }
+                    continuation.finish()
+                }
+            }
+        } else {
+            return AsyncStream { continuation in
+                continuation.finish()
+            }
+        }
+    }
+}
+
+#else
+
+import Foundation
+
+public enum AppleFM {
+    /// Stub health check implementation when Foundation Models is not available.
+    /// - Throws: Always throws an error indicating the feature is unavailable.
+    public static func appleFMHealthCheck() async throws -> String {
+        throw NSError(domain: "AppleFM", code: -1, userInfo: [NSLocalizedDescriptionKey: "Foundation Models feature is not enabled."])
+    }
+
+    /// Stub completion implementation when Foundation Models is not available.
+    /// - Parameter prompt: The prompt string.
+    /// - Returns: Placeholder string indicating unavailable feature.
+    public static func appleFMComplete(prompt: String) async throws -> String {
+        return "Completion unavailable: Foundation Models feature not enabled."
+    }
+
+    /// Stub streaming implementation when Foundation Models is not available.
+    public static func appleFMStream(prompt: String) -> AsyncStream<String> {
+        return AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+}
+
+#endif
+
+
+
+
