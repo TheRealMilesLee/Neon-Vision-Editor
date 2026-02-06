@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct NeonVisionEditorApp: App {
     @StateObject private var viewModel = EditorViewModel()
+    @Environment(\.openWindow) private var openWindow
     @State private var showGrokError: Bool = false
     @State private var grokErrorMessage: String = ""
     @State private var useAppleIntelligence: Bool = true
@@ -70,8 +71,29 @@ struct NeonVisionEditorApp: App {
                 }
         }
         .defaultSize(width: 1000, height: 600)
+
+        WindowGroup("New Window", id: "blank-window") {
+            ContentView()
+                .environmentObject(EditorViewModel())
+                .environment(\.showGrokError, $showGrokError)
+                .environment(\.grokErrorMessage, $grokErrorMessage)
+                .frame(minWidth: 600, minHeight: 400)
+        }
+        .defaultSize(width: 1000, height: 600)
+
         .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Window") {
+                    openWindow(id: "blank-window")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
+
             CommandMenu("File") {
+                Button("New Window") {
+                    openWindow(id: "blank-window")
+                }
+
                 Button("New Tab") {
                     viewModel.addNewTab()
                 }

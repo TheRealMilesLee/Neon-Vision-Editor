@@ -2,7 +2,7 @@
 //  LineNumberRulerView.swift
 //  Neon Vision Editor
 //
-//  Created by Hilthart Pedersen on 06.02.26.
+//  Created by h3pdesign on 06.02.26.
 //
 
 
