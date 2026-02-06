@@ -77,7 +77,7 @@ No background indexing. No telemetry. No plugin sprawl.
 
 -  **X** No plugin system (for now)
 -  **X** No project/workspace management
--  **X** No code intelligence (LSP, autocomplete, refactors)
+-  **X** No code intelligence (LSP, refactors) but simple autocomplete
 -  **X** No Electron, no cross-platform abstraction layer
 
 This is **not** an IDE. That is intentional.
