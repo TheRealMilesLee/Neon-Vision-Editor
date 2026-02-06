@@ -4,9 +4,9 @@
   <img src="NeonVisionEditorIcon.png" alt="Neon Vision Editor Logo" width="200"/>
 </p>
 
-<h3 align="center">
+<h4 align="center">
   A lightweight, modern macOS text editor focused on speed, readability, and fast automatic syntax highlighting. 
-</h3>
+</h4>
 
 <p align="center">
   It is intentionally minimal: quick edits, fast file access, no IDE bloat.
