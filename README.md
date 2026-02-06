@@ -25,7 +25,7 @@ It is intentionally minimal: quick edits, fast file access, no IDE bloat.
 
 Prebuilt binaries are available via **GitHub Releases**:
 
-- Latest release: **v0.2.8-alpha**
+- Latest release: **v0.2.9-alpha**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *not yet*
 
