@@ -150,7 +150,7 @@ struct NeonVisionEditorApp: App {
                                 #if USE_FOUNDATION_MODELS
                                 // Prefer Apple Intelligence by default
                                 if useAppleIntelligence {
-                                    return AIClientFactory.makeClient(for: .appleIntelligence)
+                                    return AIClientFactory.makeClient(for: AIModel.appleIntelligence)
                                 }
                                 #endif
                                 // Fallback order: Grok -> OpenAI -> Gemini -> Apple (if compiled) -> nil

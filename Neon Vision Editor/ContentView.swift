@@ -10,15 +10,6 @@ import Foundation
 import FoundationModels
 #endif
 
-// Supported AI providers for suggestions. Extend as needed.
-enum AIModel: String, CaseIterable, Identifiable {
-    case appleIntelligence
-    case grok
-    case openAI
-    case gemini
-    case anthropic
-    var id: String { rawValue }
-}
 
 // Utility: quick width calculation for strings with a given font (AppKit-based)
 extension String {
@@ -1879,120 +1870,6 @@ struct CustomTextEditor: NSViewRepresentable {
     }
 }
 
-// Vertical ruler that paints line numbers aligned to visible text lines.
-final class LineNumberRulerView: NSRulerView {
-    private weak var textView: NSTextView?
-    private let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-    private let textColor = NSColor.secondaryLabelColor
-    private let inset: CGFloat = 4
-
-    override var isOpaque: Bool { false }
-
-    init(textView: NSTextView) {
-        self.textView = textView
-        super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
-        self.clientView = textView
-        self.ruleThickness = 44
-        NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: NSText.didChangeNotification, object: textView)
-        NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: NSView.boundsDidChangeNotification, object: scrollView?.contentView)
-        NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: NSView.boundsDidChangeNotification, object: textView.enclosingScrollView?.contentView)
-    }
-
-    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.clear.setFill()
-        dirtyRect.fill()
-        drawHashMarksAndLabels(in: dirtyRect)
-    }
-
-    @objc private func redraw() { needsDisplay = true }
-
-    override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let tv = textView, let lm = tv.layoutManager, tv.textContainer != nil else { return }
-        
-        // Use the text view's visible rect (already in the correct coordinate space & respects flipping/insets)
-        let visibleRect = tv.visibleRect
-        let tcOrigin = tv.textContainerOrigin // accounts for textContainerInset
-
-        // Determine first visible character and line number
-        let probePoint = NSPoint(x: visibleRect.minX + 2, y: visibleRect.minY + 2)
-        let firstVisibleCharIndex = tv.characterIndexForInsertion(at: probePoint)
-
-        // Compute the first visible line number by counting newlines up to that character index
-        let fullString = tv.string as NSString
-        let clampedCharIndex = min(max(firstVisibleCharIndex, 0), fullString.length)
-        let prefix = fullString.substring(to: clampedCharIndex)
-        var currentLineNumber = prefix.reduce(1) { $1 == "\n" ? $0 + 1 : $0 }
-
-        // Ensure layout is available around the first visible character
-        lm.ensureLayout(forCharacterRange: NSRange(location: clampedCharIndex, length: 0))
-
-        // Iterate line fragments and compute draw positions
-        var glyphIndex = lm.glyphIndexForCharacter(at: clampedCharIndex)
-
-        while glyphIndex < lm.numberOfGlyphs {
-            var effectiveGlyphRange = NSRange(location: 0, length: 0)
-
-            // Allow layout manager to lay out additional text as needed while we scroll
-            let lineRectInContainer = lm.lineFragmentRect(
-                forGlyphAt: glyphIndex,
-                effectiveRange: &effectiveGlyphRange,
-                withoutAdditionalLayout: false
-            )
-            let usedRectInContainer = lm.lineFragmentUsedRect(
-                forGlyphAt: glyphIndex,
-                effectiveRange: nil,
-                withoutAdditionalLayout: false
-            )
-
-            // Convert container rects -> text view coordinates
-            let lineRectInView = NSRect(
-                x: lineRectInContainer.origin.x + tcOrigin.x,
-                y: lineRectInContainer.origin.y + tcOrigin.y,
-                width: lineRectInContainer.size.width,
-                height: lineRectInContainer.size.height
-            )
-            let usedRectInView = NSRect(
-                x: usedRectInContainer.origin.x + tcOrigin.x,
-                y: usedRectInContainer.origin.y + tcOrigin.y,
-                width: usedRectInContainer.size.width,
-                height: usedRectInContainer.size.height
-            )
-
-            // Stop once we're below the visible area
-            if lineRectInView.minY > visibleRect.maxY { break }
-
-            // Draw line numbers aligned with baselines
-            // Compute a stable vertical position (baseline-ish if possible, otherwise center)
-            var drawYInView: CGFloat
-            if effectiveGlyphRange.length > 0 {
-                let baselinePoint = lm.location(forGlyphAt: glyphIndex)
-                drawYInView = (lineRectInView.minY + baselinePoint.y)
-            } else {
-                drawYInView = usedRectInView.midY
-            }
-
-            // Convert text view Y -> ruler view Y (ruler is synced to visibleRect)
-            let drawY = (drawYInView - visibleRect.minY) + bounds.minY
-
-            let numberString = NSString(string: "\(currentLineNumber)")
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: textColor
-            ]
-            let size = numberString.size(withAttributes: attributes)
-
-            // Center the label vertically around computed Y
-            let drawPoint = NSPoint(x: bounds.maxX - size.width - inset, y: drawY - size.height / 2.0)
-            numberString.draw(at: drawPoint, withAttributes: attributes)
-
-            // Advance to next line fragment
-            glyphIndex = max(effectiveGlyphRange.upperBound, glyphIndex + 1)
-            currentLineNumber += 1
-        }
-    }
-}
 
 // SyntaxColors: palette for token types; derived from a vibrant theme and respects dark mode.
 struct SyntaxColors {
