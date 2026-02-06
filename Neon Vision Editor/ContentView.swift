@@ -62,6 +62,8 @@ struct ContentView: View {
     @State var showProjectStructureSidebar: Bool = false
     @State var projectRootFolderURL: URL? = nil
     @State var projectTreeNodes: [ProjectTreeNode] = []
+    @State var pendingCloseTabID: UUID? = nil
+    @State var showUnsavedCloseDialog: Bool = false
 
 #if USE_FOUNDATION_MODELS
     var appleModelAvailable: Bool { true }
@@ -680,6 +682,20 @@ struct ContentView: View {
             )
                 .frame(width: 420)
         }
+        .confirmationDialog("Save changes before closing?", isPresented: $showUnsavedCloseDialog, titleVisibility: .visible) {
+            Button("Save") { saveAndClosePendingTab() }
+            Button("Don't Save", role: .destructive) { discardAndClosePendingTab() }
+            Button("Cancel", role: .cancel) {
+                pendingCloseTabID = nil
+            }
+        } message: {
+            if let pendingCloseTabID,
+               let tab = viewModel.tabs.first(where: { $0.id == pendingCloseTabID }) {
+                Text("\"\(tab.name)\" has unsaved changes.")
+            } else {
+                Text("This file has unsaved changes.")
+            }
+        }
         .onAppear {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
@@ -861,6 +877,10 @@ struct ContentView: View {
     var editorView: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
+                if !viewModel.isBrainDumpMode {
+                    tabBarView
+                }
+
                 // Single editor (no TabView)
                 CustomTextEditor(
                     text: currentContentBinding,
@@ -947,6 +967,44 @@ struct ContentView: View {
                 .padding(.trailing, 16)
         }
         .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
+    }
+
+    @ViewBuilder
+    var tabBarView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(viewModel.tabs) { tab in
+                    HStack(spacing: 6) {
+                        Button {
+                            viewModel.selectedTabID = tab.id
+                        } label: {
+                            Text(tab.name + (tab.isDirty ? " •" : ""))
+                                .lineLimit(1)
+                                .font(.system(size: 12, weight: viewModel.selectedTabID == tab.id ? .semibold : .regular))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            requestCloseTab(tab)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Close \(tab.name)")
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(viewModel.selectedTabID == tab.id ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.10))
+                    )
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)))
     }
 
 }

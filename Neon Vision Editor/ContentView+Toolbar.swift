@@ -118,7 +118,8 @@ extension ContentView {
             Button(action: {
                 viewModel.showSidebar.toggle()
             }) {
-                Image(systemName: viewModel.showSidebar ? "sidebar.left" : "sidebar.right")
+                Image(systemName: "sidebar.left")
+                    .symbolVariant(viewModel.showSidebar ? .fill : .none)
             }
             .help("Toggle Sidebar")
 

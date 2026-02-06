@@ -10,6 +10,7 @@ struct TabData: Identifiable {
     var language: String
     var fileURL: URL?
     var languageLocked: Bool = false
+    var isDirty: Bool = false
 }
 
 @MainActor
@@ -62,7 +63,11 @@ class EditorViewModel: ObservableObject {
     
     func updateTabContent(tab: TabData, content: String) {
         if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
+            let previous = tabs[index].content
             tabs[index].content = content
+            if content != previous {
+                tabs[index].isDirty = true
+            }
             
             // Early lock to Swift if clearly Swift-specific tokens are present
             let lower = content.lowercased()
@@ -186,6 +191,7 @@ class EditorViewModel: ObservableObject {
         if let url = tabs[index].fileURL {
             do {
                 try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
+                tabs[index].isDirty = false
             } catch {
                 print("Error saving file: \(error)")
             }
@@ -216,6 +222,7 @@ class EditorViewModel: ObservableObject {
                 try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].fileURL = url
                 tabs[index].name = url.lastPathComponent
+                tabs[index].isDirty = false
             } catch {
                 print("Error saving file: \(error)")
             }
@@ -240,7 +247,8 @@ class EditorViewModel: ObservableObject {
                                      content: content,
                                      language: detectedLang,
                                      fileURL: url,
-                                     languageLocked: extLang != nil)
+                                     languageLocked: extLang != nil,
+                                     isDirty: false)
                 tabs.append(newTab)
                 selectedTabID = newTab.id
             } catch {
@@ -258,7 +266,8 @@ class EditorViewModel: ObservableObject {
                                  content: content,
                                  language: detectedLang,
                                  fileURL: url,
-                                 languageLocked: extLang != nil)
+                                 languageLocked: extLang != nil,
+                                 isDirty: false)
             tabs.append(newTab)
             selectedTabID = newTab.id
         } catch {

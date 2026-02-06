@@ -3,6 +3,43 @@ import AppKit
 import Foundation
 
 extension ContentView {
+    func requestCloseTab(_ tab: TabData) {
+        if tab.isDirty {
+            pendingCloseTabID = tab.id
+            showUnsavedCloseDialog = true
+        } else {
+            viewModel.closeTab(tab: tab)
+        }
+    }
+
+    func saveAndClosePendingTab() {
+        guard let pendingCloseTabID,
+              let tab = viewModel.tabs.first(where: { $0.id == pendingCloseTabID }) else {
+            self.pendingCloseTabID = nil
+            return
+        }
+
+        viewModel.saveFile(tab: tab)
+
+        if let updated = viewModel.tabs.first(where: { $0.id == pendingCloseTabID }),
+           !updated.isDirty {
+            viewModel.closeTab(tab: updated)
+            self.pendingCloseTabID = nil
+        } else {
+            self.pendingCloseTabID = nil
+        }
+    }
+
+    func discardAndClosePendingTab() {
+        guard let pendingCloseTabID,
+              let tab = viewModel.tabs.first(where: { $0.id == pendingCloseTabID }) else {
+            self.pendingCloseTabID = nil
+            return
+        }
+        viewModel.closeTab(tab: tab)
+        self.pendingCloseTabID = nil
+    }
+
     func findNext() {
         guard !findQuery.isEmpty, let tv = activeEditorTextView() else { return }
         findStatusMessage = ""
