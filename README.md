@@ -1,7 +1,7 @@
 <h1 align="center">Neon Vision Editor</h1>
 
 <p align="center">
-  <img src="NeonVisionEditoricon.png" alt="Neon Vision Editor Logo" width="200"/>
+  <img src="NeonVisionEditorIcon.png" alt="Neon Vision Editor Logo" width="200"/>
 </p>
 
 <p align="center">
