@@ -97,7 +97,6 @@ No background indexing. No telemetry. No plugin sprawl.
 ## Non-goals (by design)
 
 -  **X** No plugin system (for now)
--  **X** No project/workspace management
 -  **X** No code intelligence (LSP, refactors) but simple autocomplete
 -  **X** No Electron, no cross-platform abstraction layer
 
