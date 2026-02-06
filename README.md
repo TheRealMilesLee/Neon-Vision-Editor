@@ -61,7 +61,7 @@ Neon Vision Editor sits in between:
 No background indexing. No telemetry. No plugin sprawl.
 
 <p align="left">
-  <img src="NeonVisionEditor.png" alt="Neon Vision Editor App" width="1100"/>
+  <img src="NeonVisionEditorApp.png" alt="Neon Vision Editor App" width="1100"/>
 </p>
 
 ## Features
