@@ -25,7 +25,7 @@ It is intentionally minimal: quick edits, fast file access, no IDE bloat.
 
 Prebuilt binaries are available via **GitHub Releases**:
 
-- Latest release: **v0.2.5-alpha**
+- Latest release: **v0.2.8-alpha**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *not yet*
 
@@ -75,10 +75,10 @@ No background indexing. No telemetry. No plugin sprawl.
 
 ## Non-goals (by design)
 
-- ❌ No plugin system (for now)
-- ❌ No project/workspace management
-- ❌ No code intelligence (LSP, autocomplete, refactors)
-- ❌ No Electron, no cross-platform abstraction layer
+-  **X** No plugin system (for now)
+-  **X** No project/workspace management
+-  **X** No code intelligence (LSP, autocomplete, refactors)
+-  **X** No Electron, no cross-platform abstraction layer
 
 This is **not** an IDE. That is intentional.
 
