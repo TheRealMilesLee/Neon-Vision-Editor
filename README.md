@@ -77,6 +77,28 @@ No background indexing. No telemetry. No plugin sprawl.
 - Native macOS 26 (Tahoe) look & behavior
 - Built with Swift and AppKit
 
+## What’s new (feature-focused) in latest release
+
+### Major editor UX expansion:
+
+- Added regex-capable Find/Replace with Replace All and quick toolbar access.
+- Added a right-side project structure panel with recursive folder tree browsing.
+- Added a dedicated New Window flow that opens blank/isolated windows.
+- Added richer window controls in the toolbar (including sidebar/window toggles).
+- Improved translucency support in editor/window surfaces.
+- Better sidebar and window-state handling across the app.
+- Smarter language/editor behavior:
+- Added/expanded local language detection heuristics.
+- Improved syntax highlighting behavior (including markdown edge cases).
+- Improved focus and editor interaction behavior in general.
+- Internal quality improvements:
+- Large ContentView refactor into modular files/extensions for easier maintenance and faster iteration.
+
+If you want, I can also turn this into:
+
+a shorter “TL;DR + bullet list” version
+a more polished launch-style Reddit post with title options
+
 ## Non-goals (by design)
 
 -  **X** No plugin system (for now)
