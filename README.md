@@ -67,7 +67,7 @@ No background indexing. No telemetry. No plugin sprawl.
 ## Features
 
 - Fast loading, including large text files
-- Syntax highlighting for common languages  
+- Automatic applied syntax highlighting for common languages  
   (Python, C/C++, JavaScript, HTML, CSS, and others)
 - Clean, minimal UI optimized for readability
 - Native macOS 26 (Tahoe) look & behavior
