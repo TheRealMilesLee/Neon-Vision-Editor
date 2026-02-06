@@ -94,11 +94,6 @@ No background indexing. No telemetry. No plugin sprawl.
 - Internal quality improvements:
 - Large ContentView refactor into modular files/extensions for easier maintenance and faster iteration.
 
-If you want, I can also turn this into:
-
-a shorter “TL;DR + bullet list” version
-a more polished launch-style Reddit post with title options
-
 ## Non-goals (by design)
 
 -  **X** No plugin system (for now)
