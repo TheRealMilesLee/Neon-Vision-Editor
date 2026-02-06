@@ -26,8 +26,9 @@ public final class AIModelClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw NSError(domain: "AIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "API request failed"])
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(domain: "AIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "API request failed (status: \(status))"])
         }
 
         struct Response: Decodable {
@@ -84,13 +85,21 @@ public final class AIModelClient {
                             let event = String(buffer[..<range.lowerBound])
                             buffer = String(buffer[range.upperBound...])
 
-                            let payload = event
+                            let dataLines = event
                                 .split(separator: "\n")
                                 .filter { $0.hasPrefix("data:") }
                                 .map { String($0.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
-                                .joined()
 
-                            guard !payload.isEmpty else { continue }
+                            guard !dataLines.isEmpty else { continue }
+
+                            // Handle SSE sentinel
+                            if dataLines.count == 1, dataLines[0] == "[DONE]" {
+                                continuation.finish()
+                                return
+                            }
+
+                            let payload = dataLines.joined(separator: "\n")
+
                             if let data = payload.data(using: .utf8) {
                                 if let chunk = try? JSONDecoder().decode(ChatDeltaChunk.self, from: data),
                                    let choice = chunk.choices?.first {

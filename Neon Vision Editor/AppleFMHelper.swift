@@ -6,11 +6,22 @@ import FoundationModels
 public struct GeneratedText { public var text: String }
 
 public enum AppleFM {
+    /// Global toggle to enable Apple Foundation Models features at runtime.
+    /// Defaults to `false` so code completion/AI features are disabled by default.
+    public static var isEnabled: Bool = false
+
+    private static func featureDisabledError() -> NSError {
+        NSError(domain: "AppleFM", code: -10, userInfo: [NSLocalizedDescriptionKey: "Foundation Models feature is disabled by default. Enable via AppleFM.isEnabled = true."])
+    }
+
     /// Perform a simple health check by requesting a short completion using the system model.
     /// - Returns: A string indicating the model is responsive ("pong").
     /// - Throws: Any error thrown by the Foundation Models API or availability checks.
     public static func appleFMHealthCheck() async throws -> String {
         if #available(iOS 18.0, macOS 15.0, *) {
+            guard isEnabled else {
+                throw featureDisabledError()
+            }
             // Ensure the system model is available before attempting to respond
             let model = SystemLanguageModel.default
             guard case .available = model.availability else {
@@ -30,6 +41,9 @@ public enum AppleFM {
     /// - Throws: Any error thrown by the Foundation Models API or availability checks.
     public static func appleFMComplete(prompt: String) async throws -> String {
         if #available(iOS 18.0, macOS 15.0, *) {
+            guard isEnabled else {
+                throw featureDisabledError()
+            }
             let model = SystemLanguageModel.default
             guard case .available = model.availability else {
                 throw NSError(domain: "AppleFM", code: -2, userInfo: [NSLocalizedDescriptionKey: "Apple Intelligence model unavailable: \(String(describing: model.availability))"]) 
@@ -47,6 +61,9 @@ public enum AppleFM {
     /// - Returns: An AsyncStream of incremental text deltas.
     public static func appleFMStream(prompt: String) -> AsyncStream<String> {
         if #available(iOS 18.0, macOS 15.0, *) {
+            guard isEnabled else {
+                return AsyncStream { $0.finish() }
+            }
             let model = SystemLanguageModel.default
             guard case .available = model.availability else {
                 return AsyncStream { $0.finish() }
@@ -128,4 +145,5 @@ public enum AppleFM {
 
 
 
+ 
 

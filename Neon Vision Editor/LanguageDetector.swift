@@ -4,6 +4,12 @@ public struct LanguageDetector {
     public static let shared = LanguageDetector()
     private init() {}
 
+    // Temporary kill-switch for C# detection; set to true to re-enable
+    public static var csharpDetectionEnabled: Bool = false
+
+    // Temporary kill-switch for C detection; set to true to re-enable
+    public static var cDetectionEnabled: Bool = false
+
     // Known extension to language map
     private let extensionMap: [String: String] = [
         "swift": "swift",
@@ -36,6 +42,29 @@ public struct LanguageDetector {
         let raw = text
         let t = raw.lowercased()
         let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Strong priority: if the text contains "import SwiftUI" anywhere, classify as Swift immediately.
+        if t.contains("import swiftui") {
+            return Result(lang: "swift", scores: ["swift": 10_000], confidence: 10_000)
+        }
+
+        // Additional strong Swift early-returns for common app files
+        if t.contains("@main") {
+            return Result(lang: "swift", scores: ["swift": 10_000], confidence: 10_000)
+        }
+        if (t.contains("struct ") && t.contains(": view")) || t.contains("import appkit") || t.contains("import uikit") || t.contains("import foundationmodels") {
+            return Result(lang: "swift", scores: ["swift": 9_000], confidence: 9_000)
+        }
+
+        // If content includes several Swift-only tokens, force Swift regardless of other signals
+        if t.contains("@published") || t.contains("@stateobject") || t.contains("guard ") || t.contains(" if let ") {
+            return Result(lang: "swift", scores: ["swift": 8_000], confidence: 8_000)
+        }
+
+        // Swift-specific class modifier that's uncommon in C# (uses 'sealed' instead)
+        if t.contains(" final class ") || t.contains("public final class ") {
+            return Result(lang: "swift", scores: ["swift": 8_500], confidence: 8_500)
+        }
 
         var scores: [String: Int] = [
             "swift": 0,
@@ -80,19 +109,31 @@ public struct LanguageDetector {
 
         // 3) Swift signals
         let swiftSignals = [
-            ("import swiftui", 20),
-            ("import foundation", 15),
-            ("struct ", 4),
-            (": view", 10),
-            ("enum ", 4),
-            (" case ", 3),
-            ("let ", 4),
-            ("var ", 3),
-            ("func ", 3),
-            ("->", 3),
-            ("@main", 8),
-            ("#if ", 3),
-            ("#endif", 3),
+            ("import swiftui", 30),
+            ("import foundation", 20),
+            ("import appkit", 18),
+            ("import uikit", 18),
+            ("import combine", 16),
+            ("import swiftdata", 16),
+            ("struct ", 6),
+            (": view", 14),
+            ("enum ", 5),
+            (" class ", 4),
+            (" case ", 4),
+            ("let ", 6),
+            ("var ", 5),
+            ("func ", 5),
+            ("->", 4),
+            (" init(", 6),
+            ("guard ", 10),
+            ("if let ", 10),
+            ("as?", 6),
+            ("as!", 6),
+            ("try?", 6),
+            ("try!", 6),
+            ("@main", 10),
+            ("#if ", 4),
+            ("#endif", 4),
             ("urlsession", 10),
             ("urlrequest(", 8),
             ("jsondecoder", 8),
@@ -100,14 +141,17 @@ public struct LanguageDetector {
             ("decodable", 8),
             ("encodable", 6),
             ("asyncstream<", 8),
-            ("public final class ", 8),
-            ("url(", 3),
-            ("url(string:", 3),
-            ("try await", 8),
-            ("task {", 5),
-            ("@published", 6),
-            ("@stateobject", 6),
-            ("@mainactor", 6)
+            ("observableobject", 10),
+            ("@published", 8),
+            ("@stateobject", 8),
+            ("@state", 6),
+            ("@binding", 6),
+            ("@mainactor", 8)
+        ,
+        ("public final class ", 14),
+        (" final class ", 12),
+        ("protocol ", 10),
+        ("extension ", 10)
         ]
         for (sig, w) in swiftSignals { if t.contains(sig) { bump("swift", w) } }
 
@@ -115,20 +159,22 @@ public struct LanguageDetector {
         let hasUsingSystem = t.contains("\nusing system;") || t.contains("\nusing system.")
         let hasNamespace = t.contains("\nnamespace ")
         let hasMainMethod = t.contains("static void main(") || t.contains("static int main(")
-        let hasCSharpAttributes = t.contains("\n[") && t.contains("]\n")
+        let hasCSharpAttributes = t.contains("\n[") && t.contains("]\n") && !t.contains("@")
         let csharpContext = hasUsingSystem || hasNamespace || hasMainMethod
         let semicolonCount = raw.components(separatedBy: ";").count - 1
 
-        if hasUsingSystem { bump("csharp", 25) }
-        if hasNamespace { bump("csharp", 25) }
-        if hasMainMethod { bump("csharp", 20) }
-        if hasCSharpAttributes { bump("csharp", 8) }
+        if hasUsingSystem { bump("csharp", 18) }
+        if hasNamespace { bump("csharp", 18) }
+        if hasMainMethod { bump("csharp", 16) }
+        if hasCSharpAttributes { bump("csharp", 6) }
         if csharpContext {
-            if semicolonCount > 8 { bump("csharp", 6) }
-            if t.contains("\nclass ") && (t.contains("\npublic ") || t.contains(" public ")) && t.contains(" static ") { bump("csharp", 6) }
+            if semicolonCount > 8 { bump("csharp", 4) }
+            if t.contains("\nclass ") && (t.contains("\npublic ") || t.contains(" public ")) && t.contains(" static ") {
+                bump("csharp", 4)
+            }
         } else {
-            // Without strong context, cap weak C# signals
-            if semicolonCount > 12 { bump("csharp", 2) }
+            // Without strong context, do not let semicolons alone push C# over Swift
+            if semicolonCount > 20 { bump("csharp", 1) }
         }
 
         // 5) Python
@@ -153,9 +199,31 @@ public struct LanguageDetector {
         // Conflict resolution tweaks
         let swiftScore = scores["swift"] ?? 0
         let csharpScore = scores["csharp"] ?? 0
-        if swiftScore >= 15 && !csharpContext {
-            // Penalize accidental C# when Swift is strong and no C# context
+        if swiftScore >= 20 && !csharpContext {
+            // Strong Swift indicators without C# context: heavily penalize accidental C# bumps
+            scores["csharp"] = max(0, csharpScore - 20)
+        } else if swiftScore >= 15 && !csharpContext {
+            // Moderate Swift indicators: apply smaller penalty
             scores["csharp"] = max(0, csharpScore - 10)
+        }
+
+        if (t.contains("import swiftui") || t.contains(": view") || t.contains("@main") || t.contains(" final class ")) && !csharpContext {
+            scores["csharp"] = max(0, (scores["csharp"] ?? 0) - 40)
+        }
+
+        // If Swift-only tokens are present, strongly discourage C#
+        if (t.contains(" final class ") || t.contains("@published") || t.contains(": view")) && !csharpContext {
+            scores["csharp"] = max(0, (scores["csharp"] ?? 0) - 30)
+        }
+
+        // If C# detection is disabled, ensure it cannot win
+        if !Self.csharpDetectionEnabled {
+            scores["csharp"] = Int.min / 2
+        }
+
+        // If C detection is disabled, ensure it cannot win
+        if !Self.cDetectionEnabled {
+            scores["c"] = Int.min / 2
         }
 
         // Decide winner and confidence
@@ -167,3 +235,4 @@ public struct LanguageDetector {
         return Result(lang: lang, scores: scores, confidence: confidence)
     }
 }
+

@@ -54,7 +54,8 @@ struct ContentView: View {
 
     // Debounce handle for inline completion
     @State private var lastCompletionWorkItem: DispatchWorkItem?
-    @State private var isAutoCompletionEnabled: Bool = true
+    @State private var isAutoCompletionEnabled: Bool = false
+    @State private var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
 
     // Added missing popover UI state
     @State private var showAISelectorPopover: Bool = false
@@ -647,6 +648,7 @@ struct ContentView: View {
                     editorView
                 }
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 600)
+                .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
             } else {
                 // Fully collapsed: render only the editor without a split view
                 editorView
@@ -674,6 +676,29 @@ struct ContentView: View {
         .onAppear {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
+
+            // Restore Brain Dump mode from defaults
+            if UserDefaults.standard.object(forKey: "BrainDumpModeEnabled") != nil {
+                viewModel.isBrainDumpMode = UserDefaults.standard.bool(forKey: "BrainDumpModeEnabled")
+            }
+
+            if let window = NSApp.keyWindow ?? NSApp.windows.first {
+                if enableTranslucentWindow {
+                    window.isOpaque = false
+                    window.backgroundColor = .clear
+                    window.titlebarAppearsTransparent = true
+                    if #available(macOS 13.0, *) {
+                        window.titlebarSeparatorStyle = .none
+                    }
+                } else {
+                    window.isOpaque = true
+                    window.backgroundColor = NSColor.windowBackgroundColor
+                    window.titlebarAppearsTransparent = false
+                    if #available(macOS 13.0, *) {
+                        window.titlebarSeparatorStyle = .automatic
+                    }
+                }
+            }
         }
     }
 
@@ -688,6 +713,7 @@ struct ContentView: View {
                 .safeAreaInset(edge: .bottom) {
                     Divider()
                 }
+                .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
         } else {
             EmptyView()
         }
@@ -848,13 +874,23 @@ struct ContentView: View {
                 language: currentLanguage,
                 colorScheme: colorScheme,
                 fontSize: editorFontSize,
-                isLineWrapEnabled: $viewModel.isLineWrapEnabled
+                isLineWrapEnabled: $viewModel.isLineWrapEnabled,
+                translucentBackgroundEnabled: enableTranslucentWindow
             )
             .id(currentLanguage)
             .frame(maxWidth: viewModel.isBrainDumpMode ? 800 : .infinity)
             .frame(maxHeight: .infinity)
             .padding(.horizontal, viewModel.isBrainDumpMode ? 100 : 0)
             .padding(.vertical, viewModel.isBrainDumpMode ? 40 : 0)
+            .background(
+                Group {
+                    if enableTranslucentWindow {
+                        Color.clear.background(.ultraThinMaterial)
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
 
             if !viewModel.isBrainDumpMode {
                 wordCountView
@@ -867,22 +903,38 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
-            // Auto-detect language on paste
             if let pasted = notif.object as? String {
-                Task { @MainActor in
-                    let detected = await detectLanguageWithAppleIntelligence(pasted)
-                    currentLanguageBinding.wrappedValue = detected
-                }
+                let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
+                currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
-            guard isAutoCompletionEnabled else { return }
+            guard isAutoCompletionEnabled && !viewModel.isBrainDumpMode else { return }
             lastCompletionWorkItem?.cancel()
             let work = DispatchWorkItem {
                 performInlineCompletion()
             }
             lastCompletionWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        }
+        .onChange(of: enableTranslucentWindow) { _, newValue in
+            if let window = NSApp.keyWindow ?? NSApp.windows.first {
+                if newValue {
+                    window.isOpaque = false
+                    window.backgroundColor = .clear
+                    window.titlebarAppearsTransparent = true
+                    if #available(macOS 13.0, *) {
+                        window.titlebarSeparatorStyle = .none
+                    }
+                } else {
+                    window.isOpaque = true
+                    window.backgroundColor = NSColor.windowBackgroundColor
+                    window.titlebarAppearsTransparent = false
+                    if #available(macOS 13.0, *) {
+                        window.titlebarSeparatorStyle = .automatic
+                    }
+                }
+            }
         }
         // Toolbar: grouped items with click actions and hover-triggered popovers.
         .toolbar {
@@ -957,26 +1009,6 @@ struct ContentView: View {
                     .background(Color.secondary.opacity(0.12), in: Capsule())
                     .help("Active provider")
 
-                Button(action: { showAPISettings = true }) {
-                    Image(systemName: "gearshape")
-                }
-                .help("API Settings")
-
-                Button(action: { showFindReplace = true }) {
-                    Image(systemName: "magnifyingglass")
-                }
-                .help("Find & Replace")
-
-                Button(action: { editorFontSize = max(8, editorFontSize - 1) }) {
-                    Image(systemName: "textformat.size.smaller")
-                }
-                .help("Decrease Font Size")
-
-                Button(action: { editorFontSize = min(48, editorFontSize + 1) }) {
-                    Image(systemName: "textformat.size.larger")
-                }
-                .help("Increase Font Size")
-
                 Button(action: {
                     // Clear the SwiftUI binding
                     currentContentBinding.wrappedValue = ""
@@ -1021,10 +1053,25 @@ struct ContentView: View {
                 }
                 .help("Toggle Sidebar")
 
-                Button(action: { viewModel.isBrainDumpMode.toggle() }) {
-                    Image(systemName: "note.text")
+                Button(action: {
+                    viewModel.isBrainDumpMode.toggle()
+                    UserDefaults.standard.set(viewModel.isBrainDumpMode, forKey: "BrainDumpModeEnabled")
+                }) {
+                    Image(systemName: viewModel.isBrainDumpMode ? "note.text" : "note.text")
+                        .symbolVariant(viewModel.isBrainDumpMode ? .fill : .none)
                 }
                 .help("Brain Dump Mode")
+                .accessibilityLabel("Brain Dump Mode")
+
+                Button(action: {
+                    enableTranslucentWindow.toggle()
+                    UserDefaults.standard.set(enableTranslucentWindow, forKey: "EnableTranslucentWindow")
+                    NotificationCenter.default.post(name: .toggleTranslucencyRequested, object: enableTranslucentWindow)
+                }) {
+                    Image(systemName: enableTranslucentWindow ? "rectangle.fill" : "rectangle")
+                }
+                .help("Toggle Translucent Window Background")
+                .accessibilityLabel("Translucent Window Background")
 
                 Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
                     Image(systemName: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
@@ -1032,8 +1079,7 @@ struct ContentView: View {
                 .help(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap")
             }
         }
-        .toolbarBackground(.visible, for: .windowToolbar)
-        .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
+        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: .windowToolbar)
     }
 
     // Status line: caret location + live word count from the view model.
@@ -1047,6 +1093,7 @@ struct ContentView: View {
                 .padding(.bottom, 8)
                 .padding(.trailing, 16)
         }
+        .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
     }
 
     private func findNext() {
@@ -1092,39 +1139,41 @@ struct SidebarView: View {
     let content: String
     let language: String
     var body: some View {
-    List {
-        ForEach(generateTableOfContents(), id: \.self) { item in
-            Button {
-                jump(to: item)
-            } label: {
-                Text(item)
-                    .font(.system(size: 13))
-                    .foregroundColor(.primary)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 8)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-    .listStyle(.sidebar)
-    .frame(maxWidth: .infinity, alignment: .leading)
-}
-
-private func jump(to item: String) {
-    // Expect item format: "... (Line N)"
-    if let startRange = item.range(of: "(Line "),
-       let endRange = item.range(of: ")", range: startRange.upperBound..<item.endIndex) {
-        let numberStr = item[startRange.upperBound..<endRange.lowerBound]
-        if let lineOneBased = Int(numberStr.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)),
-           lineOneBased > 0 {
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .moveCursorToLine, object: lineOneBased)
+        List {
+            ForEach(generateTableOfContents(), id: \.self) { item in
+                Button {
+                    jump(to: item)
+                } label: {
+                    Text(item)
+                        .font(.system(size: 13))
+                        .foregroundColor(.primary)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                }
+                .buttonStyle(.plain)
             }
         }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
-}
 
-// Naive line-scanning TOC: looks for language-specific declarations or headers.
+    private func jump(to item: String) {
+        // Expect item format: "... (Line N)"
+        if let startRange = item.range(of: "(Line "),
+           let endRange = item.range(of: ")", range: startRange.upperBound..<item.endIndex) {
+            let numberStr = item[startRange.upperBound..<endRange.lowerBound]
+            if let lineOneBased = Int(numberStr.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)),
+               lineOneBased > 0 {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .moveCursorToLine, object: lineOneBased)
+                }
+            }
+        }
+    }
+
+    // Naive line-scanning TOC: looks for language-specific declarations or headers.
     func generateTableOfContents() -> [String] {
         guard !content.isEmpty else { return ["No content available"] }
         let lines = content.components(separatedBy: .newlines)
@@ -1441,6 +1490,7 @@ struct CustomTextEditor: NSViewRepresentable {
     let colorScheme: ColorScheme
     let fontSize: CGFloat
     @Binding var isLineWrapEnabled: Bool
+    let translucentBackgroundEnabled: Bool
 
     // Toggle soft-wrapping by adjusting text container sizing and scroller visibility.
     private func applyWrapMode(isWrapped: Bool, textView: NSTextView, scrollView: NSScrollView) {
@@ -1450,7 +1500,7 @@ struct CustomTextEditor: NSViewRepresentable {
             textView.textContainer?.widthTracksTextView = true
             textView.textContainer?.heightTracksTextView = false
             scrollView.hasHorizontalScroller = false
-            // Ensure the container width matches the visible content width
+            // Ensure the container width matches the visible content width right now
             let contentWidth = scrollView.contentSize.width
             let width = contentWidth > 0 ? contentWidth : scrollView.frame.size.width
             textView.textContainer?.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
@@ -1462,6 +1512,13 @@ struct CustomTextEditor: NSViewRepresentable {
             scrollView.hasHorizontalScroller = true
             textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         }
+
+        // Force layout update so the change takes effect immediately
+        if let container = textView.textContainer, let lm = textView.layoutManager {
+            lm.invalidateLayout(forCharacterRange: NSRange(location: 0, length: (textView.string as NSString).length), actualCharacterRange: nil)
+            lm.ensureLayout(for: container)
+        }
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -1480,7 +1537,15 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        textView.backgroundColor = .textBackgroundColor
+
+        if translucentBackgroundEnabled {
+            textView.backgroundColor = .clear
+            textView.drawsBackground = false
+        } else {
+            textView.backgroundColor = .textBackgroundColor
+            textView.drawsBackground = true
+        }
+
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -1488,10 +1553,9 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.allowsUndo = true
         textView.textColor = .labelColor
         textView.insertionPointColor = .controlAccentColor
-        textView.drawsBackground = true
-        textView.isAutomaticTextCompletionEnabled = false
 
         // Disable smart substitutions/detections that can interfere with selection when recoloring
+        textView.isAutomaticTextCompletionEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticDataDetectionEnabled = false
@@ -1548,12 +1612,28 @@ struct CustomTextEditor: NSViewRepresentable {
             if textView.font?.pointSize != fontSize {
                 textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
             }
+            // Background color adjustments for translucency
+            if translucentBackgroundEnabled {
+                nsView.drawsBackground = false
+                textView.backgroundColor = .clear
+                textView.drawsBackground = false
+            } else {
+                nsView.drawsBackground = false
+                textView.backgroundColor = .textBackgroundColor
+                textView.drawsBackground = true
+            }
             // Keep the text container width in sync & relayout
             applyWrapMode(isWrapped: isLineWrapEnabled, textView: textView, scrollView: nsView)
-            if let textContainer = textView.textContainer {
-                textView.layoutManager?.ensureLayout(for: textContainer)
+
+            // Force immediate reflow after toggling wrap
+            if let container = textView.textContainer, let lm = textView.layoutManager {
+                lm.invalidateLayout(forCharacterRange: NSRange(location: 0, length: (textView.string as NSString).length), actualCharacterRange: nil)
+                lm.ensureLayout(for: container)
             }
+
             textView.invalidateIntrinsicContentSize()
+            nsView.reflectScrolledClipView(nsView.contentView)
+
             // Only schedule highlight if needed (e.g., language/color scheme changes or external text updates)
             context.coordinator.parent = self
             context.coordinator.scheduleHighlightIfNeeded()
@@ -1806,6 +1886,8 @@ final class LineNumberRulerView: NSRulerView {
     private let textColor = NSColor.secondaryLabelColor
     private let inset: CGFloat = 4
 
+    override var isOpaque: Bool { false }
+
     init(textView: NSTextView) {
         self.textView = textView
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
@@ -1817,6 +1899,12 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.clear.setFill()
+        dirtyRect.fill()
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
 
     @objc private func redraw() { needsDisplay = true }
 
@@ -2297,6 +2385,7 @@ extension Notification.Name {
     static let moveCursorToLine = Notification.Name("moveCursorToLine")
     static let caretPositionDidChange = Notification.Name("caretPositionDidChange")
     static let pastedText = Notification.Name("pastedText")
+    static let toggleTranslucencyRequested = Notification.Name("toggleTranslucencyRequested")
 }
 
 private extension NSRange {

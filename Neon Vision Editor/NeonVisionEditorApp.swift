@@ -22,6 +22,7 @@ struct NeonVisionEditorApp: App {
     @State private var useAppleIntelligence: Bool = true
     @State private var appleAIStatus: String = "Apple Intelligence: Checking…"
     @State private var appleAIRoundTripMS: Double? = nil
+    @State private var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
     
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
@@ -48,6 +49,24 @@ struct NeonVisionEditorApp: App {
                     #else
                     appleAIStatus = "Apple Intelligence: Unavailable (build without USE_FOUNDATION_MODELS)"
                     #endif
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .toggleTranslucencyRequested)) { notif in
+                    if let enabled = notif.object as? Bool {
+                        enableTranslucentWindow = enabled
+                        if let window = NSApp.windows.first {
+                            window.isOpaque = !enabled
+                            window.backgroundColor = enabled ? .clear : NSColor.windowBackgroundColor
+                            window.titlebarAppearsTransparent = enabled
+                        }
+                    }
+                }
+                .onAppear {
+                    // Apply initial translucency preference
+                    if let window = NSApp.windows.first {
+                        window.isOpaque = !enableTranslucentWindow
+                        window.backgroundColor = enableTranslucentWindow ? .clear : NSColor.windowBackgroundColor
+                        window.titlebarAppearsTransparent = enableTranslucentWindow
+                    }
                 }
         }
         .defaultSize(width: 1000, height: 600)
@@ -94,7 +113,7 @@ struct NeonVisionEditorApp: App {
             }
             
             CommandMenu("Language") {
-                ForEach(["swift", "python", "javascript", "html", "css", "cpp", "csharp", "json", "markdown", "standard", "plain"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "html", "css", "cpp", "json", "markdown", "standard", "plain"], id: \.self) { lang in
                     Button(lang.capitalized) {
                         if let tab = viewModel.selectedTab {
                             viewModel.updateTabLanguage(tab: tab, language: lang)
