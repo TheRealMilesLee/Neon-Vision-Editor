@@ -4,15 +4,21 @@
   <img src="NeonVisionEditorIcon.png" alt="Neon Vision Editor Logo" width="200"/>
 </p>
 
+<h3 align="center">
+  A lightweight, modern macOS text editor focused on speed, readability, and fast automatic syntax highlighting. 
+</h3>
+
 <p align="center">
-  A lightweight, modern macOS text editor focused on speed, readability, and fast automatic syntax highlighting
+  It is intentionally minimal: quick edits, fast file access, no IDE bloat.
 </p>
 
 <p align="center">
 Release Download: https://github.com/h3pdesign/Neon-Vision-Editor/releases
 </p>
 
-It is intentionally minimal: quick edits, fast file access, no IDE bloat.
+<p align="center">
+.  .  .
+</p>
 
 > Status: **alpha / beta**  
 > Platform target: **macOS 26 (Tahoe)**
