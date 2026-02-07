@@ -94,23 +94,21 @@ struct NeonVisionEditorApp: App {
                     openWindow(id: "blank-window")
                 }
                 .keyboardShortcut("n", modifiers: .command)
-            }
-
-            CommandMenu("File") {
-                Button("New Window") {
-                    openWindow(id: "blank-window")
-                }
 
                 Button("New Tab") {
                     viewModel.addNewTab()
                 }
                 .keyboardShortcut("t", modifiers: .command)
+            }
 
+            CommandGroup(after: .newItem) {
                 Button("Open File...") {
                     viewModel.openFile()
                 }
                 .keyboardShortcut("o", modifiers: .command)
+            }
 
+            CommandGroup(replacing: .saveItem) {
                 Button("Save") {
                     if let tab = viewModel.selectedTab {
                         viewModel.saveFile(tab: tab)
@@ -131,6 +129,8 @@ struct NeonVisionEditorApp: App {
                     viewModel.renameText = viewModel.selectedTab?.name ?? "Untitled"
                 }
                 .disabled(viewModel.selectedTab == nil)
+
+                Divider()
 
                 Button("Close Tab") {
                     if let tab = viewModel.selectedTab {
