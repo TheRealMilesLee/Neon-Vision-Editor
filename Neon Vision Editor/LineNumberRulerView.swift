@@ -6,6 +6,7 @@
 //
 
 
+#if os(macOS)
 import AppKit
 
 final class LineNumberRulerView: NSRulerView {
@@ -140,3 +141,4 @@ final class LineNumberRulerView: NSRulerView {
         }
     }
 }
+#endif

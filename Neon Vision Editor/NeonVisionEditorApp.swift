@@ -1,7 +1,12 @@
 import SwiftUI
+#if canImport(FoundationModels)
 import FoundationModels
+#endif
+#if os(macOS)
 import AppKit
+#endif
 
+#if os(macOS)
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var viewModel: EditorViewModel?
 
@@ -13,21 +18,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+#endif
 
 @main
 struct NeonVisionEditorApp: App {
     @StateObject private var viewModel = EditorViewModel()
+#if os(macOS)
     @Environment(\.openWindow) private var openWindow
-    @State private var showGrokError: Bool = false
-    @State private var grokErrorMessage: String = ""
     @State private var useAppleIntelligence: Bool = true
     @State private var appleAIStatus: String = "Apple Intelligence: Checking…"
     @State private var appleAIRoundTripMS: Double? = nil
     @State private var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
-    
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
+#endif
+    @State private var showGrokError: Bool = false
+    @State private var grokErrorMessage: String = ""
+
     var body: some Scene {
+#if os(macOS)
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
@@ -62,7 +70,6 @@ struct NeonVisionEditorApp: App {
                     }
                 }
                 .onAppear {
-                    // Apply initial translucency preference
                     if let window = NSApp.windows.first {
                         window.isOpaque = !enableTranslucentWindow
                         window.backgroundColor = enableTranslucentWindow ? .clear : NSColor.windowBackgroundColor
@@ -98,12 +105,12 @@ struct NeonVisionEditorApp: App {
                     viewModel.addNewTab()
                 }
                 .keyboardShortcut("t", modifiers: .command)
-                
+
                 Button("Open File...") {
                     viewModel.openFile()
                 }
                 .keyboardShortcut("o", modifiers: .command)
-                
+
                 Button("Save") {
                     if let tab = viewModel.selectedTab {
                         viewModel.saveFile(tab: tab)
@@ -111,20 +118,20 @@ struct NeonVisionEditorApp: App {
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(viewModel.selectedTab == nil)
-                
+
                 Button("Save As...") {
                     if let tab = viewModel.selectedTab {
                         viewModel.saveFileAs(tab: tab)
                     }
                 }
                 .disabled(viewModel.selectedTab == nil)
-                
+
                 Button("Rename") {
                     viewModel.showingRename = true
                     viewModel.renameText = viewModel.selectedTab?.name ?? "Untitled"
                 }
                 .disabled(viewModel.selectedTab == nil)
-                
+
                 Button("Close Tab") {
                     if let tab = viewModel.selectedTab {
                         viewModel.closeTab(tab: tab)
@@ -133,9 +140,9 @@ struct NeonVisionEditorApp: App {
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(viewModel.selectedTab == nil)
             }
-            
+
             CommandMenu("Language") {
-                ForEach(["swift", "python", "javascript", "html", "css", "cpp", "json", "markdown", "standard", "plain"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                     Button(lang.capitalized) {
                         if let tab = viewModel.selectedTab {
                             viewModel.updateTabLanguage(tab: tab, language: lang)
@@ -144,23 +151,69 @@ struct NeonVisionEditorApp: App {
                     .disabled(viewModel.selectedTab == nil)
                 }
             }
-            
+
+            CommandMenu("AI") {
+                Button("API Settings…") {
+                    NotificationCenter.default.post(name: .showAPISettingsRequested, object: nil)
+                }
+
+                Divider()
+
+                Button("Use Apple Intelligence") {
+                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.appleIntelligence.rawValue)
+                }
+                Button("Use Grok") {
+                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.grok.rawValue)
+                }
+                Button("Use OpenAI") {
+                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.openAI.rawValue)
+                }
+                Button("Use Gemini") {
+                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.gemini.rawValue)
+                }
+                Button("Use Anthropic") {
+                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.anthropic.rawValue)
+                }
+            }
+
             CommandMenu("View") {
                 Toggle("Toggle Sidebar", isOn: $viewModel.showSidebar)
                     .keyboardShortcut("s", modifiers: [.command, .option])
-                
+
+                Button("Toggle Project Structure Sidebar") {
+                    NotificationCenter.default.post(name: .toggleProjectStructureSidebarRequested, object: nil)
+                }
+
                 Toggle("Brain Dump Mode", isOn: $viewModel.isBrainDumpMode)
                     .keyboardShortcut("d", modifiers: [.command, .shift])
-                
+
                 Toggle("Line Wrap", isOn: $viewModel.isLineWrapEnabled)
                     .keyboardShortcut("l", modifiers: [.command, .option])
+
+                Button("Toggle Translucent Window Background") {
+                    NotificationCenter.default.post(name: .toggleTranslucencyRequested, object: !enableTranslucentWindow)
+                }
             }
-            
+
+            CommandMenu("Editor") {
+                Button("Clear Editor") {
+                    NotificationCenter.default.post(name: .clearEditorRequested, object: nil)
+                }
+
+                Button("Toggle Code Completion") {
+                    NotificationCenter.default.post(name: .toggleCodeCompletionRequested, object: nil)
+                }
+
+                Button("Find & Replace") {
+                    NotificationCenter.default.post(name: .showFindReplaceRequested, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+
             CommandMenu("Tools") {
                 Button("Suggest Code") {
                     Task {
                         if let tab = viewModel.selectedTab {
-                            // Choose provider by available tokens (Apple Intelligence preferred) then others
                             let contentPrefix = String(tab.content.prefix(1000))
                             let prompt = "Suggest improvements for this \(tab.language) code: \(contentPrefix)"
 
@@ -170,12 +223,10 @@ struct NeonVisionEditorApp: App {
 
                             let client: AIClient? = {
                                 #if USE_FOUNDATION_MODELS
-                                // Prefer Apple Intelligence by default
                                 if useAppleIntelligence {
                                     return AIClientFactory.makeClient(for: AIModel.appleIntelligence)
                                 }
                                 #endif
-                                // Fallback order: Grok -> OpenAI -> Gemini -> Apple (if compiled) -> nil
                                 if !grokToken.isEmpty { return AIClientFactory.makeClient(for: .grok, grokAPITokenProvider: { grokToken }) }
                                 if !openAIToken.isEmpty { return AIClientFactory.makeClient(for: .openAI, openAIKeyProvider: { openAIToken }) }
                                 if !geminiToken.isEmpty { return AIClientFactory.makeClient(for: .gemini, geminiKeyProvider: { geminiToken }) }
@@ -197,10 +248,10 @@ struct NeonVisionEditorApp: App {
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(viewModel.selectedTab == nil)
-                
+
                 Toggle("Use Apple Intelligence", isOn: $useAppleIntelligence)
             }
-            
+
             CommandMenu("Diagnostics") {
                 Text(appleAIStatus)
                 Divider()
@@ -223,7 +274,6 @@ struct NeonVisionEditorApp: App {
                         #endif
                     }
                 }
-                .disabled(false)
 
                 if let ms = appleAIRoundTripMS {
                     Text(String(format: "Last round-trip: %.1f ms", ms))
@@ -231,6 +281,14 @@ struct NeonVisionEditorApp: App {
                 }
             }
         }
+#else
+        WindowGroup {
+            ContentView()
+                .environmentObject(viewModel)
+                .environment(\.showGrokError, $showGrokError)
+                .environment(\.grokErrorMessage, $grokErrorMessage)
+        }
+#endif
     }
 }
 
@@ -247,10 +305,9 @@ extension EnvironmentValues {
         get { self[ShowGrokErrorKey.self] }
         set { self[ShowGrokErrorKey.self] = newValue }
     }
-    
+
     var grokErrorMessage: Binding<String> {
         get { self[GrokErrorMessageKey.self] }
         set { self[GrokErrorMessageKey.self] = newValue }
     }
 }
-    

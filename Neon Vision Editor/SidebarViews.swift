@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 import Foundation
 
 struct SidebarView: View {

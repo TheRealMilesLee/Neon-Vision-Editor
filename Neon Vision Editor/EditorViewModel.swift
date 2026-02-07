@@ -2,6 +2,9 @@ import SwiftUI
 import Combine
 import UniformTypeIdentifiers
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct TabData: Identifiable {
     let id = UUID()
@@ -202,6 +205,7 @@ class EditorViewModel: ObservableObject {
     
     func saveFileAs(tab: TabData) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+#if os(macOS)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = tabs[index].name
         let mdType = UTType(filenameExtension: "md") ?? .plainText
@@ -227,9 +231,15 @@ class EditorViewModel: ObservableObject {
                 print("Error saving file: \(error)")
             }
         }
+#else
+        // iOS/iPadOS: explicit Save As panel is not available here yet.
+        // Keep document dirty so user can export/share via future document APIs.
+        print("Save As is currently only available on macOS.")
+#endif
     }
     
     func openFile() {
+#if os(macOS)
         let panel = NSOpenPanel()
         // Allow opening any file type, including hidden dotfiles like .zshrc
         panel.allowedContentTypes = []
@@ -255,6 +265,10 @@ class EditorViewModel: ObservableObject {
                 print("Error opening file: \(error)")
             }
         }
+#else
+        // iOS/iPadOS: document picker flow can be added here.
+        print("Open File panel is currently only available on macOS.")
+#endif
     }
     
     func openFile(url: URL) {
@@ -273,6 +287,15 @@ class EditorViewModel: ObservableObject {
         } catch {
             print("Error opening file: \(error)")
         }
+    }
+
+    func markTabSaved(tabID: UUID, fileURL: URL? = nil) {
+        guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        if let fileURL {
+            tabs[index].fileURL = fileURL
+            tabs[index].name = fileURL.lastPathComponent
+        }
+        tabs[index].isDirty = false
     }
     
     func wordCount(for text: String) -> Int {

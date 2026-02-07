@@ -1,6 +1,8 @@
 import SwiftUI
-import AppKit
 import Foundation
+
+#if os(macOS)
+import AppKit
 
 final class AcceptingTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
@@ -561,3 +563,215 @@ struct CustomTextEditor: NSViewRepresentable {
         }
     }
 }
+#else
+import UIKit
+
+final class LineNumberedTextViewContainer: UIView {
+    let lineNumberView = UITextView()
+    let textView = UITextView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        lineNumberView.translatesAutoresizingMaskIntoConstraints = false
+        textView.translatesAutoresizingMaskIntoConstraints = false
+
+        lineNumberView.isEditable = false
+        lineNumberView.isSelectable = false
+        lineNumberView.isScrollEnabled = true
+        lineNumberView.isUserInteractionEnabled = false
+        lineNumberView.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.65)
+        lineNumberView.textColor = .secondaryLabel
+        lineNumberView.textAlignment = .right
+        lineNumberView.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 6)
+        lineNumberView.textContainer.lineFragmentPadding = 0
+
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+
+        let divider = UIView()
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.backgroundColor = UIColor.separator.withAlphaComponent(0.6)
+
+        addSubview(lineNumberView)
+        addSubview(divider)
+        addSubview(textView)
+
+        NSLayoutConstraint.activate([
+            lineNumberView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            lineNumberView.topAnchor.constraint(equalTo: topAnchor),
+            lineNumberView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            lineNumberView.widthAnchor.constraint(equalToConstant: 46),
+
+            divider.leadingAnchor.constraint(equalTo: lineNumberView.trailingAnchor),
+            divider.topAnchor.constraint(equalTo: topAnchor),
+            divider.bottomAnchor.constraint(equalTo: bottomAnchor),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+
+            textView.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            textView.topAnchor.constraint(equalTo: topAnchor),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func updateLineNumbers(for text: String, fontSize: CGFloat) {
+        let lineCount = max(1, text.components(separatedBy: .newlines).count)
+        let numbers = (1...lineCount).map(String.init).joined(separator: "\n")
+        lineNumberView.font = UIFont.monospacedDigitSystemFont(ofSize: max(11, fontSize - 1), weight: .regular)
+        lineNumberView.text = numbers
+    }
+}
+
+struct CustomTextEditor: UIViewRepresentable {
+    @Binding var text: String
+    let language: String
+    let colorScheme: ColorScheme
+    let fontSize: CGFloat
+    @Binding var isLineWrapEnabled: Bool
+    let translucentBackgroundEnabled: Bool
+
+    func makeUIView(context: Context) -> LineNumberedTextViewContainer {
+        let container = LineNumberedTextViewContainer()
+        let textView = container.textView
+
+        textView.delegate = context.coordinator
+        textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.text = text
+        textView.autocorrectionType = .no
+        textView.autocapitalizationType = .none
+        textView.smartDashesType = .no
+        textView.smartQuotesType = .no
+        textView.smartInsertDeleteType = .no
+        textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
+        textView.textContainer.lineBreakMode = isLineWrapEnabled ? .byWordWrapping : .byClipping
+        textView.textContainer.widthTracksTextView = isLineWrapEnabled
+
+        container.updateLineNumbers(for: text, fontSize: fontSize)
+        context.coordinator.container = container
+        context.coordinator.textView = textView
+        context.coordinator.scheduleHighlightIfNeeded(currentText: text)
+        return container
+    }
+
+    func updateUIView(_ uiView: LineNumberedTextViewContainer, context: Context) {
+        let textView = uiView.textView
+        context.coordinator.parent = self
+        if textView.text != text {
+            textView.text = text
+        }
+        if textView.font?.pointSize != fontSize {
+            textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+        textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
+        textView.textContainer.lineBreakMode = isLineWrapEnabled ? .byWordWrapping : .byClipping
+        textView.textContainer.widthTracksTextView = isLineWrapEnabled
+        uiView.updateLineNumbers(for: text, fontSize: fontSize)
+        context.coordinator.syncLineNumberScroll()
+        context.coordinator.scheduleHighlightIfNeeded(currentText: text)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UITextViewDelegate {
+        var parent: CustomTextEditor
+        weak var container: LineNumberedTextViewContainer?
+        weak var textView: UITextView?
+        private let highlightQueue = DispatchQueue(label: "NeonVision.iOS.SyntaxHighlight", qos: .userInitiated)
+        private var pendingHighlight: DispatchWorkItem?
+        private var lastHighlightedText: String = ""
+        private var lastLanguage: String?
+        private var lastColorScheme: ColorScheme?
+        private var isApplyingHighlight = false
+
+        init(_ parent: CustomTextEditor) {
+            self.parent = parent
+        }
+
+        func scheduleHighlightIfNeeded(currentText: String? = nil) {
+            guard let textView else { return }
+            let text = currentText ?? textView.text ?? ""
+            let lang = parent.language
+            let scheme = parent.colorScheme
+
+            if text == lastHighlightedText && lang == lastLanguage && scheme == lastColorScheme {
+                return
+            }
+
+            pendingHighlight?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.rehighlight(text: text, language: lang, colorScheme: scheme)
+            }
+            pendingHighlight = work
+            highlightQueue.asyncAfter(deadline: .now() + 0.1, execute: work)
+        }
+
+        private func rehighlight(text: String, language: String, colorScheme: ColorScheme) {
+            let nsText = text as NSString
+            let fullRange = NSRange(location: 0, length: nsText.length)
+            let baseColor: UIColor = colorScheme == .dark ? .white : .label
+            let baseFont = UIFont.monospacedSystemFont(ofSize: parent.fontSize, weight: .regular)
+
+            let attributed = NSMutableAttributedString(
+                string: text,
+                attributes: [
+                    .foregroundColor: baseColor,
+                    .font: baseFont
+                ]
+            )
+
+            let colors = SyntaxColors.fromVibrantLightTheme(colorScheme: colorScheme)
+            let patterns = getSyntaxPatterns(for: language, colors: colors)
+
+            for (pattern, color) in patterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { continue }
+                let matches = regex.matches(in: text, range: fullRange)
+                let uiColor = UIColor(color)
+                for match in matches {
+                    attributed.addAttribute(.foregroundColor, value: uiColor, range: match.range)
+                }
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                guard textView.text == text else { return }
+                let selectedRange = textView.selectedRange
+                self.isApplyingHighlight = true
+                textView.attributedText = attributed
+                textView.selectedRange = selectedRange
+                textView.typingAttributes = [
+                    .foregroundColor: baseColor,
+                    .font: baseFont
+                ]
+                self.isApplyingHighlight = false
+                self.lastHighlightedText = text
+                self.lastLanguage = language
+                self.lastColorScheme = colorScheme
+                self.container?.updateLineNumbers(for: text, fontSize: self.parent.fontSize)
+                self.syncLineNumberScroll()
+            }
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard !isApplyingHighlight else { return }
+            parent.text = textView.text
+            container?.updateLineNumbers(for: textView.text, fontSize: parent.fontSize)
+            scheduleHighlightIfNeeded(currentText: textView.text)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            syncLineNumberScroll()
+        }
+
+        func syncLineNumberScroll() {
+            guard let textView, let lineView = container?.lineNumberView else { return }
+            lineView.contentOffset = CGPoint(x: 0, y: textView.contentOffset.y)
+        }
+    }
+}
+#endif

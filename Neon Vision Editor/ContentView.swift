@@ -4,8 +4,13 @@
 
 // MARK: - Imports
 import SwiftUI
-import AppKit
 import Foundation
+import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 #if USE_FOUNDATION_MODELS
 import FoundationModels
 #endif
@@ -13,11 +18,13 @@ import FoundationModels
 
 // Utility: quick width calculation for strings with a given font (AppKit-based)
 extension String {
+#if os(macOS)
     func width(usingFont font: NSFont) -> CGFloat {
         let attributes = [NSAttributedString.Key.font: font]
         let size = (self as NSString).size(withAttributes: attributes)
         return size.width
     }
+#endif
 }
 
 // MARK: - Root view for the editor.
@@ -26,7 +33,12 @@ struct ContentView: View {
     // Environment-provided view model and theme/error bindings
     @EnvironmentObject var viewModel: EditorViewModel
     @Environment(\.colorScheme) var colorScheme
+#if os(iOS)
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+#endif
+#if os(macOS)
     @Environment(\.openWindow) var openWindow
+#endif
     @Environment(\.showGrokError) var showGrokError
     @Environment(\.grokErrorMessage) var grokErrorMessage
 
@@ -60,10 +72,16 @@ struct ContentView: View {
     @State var findCaseSensitive: Bool = false
     @State var findStatusMessage: String = ""
     @State var showProjectStructureSidebar: Bool = false
+    @State var showCompactSidebarSheet: Bool = false
     @State var projectRootFolderURL: URL? = nil
     @State var projectTreeNodes: [ProjectTreeNode] = []
     @State var pendingCloseTabID: UUID? = nil
     @State var showUnsavedCloseDialog: Bool = false
+    @State var showIOSFileImporter: Bool = false
+    @State var showIOSFileExporter: Bool = false
+    @State var iosExportDocument: PlainTextDocument = PlainTextDocument(text: "")
+    @State var iosExportFilename: String = "Untitled.txt"
+    @State var iosExportTabID: UUID? = nil
 
 #if USE_FOUNDATION_MODELS
     var appleModelAvailable: Bool { true }
@@ -77,6 +95,7 @@ struct ContentView: View {
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGrokTokenIfNeeded() -> Bool {
         if !grokAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+#if os(macOS)
         let alert = NSAlert()
         alert.messageText = "Grok API Token Required"
         alert.informativeText = "Enter your Grok API token to enable suggestions. You can obtain this from your Grok account."
@@ -94,6 +113,7 @@ struct ContentView: View {
             UserDefaults.standard.set(token, forKey: "GrokAPIToken")
             return true
         }
+#endif
         return false
     }
 
@@ -101,6 +121,7 @@ struct ContentView: View {
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForOpenAITokenIfNeeded() -> Bool {
         if !openAIAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+#if os(macOS)
         let alert = NSAlert()
         alert.messageText = "OpenAI API Token Required"
         alert.informativeText = "Enter your OpenAI API token to enable suggestions."
@@ -118,6 +139,7 @@ struct ContentView: View {
             UserDefaults.standard.set(token, forKey: "OpenAIAPIToken")
             return true
         }
+#endif
         return false
     }
 
@@ -125,6 +147,7 @@ struct ContentView: View {
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGeminiTokenIfNeeded() -> Bool {
         if !geminiAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+#if os(macOS)
         let alert = NSAlert()
         alert.messageText = "Gemini API Key Required"
         alert.informativeText = "Enter your Gemini API key to enable suggestions."
@@ -142,6 +165,7 @@ struct ContentView: View {
             UserDefaults.standard.set(token, forKey: "GeminiAPIToken")
             return true
         }
+#endif
         return false
     }
 
@@ -149,6 +173,7 @@ struct ContentView: View {
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForAnthropicTokenIfNeeded() -> Bool {
         if !anthropicAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+#if os(macOS)
         let alert = NSAlert()
         alert.messageText = "Anthropic API Token Required"
         alert.informativeText = "Enter your Anthropic API token to enable suggestions."
@@ -166,6 +191,7 @@ struct ContentView: View {
             UserDefaults.standard.set(token, forKey: "AnthropicAPIToken")
             return true
         }
+#endif
         return false
     }
 
@@ -176,6 +202,7 @@ struct ContentView: View {
     }
 
     private func performInlineCompletionAsync() async {
+#if os(macOS)
         guard let textView = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
         let sel = textView.selectedRange()
         guard sel.length == 0 else { return }
@@ -255,6 +282,10 @@ struct ContentView: View {
             // Scroll to visible range of inserted text
             textView.scrollRangeToVisible(NSRange(location: sel.location + (suggestion as NSString).length, length: 0))
         }
+#else
+        // iOS inline completion hook can be added for UITextView selection APIs.
+        return
+#endif
     }
 
     private func externalModelCompletion(prefix: String, language: String) async -> String {
@@ -638,10 +669,11 @@ struct ContentView: View {
         return result
     }
 
-    // Layout: NavigationSplitView with optional sidebar and the primary code editor.
-    var body: some View {
+    @ViewBuilder
+    private var platformLayout: some View {
+#if os(macOS)
         Group {
-            if viewModel.showSidebar && !viewModel.isBrainDumpMode {
+            if shouldUseSplitView {
                 NavigationSplitView {
                     sidebarView
                 } detail: {
@@ -650,11 +682,33 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 600)
                 .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
             } else {
-                // Fully collapsed: render only the editor without a split view
                 editorView
             }
         }
         .frame(minWidth: 600, minHeight: 400)
+#else
+        NavigationStack {
+            Group {
+                if shouldUseSplitView {
+                    NavigationSplitView {
+                        sidebarView
+                    } detail: {
+                        editorView
+                    }
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 600)
+                    .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
+                } else {
+                    editorView
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+#endif
+    }
+
+    // Layout: NavigationSplitView with optional sidebar and the primary code editor.
+    var body: some View {
+        platformLayout
         .alert("AI Error", isPresented: showGrokError) {
             Button("OK") { }
         } message: {
@@ -680,8 +734,28 @@ struct ContentView: View {
                 onReplace: { replaceSelection() },
                 onReplaceAll: { replaceAll() }
             )
+#if canImport(UIKit)
+                .frame(maxWidth: 420)
+#else
                 .frame(width: 420)
+#endif
         }
+#if os(iOS)
+        .sheet(isPresented: $showCompactSidebarSheet) {
+            NavigationStack {
+                SidebarView(content: currentContent, language: currentLanguage)
+                    .navigationTitle("Sidebar")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") {
+                                showCompactSidebarSheet = false
+                            }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
+#endif
         .confirmationDialog("Save changes before closing?", isPresented: $showUnsavedCloseDialog, titleVisibility: .visible) {
             Button("Save") { saveAndClosePendingTab() }
             Button("Don't Save", role: .destructive) { discardAndClosePendingTab() }
@@ -696,6 +770,23 @@ struct ContentView: View {
                 Text("This file has unsaved changes.")
             }
         }
+#if canImport(UIKit)
+        .fileImporter(
+            isPresented: $showIOSFileImporter,
+            allowedContentTypes: [.text, .plainText, .sourceCode, .json, .xml, .yaml],
+            allowsMultipleSelection: false
+        ) { result in
+            handleIOSImportResult(result)
+        }
+        .fileExporter(
+            isPresented: $showIOSFileExporter,
+            document: iosExportDocument,
+            contentType: .plainText,
+            defaultFilename: iosExportFilename
+        ) { result in
+            handleIOSExportResult(result)
+        }
+#endif
         .onAppear {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
@@ -708,6 +799,15 @@ struct ContentView: View {
 
             applyWindowTranslucency(enableTranslucentWindow)
         }
+    }
+
+    private var shouldUseSplitView: Bool {
+#if os(macOS)
+        return viewModel.showSidebar && !viewModel.isBrainDumpMode
+#else
+        // Keep iPhone layout single-column to avoid horizontal clipping.
+        return viewModel.showSidebar && !viewModel.isBrainDumpMode && horizontalSizeClass == .regular
+#endif
     }
 
     // Sidebar shows a lightweight table of contents (TOC) derived from the current document.
@@ -917,7 +1017,7 @@ struct ContentView: View {
                     nodes: projectTreeNodes,
                     selectedFileURL: viewModel.selectedTab?.fileURL,
                     translucentBackgroundEnabled: enableTranslucentWindow,
-                    onOpenFile: { viewModel.openFile() },
+                    onOpenFile: { openFileFromToolbar() },
                     onOpenFolder: { openProjectFolder() },
                     onOpenProjectFile: { openProjectFile(url: $0) },
                     onRefreshTree: { refreshProjectTree() }
@@ -925,6 +1025,7 @@ struct ContentView: View {
                 .frame(minWidth: 220, idealWidth: 260, maxWidth: 340)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onReceive(NotificationCenter.default.publisher(for: .caretPositionDidChange)) { notif in
             // Update status line when caret moves
             if let line = notif.userInfo?["line"] as? Int, let col = notif.userInfo?["column"] as? Int {
@@ -937,6 +1038,28 @@ struct ContentView: View {
                 currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .clearEditorRequested)) { _ in
+            clearEditorContent()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleCodeCompletionRequested)) { _ in
+            isAutoCompletionEnabled.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { _ in
+            showFindReplace = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleProjectStructureSidebarRequested)) { _ in
+            showProjectStructureSidebar.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAPISettingsRequested)) { _ in
+            showAISelectorPopover = false
+            showAPISettings = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .selectAIModelRequested)) { notif in
+            guard let modelRawValue = notif.object as? String,
+                  let model = AIModel(rawValue: modelRawValue) else { return }
+            selectedModel = model
+        }
+#if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
             guard isAutoCompletionEnabled && !viewModel.isBrainDumpMode else { return }
             lastCompletionWorkItem?.cancel()
@@ -946,13 +1069,18 @@ struct ContentView: View {
             lastCompletionWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
         }
+#endif
         .onChange(of: enableTranslucentWindow) { _, newValue in
             applyWindowTranslucency(newValue)
         }
         .toolbar {
             editorToolbarContent
         }
+#if os(macOS)
         .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: .windowToolbar)
+#else
+        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.systemBackground)), for: .navigationBar)
+#endif
     }
 
     // Status line: caret location + live word count from the view model.
@@ -1004,7 +1132,11 @@ struct ContentView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
         }
+#if os(macOS)
         .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)))
+#else
+        .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.systemBackground)))
+#endif
     }
 
 }

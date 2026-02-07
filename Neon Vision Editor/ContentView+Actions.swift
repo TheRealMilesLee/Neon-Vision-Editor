@@ -1,8 +1,103 @@
 import SwiftUI
-import AppKit
 import Foundation
+#if os(macOS)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 extension ContentView {
+    func openFileFromToolbar() {
+#if os(macOS)
+        viewModel.openFile()
+#else
+        showIOSFileImporter = true
+#endif
+    }
+
+    func saveCurrentTabFromToolbar() {
+        guard let tab = viewModel.selectedTab else { return }
+#if os(macOS)
+        viewModel.saveFile(tab: tab)
+#else
+        if tab.fileURL != nil {
+            viewModel.saveFile(tab: tab)
+            if let updated = viewModel.tabs.first(where: { $0.id == tab.id }), !updated.isDirty {
+                return
+            }
+        }
+        iosExportTabID = tab.id
+        iosExportDocument = PlainTextDocument(text: tab.content)
+        iosExportFilename = suggestedExportFilename(for: tab)
+        showIOSFileExporter = true
+#endif
+    }
+
+#if canImport(UIKit)
+    func handleIOSImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let didStart = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStart {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            viewModel.openFile(url: url)
+            findStatusMessage = ""
+        case .failure(let error):
+            findStatusMessage = "Open failed: \(error.localizedDescription)"
+        }
+    }
+
+    func handleIOSExportResult(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            if let tabID = iosExportTabID {
+                viewModel.markTabSaved(tabID: tabID, fileURL: url)
+            }
+            findStatusMessage = ""
+        case .failure(let error):
+            findStatusMessage = "Save failed: \(error.localizedDescription)"
+        }
+        iosExportTabID = nil
+    }
+
+    private func suggestedExportFilename(for tab: TabData) -> String {
+        if tab.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Untitled.txt"
+        }
+        if tab.name.contains(".") {
+            return tab.name
+        }
+        return "\(tab.name).txt"
+    }
+#endif
+
+    func clearEditorContent() {
+        currentContentBinding.wrappedValue = ""
+#if os(macOS)
+        if let tv = NSApp.keyWindow?.firstResponder as? NSTextView {
+            tv.string = ""
+            tv.didChangeText()
+            tv.setSelectedRange(NSRange(location: 0, length: 0))
+            tv.scrollRangeToVisible(NSRange(location: 0, length: 0))
+        }
+#endif
+        caretStatus = "Ln 1, Col 1"
+    }
+
+    func toggleSidebarFromToolbar() {
+#if os(iOS)
+        if horizontalSizeClass == .compact {
+            showCompactSidebarSheet.toggle()
+            return
+        }
+#endif
+        viewModel.showSidebar.toggle()
+    }
+
     func requestCloseTab(_ tab: TabData) {
         if tab.isDirty {
             pendingCloseTabID = tab.id
@@ -41,6 +136,7 @@ extension ContentView {
     }
 
     func findNext() {
+#if os(macOS)
         guard !findQuery.isEmpty, let tv = activeEditorTextView() else { return }
         findStatusMessage = ""
         let ns = tv.string as NSString
@@ -73,9 +169,13 @@ extension ContentView {
                 NSSound.beep()
             }
         }
+#else
+        findStatusMessage = "Find next is currently available on macOS editor."
+#endif
     }
 
     func replaceSelection() {
+#if os(macOS)
         guard let tv = activeEditorTextView() else { return }
         let sel = tv.selectedRange()
         guard sel.length > 0 else { return }
@@ -92,9 +192,19 @@ extension ContentView {
         } else {
             tv.insertText(replaceQuery, replacementRange: sel)
         }
+#else
+        // iOS fallback: replace all exact text when regex is off.
+        guard !findQuery.isEmpty else { return }
+        if findUsesRegex {
+            findStatusMessage = "Regex replace selection is currently available on macOS editor."
+            return
+        }
+        currentContentBinding.wrappedValue = currentContentBinding.wrappedValue.replacingOccurrences(of: findQuery, with: replaceQuery)
+#endif
     }
 
     func replaceAll() {
+#if os(macOS)
         guard let tv = activeEditorTextView(), !findQuery.isEmpty else { return }
         findStatusMessage = ""
         let original = tv.string
@@ -137,8 +247,37 @@ extension ContentView {
             tv.didChangeText()
             findStatusMessage = "Replaced \(count) matches"
         }
+#else
+        guard !findQuery.isEmpty else { return }
+        let original = currentContentBinding.wrappedValue
+        if findUsesRegex {
+            guard let regex = try? NSRegularExpression(pattern: findQuery, options: findCaseSensitive ? [] : [.caseInsensitive]) else {
+                findStatusMessage = "Invalid regex pattern"
+                return
+            }
+            let fullRange = NSRange(location: 0, length: (original as NSString).length)
+            let count = regex.numberOfMatches(in: original, options: [], range: fullRange)
+            guard count > 0 else {
+                findStatusMessage = "No matches found"
+                return
+            }
+            currentContentBinding.wrappedValue = regex.stringByReplacingMatches(in: original, options: [], range: fullRange, withTemplate: replaceQuery)
+            findStatusMessage = "Replaced \(count) matches"
+        } else {
+            let updated = findCaseSensitive
+                ? original.replacingOccurrences(of: findQuery, with: replaceQuery)
+                : (original as NSString).replacingOccurrences(of: findQuery, with: replaceQuery, options: [.caseInsensitive], range: NSRange(location: 0, length: (original as NSString).length))
+            if updated == original {
+                findStatusMessage = "No matches found"
+            } else {
+                currentContentBinding.wrappedValue = updated
+                findStatusMessage = "Replace complete"
+            }
+        }
+#endif
     }
 
+#if os(macOS)
     private func activeEditorTextView() -> NSTextView? {
         let windows = ([NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 }) + NSApp.windows
         for window in windows {
@@ -167,8 +306,10 @@ extension ContentView {
         }
         return nil
     }
+#endif
 
     func applyWindowTranslucency(_ enabled: Bool) {
+#if os(macOS)
         for window in NSApp.windows {
             window.isOpaque = !enabled
             window.backgroundColor = enabled ? .clear : NSColor.windowBackgroundColor
@@ -177,9 +318,11 @@ extension ContentView {
                 window.titlebarSeparatorStyle = enabled ? .none : .automatic
             }
         }
+#endif
     }
 
     func openProjectFolder() {
+#if os(macOS)
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -190,6 +333,9 @@ extension ContentView {
             projectRootFolderURL = folderURL
             projectTreeNodes = buildProjectTree(at: folderURL)
         }
+#else
+        findStatusMessage = "Open Folder is currently available on macOS."
+#endif
     }
 
     func refreshProjectTree() {

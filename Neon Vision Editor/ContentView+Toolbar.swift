@@ -1,9 +1,279 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 extension ContentView {
+#if os(iOS)
+    private var isIPadToolbarLayout: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+    }
+
+    private var iPadToolbarMaxWidth: CGFloat {
+        let screenWidth = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })?
+            .screen.bounds.width ?? 1024
+        let target = screenWidth * 0.72
+        return min(max(target, 560), 980)
+    }
+
+    private var iPadPromotedActionsCount: Int {
+        switch iPadToolbarMaxWidth {
+        case 920...: return 7
+        case 840...: return 6
+        case 760...: return 5
+        case 680...: return 4
+        case 620...: return 3
+        default: return 2
+        }
+    }
+
+    @ViewBuilder
+    private var languagePickerControl: some View {
+        Picker("Language", selection: currentLanguageBinding) {
+            ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                let label: String = {
+                    switch lang {
+                    case "objective-c": return "Objective-C"
+                    case "csharp": return "C#"
+                    case "cpp": return "C++"
+                    case "json": return "JSON"
+                    case "xml": return "XML"
+                    case "yaml": return "YAML"
+                    case "toml": return "TOML"
+                    case "ini": return "INI"
+                    case "sql": return "SQL"
+                    case "html": return "HTML"
+                    case "css": return "CSS"
+                    case "standard": return "Standard"
+                    default: return lang.capitalized
+                    }
+                }()
+                Text(label).tag(lang)
+            }
+        }
+        .labelsHidden()
+        .help("Language")
+        .frame(width: isIPadToolbarLayout ? 160 : 120)
+    }
+
+    @ViewBuilder
+    private var aiSelectorControl: some View {
+        Button(action: {
+            showAISelectorPopover.toggle()
+        }) {
+            Image(systemName: "brain.head.profile")
+        }
+        .help("AI Model & Settings")
+        .popover(isPresented: $showAISelectorPopover) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("AI Model").font(.headline)
+                Picker("AI Model", selection: $selectedModel) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "brain.head.profile")
+                        Text("Apple Intelligence")
+                    }
+                    .tag(AIModel.appleIntelligence)
+                    Text("Grok").tag(AIModel.grok)
+                    Text("OpenAI").tag(AIModel.openAI)
+                    Text("Gemini").tag(AIModel.gemini)
+                    Text("Anthropic").tag(AIModel.anthropic)
+                }
+                .labelsHidden()
+                .frame(width: 170)
+                .controlSize(.large)
+
+                Button("API Settings…") {
+                    showAISelectorPopover = false
+                    showAPISettings = true
+                }
+                .buttonStyle(.bordered)
+            }
+                .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private var activeProviderBadgeControl: some View {
+        Text(activeProviderName)
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.12), in: Capsule())
+            .help("Active provider")
+    }
+
+    @ViewBuilder
+    private var clearEditorControl: some View {
+        Button(action: {
+            clearEditorContent()
+        }) {
+            Image(systemName: "trash")
+        }
+        .help("Clear Editor")
+    }
+
+    @ViewBuilder
+    private var openFileControl: some View {
+        Button(action: { openFileFromToolbar() }) {
+            Image(systemName: "folder")
+        }
+        .help("Open File…")
+    }
+
+    @ViewBuilder
+    private var saveFileControl: some View {
+        Button(action: { saveCurrentTabFromToolbar() }) {
+            Image(systemName: "square.and.arrow.down")
+        }
+        .disabled(viewModel.selectedTab == nil)
+        .help("Save File")
+    }
+
+    @ViewBuilder
+    private var toggleSidebarControl: some View {
+        Button(action: { toggleSidebarFromToolbar() }) {
+            Image(systemName: "sidebar.left")
+        }
+        .help("Toggle Sidebar")
+    }
+
+    @ViewBuilder
+    private var toggleProjectSidebarControl: some View {
+        Button(action: { showProjectStructureSidebar.toggle() }) {
+            Image(systemName: "sidebar.right")
+        }
+        .help("Toggle Project Structure Sidebar")
+    }
+
+    @ViewBuilder
+    private var findReplaceControl: some View {
+        Button(action: { showFindReplace = true }) {
+            Image(systemName: "magnifyingglass")
+        }
+        .help("Find & Replace")
+    }
+
+    @ViewBuilder
+    private var lineWrapControl: some View {
+        Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
+            Image(systemName: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
+        }
+        .help(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap")
+    }
+
+    @ViewBuilder
+    private var autoCompletionControl: some View {
+        Button(action: { isAutoCompletionEnabled.toggle() }) {
+            Image(systemName: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
+        }
+        .help(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion")
+    }
+
+    @ViewBuilder
+    private var iPadPromotedActions: some View {
+        if iPadPromotedActionsCount >= 1 { openFileControl }
+        if iPadPromotedActionsCount >= 2 { saveFileControl }
+        if iPadPromotedActionsCount >= 3 { toggleSidebarControl }
+        if iPadPromotedActionsCount >= 4 { toggleProjectSidebarControl }
+        if iPadPromotedActionsCount >= 5 { findReplaceControl }
+        if iPadPromotedActionsCount >= 6 { lineWrapControl }
+        if iPadPromotedActionsCount >= 7 { autoCompletionControl }
+    }
+
+    @ViewBuilder
+    private var moreActionsControl: some View {
+        Menu {
+            Button(action: { isAutoCompletionEnabled.toggle() }) {
+                Label(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion", systemImage: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
+            }
+
+            Button(action: { openFileFromToolbar() }) {
+                Label("Open File…", systemImage: "folder")
+            }
+
+            Button(action: { saveCurrentTabFromToolbar() }) {
+                Label("Save File", systemImage: "square.and.arrow.down")
+            }
+            .disabled(viewModel.selectedTab == nil)
+
+            Button(action: { toggleSidebarFromToolbar() }) {
+                Label("Toggle Sidebar", systemImage: "sidebar.left")
+            }
+
+            Button(action: { showProjectStructureSidebar.toggle() }) {
+                Label("Toggle Project Structure Sidebar", systemImage: "sidebar.right")
+            }
+
+            Button(action: { showFindReplace = true }) {
+                Label("Find & Replace", systemImage: "magnifyingglass")
+            }
+
+            Button(action: {
+                viewModel.isBrainDumpMode.toggle()
+                UserDefaults.standard.set(viewModel.isBrainDumpMode, forKey: "BrainDumpModeEnabled")
+            }) {
+                Label("Brain Dump Mode", systemImage: "note.text")
+            }
+
+            Button(action: {
+                enableTranslucentWindow.toggle()
+                UserDefaults.standard.set(enableTranslucentWindow, forKey: "EnableTranslucentWindow")
+                NotificationCenter.default.post(name: .toggleTranslucencyRequested, object: enableTranslucentWindow)
+            }) {
+                Label("Translucent Window Background", systemImage: enableTranslucentWindow ? "rectangle.fill" : "rectangle")
+            }
+
+            Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
+                Label(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap", systemImage: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .help("More Actions")
+    }
+
+    @ViewBuilder
+    private var iOSToolbarControls: some View {
+        languagePickerControl
+        aiSelectorControl
+        activeProviderBadgeControl
+        clearEditorControl
+        moreActionsControl
+    }
+
+    @ViewBuilder
+    private var iPadDistributedToolbarControls: some View {
+        languagePickerControl
+        Spacer(minLength: 18)
+        iPadPromotedActions
+        Spacer(minLength: 18)
+        aiSelectorControl
+        activeProviderBadgeControl
+        Spacer(minLength: 18)
+        clearEditorControl
+        moreActionsControl
+    }
+#endif
+
     @ToolbarContentBuilder
     var editorToolbarContent: some ToolbarContent {
+#if os(iOS)
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            HStack(spacing: 14) {
+                if isIPadToolbarLayout {
+                    iPadDistributedToolbarControls
+                } else {
+                    iOSToolbarControls
+                }
+            }
+            .frame(maxWidth: isIPadToolbarLayout ? iPadToolbarMaxWidth : .infinity, alignment: .trailing)
+        }
+#else
         ToolbarItemGroup(placement: .automatic) {
             Picker("Language", selection: currentLanguageBinding) {
                 ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
@@ -75,14 +345,7 @@ extension ContentView {
                 .help("Active provider")
 
             Button(action: {
-                currentContentBinding.wrappedValue = ""
-                if let tv = NSApp.keyWindow?.firstResponder as? NSTextView {
-                    tv.string = ""
-                    tv.didChangeText()
-                    tv.setSelectedRange(NSRange(location: 0, length: 0))
-                    tv.scrollRangeToVisible(NSRange(location: 0, length: 0))
-                }
-                caretStatus = "Ln 1, Col 1"
+                clearEditorContent()
             }) {
                 Image(systemName: "trash")
             }
@@ -95,20 +358,22 @@ extension ContentView {
             }
             .help(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion")
 
-            Button(action: { viewModel.openFile() }) {
+            Button(action: { openFileFromToolbar() }) {
                 Image(systemName: "folder")
             }
             .help("Open File…")
 
+            #if os(macOS)
             Button(action: {
                 openWindow(id: "blank-window")
             }) {
                 Image(systemName: "macwindow.badge.plus")
             }
             .help("New Window")
+            #endif
 
             Button(action: {
-                if let tab = viewModel.selectedTab { viewModel.saveFile(tab: tab) }
+                saveCurrentTabFromToolbar()
             }) {
                 Image(systemName: "square.and.arrow.down")
             }
@@ -116,7 +381,7 @@ extension ContentView {
             .help("Save File")
 
             Button(action: {
-                viewModel.showSidebar.toggle()
+                toggleSidebarFromToolbar()
             }) {
                 Image(systemName: "sidebar.left")
                     .symbolVariant(viewModel.showSidebar ? .fill : .none)
@@ -164,5 +429,6 @@ extension ContentView {
             }
             .help(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap")
         }
+#endif
     }
 }

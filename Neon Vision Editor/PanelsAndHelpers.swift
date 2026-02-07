@@ -1,6 +1,30 @@
 import SwiftUI
-import AppKit
 import Foundation
+import UniformTypeIdentifiers
+
+struct PlainTextDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.plainText, .text, .sourceCode] }
+
+    var text: String
+
+    init(text: String = "") {
+        self.text = text
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        if let data = configuration.file.regularFileContents,
+           let decoded = String(data: data, encoding: .utf8) {
+            text = decoded
+        } else {
+            text = ""
+        }
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let data = text.data(using: .utf8) ?? Data()
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
 
 struct APISupportSettingsView: View {
     @Binding var grokAPIToken: String
@@ -108,6 +132,12 @@ extension Notification.Name {
     static let caretPositionDidChange = Notification.Name("caretPositionDidChange")
     static let pastedText = Notification.Name("pastedText")
     static let toggleTranslucencyRequested = Notification.Name("toggleTranslucencyRequested")
+    static let clearEditorRequested = Notification.Name("clearEditorRequested")
+    static let toggleCodeCompletionRequested = Notification.Name("toggleCodeCompletionRequested")
+    static let showFindReplaceRequested = Notification.Name("showFindReplaceRequested")
+    static let toggleProjectStructureSidebarRequested = Notification.Name("toggleProjectStructureSidebarRequested")
+    static let showAPISettingsRequested = Notification.Name("showAPISettingsRequested")
+    static let selectAIModelRequested = Notification.Name("selectAIModelRequested")
 }
 
 extension NSRange {
