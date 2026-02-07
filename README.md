@@ -29,7 +29,7 @@ Release Download: https://github.com/h3pdesign/Neon-Vision-Editor/releases
 
 Prebuilt binaries are available via **GitHub Releases**:
 
-- Latest release: **v0.4.0-beta**
+- Latest release: **v0.4.1-beta**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *not yet*
 
