@@ -18,6 +18,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+
+private struct DetachedWindowContentView: View {
+    @StateObject private var viewModel = EditorViewModel()
+    @Binding var showGrokError: Bool
+    @Binding var grokErrorMessage: String
+
+    var body: some View {
+        ContentView()
+            .environmentObject(viewModel)
+            .environment(\.showGrokError, $showGrokError)
+            .environment(\.grokErrorMessage, $grokErrorMessage)
+            .frame(minWidth: 600, minHeight: 400)
+    }
+}
 #endif
 
 @main
@@ -80,11 +94,10 @@ struct NeonVisionEditorApp: App {
         .defaultSize(width: 1000, height: 600)
 
         WindowGroup("New Window", id: "blank-window") {
-            ContentView()
-                .environmentObject(EditorViewModel())
-                .environment(\.showGrokError, $showGrokError)
-                .environment(\.grokErrorMessage, $grokErrorMessage)
-                .frame(minWidth: 600, minHeight: 400)
+            DetachedWindowContentView(
+                showGrokError: $showGrokError,
+                grokErrorMessage: $grokErrorMessage
+            )
         }
         .defaultSize(width: 1000, height: 600)
 

@@ -32,6 +32,14 @@ extension ContentView {
     }
 
     @ViewBuilder
+    private var newTabControl: some View {
+        Button(action: { viewModel.addNewTab() }) {
+            Image(systemName: "plus.square.on.square")
+        }
+        .help("New Tab")
+    }
+
+    @ViewBuilder
     private var languagePickerControl: some View {
         Picker("Language", selection: currentLanguageBinding) {
             ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
@@ -240,6 +248,7 @@ extension ContentView {
     @ViewBuilder
     private var iOSToolbarControls: some View {
         languagePickerControl
+        newTabControl
         aiSelectorControl
         activeProviderBadgeControl
         clearEditorControl
@@ -249,6 +258,7 @@ extension ContentView {
     @ViewBuilder
     private var iPadDistributedToolbarControls: some View {
         languagePickerControl
+        newTabControl
         Spacer(minLength: 18)
         iPadPromotedActions
         Spacer(minLength: 18)
@@ -362,6 +372,11 @@ extension ContentView {
                 Image(systemName: "folder")
             }
             .help("Open File…")
+
+            Button(action: { viewModel.addNewTab() }) {
+                Image(systemName: "plus.square.on.square")
+            }
+            .help("New Tab")
 
             #if os(macOS)
             Button(action: {
