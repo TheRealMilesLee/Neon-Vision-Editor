@@ -122,6 +122,15 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             "\\b([0-9]+(\\.[0-9]+)?)\\b": colors.number,
             "//.*|/\\*([^*]|(\\*+[^*/]))*\\*+/": colors.comment
         ]
+    case "php":
+        return [
+            #"\b(function|class|interface|trait|namespace|use|public|private|protected|static|final|abstract|if|else|elseif|for|foreach|while|do|switch|case|default|return|try|catch|throw|new|echo)\b"#: colors.keyword,
+            #"\$[A-Za-z_][A-Za-z0-9_]*|\$\{[^}]+\}"#: colors.variable,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"//.*|#.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
+            #"<\?php|\?>"#: colors.meta
+        ]
     case "html":
         return ["<[^>]+>": colors.tag]
     case "css":
@@ -136,10 +145,11 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         ]
     case "json":
         return [
-            "\"[^\"]+\"\\s*:": colors.property,
-            "\"[^\"]*\"": colors.string,
-            "\\b([0-9]+(\\.[0-9]+)?)\\b": colors.number,
-            "\\b(true|false|null)\\b": colors.keyword
+            #"\"[^\"]+\"\s*:"#: colors.property,
+            #"\"([^\"\\]|\\.)*\""#: colors.string,
+            #"\b(-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)\b"#: colors.number,
+            #"\b(true|false|null)\b"#: colors.keyword,
+            #"[{}\[\],:]"#: colors.meta
         ]
     case "markdown":
         return [
@@ -258,9 +268,19 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         ]
     case "toml":
         return [
-            #"^\[[^\]]+\]"#: colors.meta,
-            #"\b[0-9]+\b"#: colors.number,
-            #"\"[^\"]*\""#: colors.string
+            #"^\s*\[\[?[^\]]+\]?\]\s*$"#: colors.meta,
+            #"^\s*[A-Za-z0-9_.-]+\s*="#: colors.property,
+            #"\"([^\"\\]|\\.)*\"|'[^']*'"#: colors.string,
+            #"\b(-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)\b"#: colors.number,
+            #"\b(true|false)\b"#: colors.keyword,
+            #"(?m)#.*$"#: colors.comment
+        ]
+    case "csv":
+        return [
+            #"\A([^\n,]+)(,\s*[^\n,]+)*"#: colors.meta,
+            #"\"([^\"\n]|\"\")*\""#: colors.string,
+            #"\b(-?[0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #","#: colors.property
         ]
     case "ini":
         return [

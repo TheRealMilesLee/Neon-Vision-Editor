@@ -119,6 +119,14 @@ struct SidebarView: View {
                 }
                 return nil
             }
+        case "php":
+            toc = lines.enumerated().compactMap { index, line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("function ") || t.hasPrefix("class ") || t.hasPrefix("interface ") || t.hasPrefix("trait ") {
+                    return "\(t) (Line \(index + 1))"
+                }
+                return nil
+            }
         case "objective-c":
             toc = lines.enumerated().compactMap { index, line in
                 let t = line.trimmingCharacters(in: .whitespaces)
@@ -154,7 +162,7 @@ struct SidebarView: View {
                 }
                 return nil
             }
-        case "html", "css", "json", "markdown":
+        case "html", "css", "json", "markdown", "csv":
             toc = lines.enumerated().compactMap { index, line in
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty && (trimmed.hasPrefix("#") || trimmed.hasPrefix("<h")) {

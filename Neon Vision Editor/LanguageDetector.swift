@@ -15,6 +15,10 @@ public struct LanguageDetector {
         "swift": "swift",
         "py": "python",
         "js": "javascript",
+        "php": "php",
+        "phtml": "php",
+        "csv": "csv",
+        "tsv": "csv",
         "ts": "javascript",
         "html": "html",
         "css": "css",
@@ -69,6 +73,8 @@ public struct LanguageDetector {
         var scores: [String: Int] = [
             "swift": 0,
             "csharp": 0,
+            "php": 0,
+            "csv": 0,
             "python": 0,
             "javascript": 0,
             "cpp": 0,
@@ -98,12 +104,23 @@ public struct LanguageDetector {
         if t.contains("```swift") { bump("swift", 100) }
         if t.contains("```python") { bump("python", 100) }
         if t.contains("```js") || t.contains("```javascript") { bump("javascript", 100) }
+        if t.contains("```php") { bump("php", 100) }
         if t.contains("```csharp") || t.contains("```cs") { bump("csharp", 100) }
         if t.contains("```cpp") || t.contains("```c++") { bump("cpp", 100) }
 
         // 2) Single-language quick checks
         if let first = trimmed.first, (first == "{" || first == "[") && t.contains(":") { bump("json", 90) }
         if t.contains("<html") || t.contains("<body") || t.contains("</") { bump("html", 90) }
+        if t.contains("<?php") || t.contains("<?=") { bump("php", 90) }
+        if raw.contains(",") && raw.contains("\n") {
+            let lines = raw.split(separator: "\n", omittingEmptySubsequences: true)
+            if lines.count >= 2 {
+                let commaCounts = lines.prefix(6).map { line in line.filter { $0 == "," }.count }
+                if let firstCount = commaCounts.first, firstCount > 0 && commaCounts.dropFirst().allSatisfy({ $0 == firstCount || abs($0 - firstCount) <= 1 }) {
+                    bump("csv", 80)
+                }
+            }
+        }
         if t.contains("#!/bin/bash") || t.contains("#!/usr/bin/env bash") { bump("bash", 90) }
         if t.contains("#!/bin/zsh") || t.contains("#!/usr/bin/env zsh") { bump("zsh", 90) }
 
@@ -181,19 +198,27 @@ public struct LanguageDetector {
         if t.contains("\ndef ") || t.hasPrefix("def ") { bump("python", 15) }
         if t.contains("\nimport ") && t.contains(":\n") { bump("python", 8) }
 
-        // 6) JavaScript / TypeScript
+        // 6) PHP
+        if t.contains("$this->") || t.contains("$_get") || t.contains("$_post") || t.contains("$_server") || t.contains("$_session") {
+            bump("php", 20)
+        }
+        if (t.contains("function ") && t.contains("$")) || t.contains("echo ") {
+            bump("php", 10)
+        }
+
+        // 7) JavaScript / TypeScript
         if t.contains("function ") || t.contains("=>") || t.contains("console.log") { bump("javascript", 15) }
 
-        // 7) C/C++
+        // 8) C/C++
         if t.contains("#include") || t.contains("std::") { bump("cpp", 20) }
         if t.contains("int main(") { bump("cpp", 8) }
 
-        // 8) CSS
+        // 9) CSS
         if t.contains("{") && t.contains("}") && t.contains(":") && t.contains(";") && !t.contains("func ") {
             bump("css", 8)
         }
 
-        // 9) Markdown
+        // 10) Markdown
         if t.contains("\n# ") || t.hasPrefix("# ") || t.contains("\n- ") || t.contains("\n* ") { bump("markdown", 8) }
 
         // Conflict resolution tweaks

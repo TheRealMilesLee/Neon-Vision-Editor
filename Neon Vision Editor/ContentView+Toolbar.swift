@@ -42,9 +42,10 @@ extension ContentView {
     @ViewBuilder
     private var languagePickerControl: some View {
         Picker("Language", selection: currentLanguageBinding) {
-            ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+            ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                 let label: String = {
                     switch lang {
+                    case "php": return "PHP"
                     case "objective-c": return "Objective-C"
                     case "csharp": return "C#"
                     case "cpp": return "C++"
@@ -52,6 +53,7 @@ extension ContentView {
                     case "xml": return "XML"
                     case "yaml": return "YAML"
                     case "toml": return "TOML"
+                    case "csv": return "CSV"
                     case "ini": return "INI"
                     case "sql": return "SQL"
                     case "html": return "HTML"
@@ -286,9 +288,10 @@ extension ContentView {
 #else
         ToolbarItemGroup(placement: .automatic) {
             Picker("Language", selection: currentLanguageBinding) {
-                ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                     let label: String = {
                         switch lang {
+                        case "php": return "PHP"
                         case "objective-c": return "Objective‑C"
                         case "csharp": return "C#"
                         case "cpp": return "C++"
@@ -296,6 +299,7 @@ extension ContentView {
                         case "xml": return "XML"
                         case "yaml": return "YAML"
                         case "toml": return "TOML"
+                        case "csv": return "CSV"
                         case "ini": return "INI"
                         case "sql": return "SQL"
                         case "html": return "HTML"

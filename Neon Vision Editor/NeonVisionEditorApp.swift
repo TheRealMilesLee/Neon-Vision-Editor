@@ -159,8 +159,27 @@ struct NeonVisionEditorApp: App {
             }
 
             CommandMenu("Language") {
-                ForEach(["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
-                    Button(lang.capitalized) {
+                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                    let label: String = {
+                        switch lang {
+                        case "php": return "PHP"
+                        case "objective-c": return "Objective-C"
+                        case "csharp": return "C#"
+                        case "cpp": return "C++"
+                        case "json": return "JSON"
+                        case "xml": return "XML"
+                        case "yaml": return "YAML"
+                        case "toml": return "TOML"
+                        case "csv": return "CSV"
+                        case "ini": return "INI"
+                        case "sql": return "SQL"
+                        case "html": return "HTML"
+                        case "css": return "CSS"
+                        case "standard": return "Standard"
+                        default: return lang.capitalized
+                        }
+                    }()
+                    Button(label) {
                         if let tab = viewModel.selectedTab {
                             viewModel.updateTabLanguage(tab: tab, language: lang)
                         }

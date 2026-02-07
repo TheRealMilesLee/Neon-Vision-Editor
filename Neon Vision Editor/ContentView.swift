@@ -873,7 +873,7 @@ struct ContentView: View {
     /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
-        let supported = ["swift", "python", "javascript", "typescript", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
+        let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
 
         #if USE_FOUNDATION_MODELS
         // Attempt a lightweight model-based detection via AppleIntelligenceAIClient if available
@@ -895,6 +895,18 @@ struct ContentView: View {
         // Normalize common C# indicators to "csharp" to ensure the picker has a matching tag
         if lower.contains("c#") || lower.contains("c sharp") || lower.range(of: #"\bcs\b"#, options: .regularExpression) != nil || lower.contains(".cs") {
             return "csharp"
+        }
+        if lower.contains("<?php") || lower.contains("<?=") || lower.contains("$this->") || lower.contains("$_get") || lower.contains("$_post") || lower.contains("$_server") {
+            return "php"
+        }
+        if text.contains(",") && text.contains("\n") {
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+            if lines.count >= 2 {
+                let commaCounts = lines.prefix(6).map { line in line.filter { $0 == "," }.count }
+                if let firstCount = commaCounts.first, firstCount > 0 && commaCounts.dropFirst().allSatisfy({ $0 == firstCount || abs($0 - firstCount) <= 1 }) {
+                    return "csv"
+                }
+            }
         }
         // C# strong heuristic
         if lower.contains("using system") || lower.contains("namespace ") || lower.contains("public class") || lower.contains("public static void main") || lower.contains("static void main") || lower.contains("console.writeline") || lower.contains("console.readline") || lower.contains("class program") || lower.contains("get; set;") || lower.contains("list<") || lower.contains("dictionary<") || lower.contains("ienumerable<") || lower.range(of: #"\[[A-Za-z_][A-Za-z0-9_]*\]"#, options: .regularExpression) != nil {

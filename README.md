@@ -72,7 +72,7 @@ No background indexing. No telemetry. No plugin sprawl.
 
 - Fast loading, including large text files
 - Automatic applied syntax highlighting for common languages  
-  (Python, C/C++, JavaScript, HTML, CSS, and others)
+  (Python, PHP, C/C++, JavaScript, HTML, CSS, and others)
 - Clean, minimal UI optimized for readability
 - Native macOS 26 (Tahoe) look & behavior
 - Built with Swift and AppKit
@@ -121,5 +121,15 @@ If you find Neon Vision Editor useful and want to support its development:
 git clone https://github.com/h3pdesign/Neon-Vision-Editor.git
 cd Neon-Vision-Editor
 open "Neon Vision Editor.xcodeproj"
+```
+
+## Homebrew install option
+
+If you use Homebrew, you can install via cask:
+
+```bash
+brew tap h3pdesign/tap
+brew install --cask neon-vision-editor
+```
 
 
