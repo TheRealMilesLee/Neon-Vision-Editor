@@ -51,10 +51,10 @@ struct ContentView: View {
     @State var lastProviderUsed: String = "Apple"
 
     // Persisted API tokens for external providers
-    @State var grokAPIToken: String = UserDefaults.standard.string(forKey: "GrokAPIToken") ?? ""
-    @State var openAIAPIToken: String = UserDefaults.standard.string(forKey: "OpenAIAPIToken") ?? ""
-    @State var geminiAPIToken: String = UserDefaults.standard.string(forKey: "GeminiAPIToken") ?? ""
-    @State var anthropicAPIToken: String = UserDefaults.standard.string(forKey: "AnthropicAPIToken") ?? ""
+    @State var grokAPIToken: String = SecureTokenStore.token(for: .grok)
+    @State var openAIAPIToken: String = SecureTokenStore.token(for: .openAI)
+    @State var geminiAPIToken: String = SecureTokenStore.token(for: .gemini)
+    @State var anthropicAPIToken: String = SecureTokenStore.token(for: .anthropic)
 
     // Debounce handle for inline completion
     @State var lastCompletionWorkItem: DispatchWorkItem?
@@ -91,7 +91,7 @@ struct ContentView: View {
 
     var activeProviderName: String { lastProviderUsed }
 
-    /// Prompts the user for a Grok token if none is saved. Persists to UserDefaults.
+    /// Prompts the user for a Grok token if none is saved. Persists to Keychain.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGrokTokenIfNeeded() -> Bool {
         if !grokAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
@@ -110,14 +110,14 @@ struct ContentView: View {
             let token = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if token.isEmpty { return false }
             grokAPIToken = token
-            UserDefaults.standard.set(token, forKey: "GrokAPIToken")
+            SecureTokenStore.setToken(token, for: .grok)
             return true
         }
 #endif
         return false
     }
 
-    /// Prompts the user for an OpenAI token if none is saved. Persists to UserDefaults.
+    /// Prompts the user for an OpenAI token if none is saved. Persists to Keychain.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForOpenAITokenIfNeeded() -> Bool {
         if !openAIAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
@@ -136,14 +136,14 @@ struct ContentView: View {
             let token = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if token.isEmpty { return false }
             openAIAPIToken = token
-            UserDefaults.standard.set(token, forKey: "OpenAIAPIToken")
+            SecureTokenStore.setToken(token, for: .openAI)
             return true
         }
 #endif
         return false
     }
 
-    /// Prompts the user for a Gemini token if none is saved. Persists to UserDefaults.
+    /// Prompts the user for a Gemini token if none is saved. Persists to Keychain.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGeminiTokenIfNeeded() -> Bool {
         if !geminiAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
@@ -162,14 +162,14 @@ struct ContentView: View {
             let token = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if token.isEmpty { return false }
             geminiAPIToken = token
-            UserDefaults.standard.set(token, forKey: "GeminiAPIToken")
+            SecureTokenStore.setToken(token, for: .gemini)
             return true
         }
 #endif
         return false
     }
 
-    /// Prompts the user for an Anthropic API token if none is saved. Persists to UserDefaults.
+    /// Prompts the user for an Anthropic API token if none is saved. Persists to Keychain.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForAnthropicTokenIfNeeded() -> Bool {
         if !anthropicAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
@@ -188,7 +188,7 @@ struct ContentView: View {
             let token = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if token.isEmpty { return false }
             anthropicAPIToken = token
-            UserDefaults.standard.set(token, forKey: "AnthropicAPIToken")
+            SecureTokenStore.setToken(token, for: .anthropic)
             return true
         }
 #endif
@@ -320,7 +320,9 @@ struct ContentView: View {
                    let content = message["content"] as? String {
                     return sanitizeCompletion(content)
                 }
-            } catch { print("[Completion][Fallback][Grok] error: \(error)") }
+            } catch {
+                debugLog("[Completion][Fallback][Grok] request failed")
+            }
         }
         // Try OpenAI
         if !openAIAPIToken.isEmpty {
@@ -353,16 +355,19 @@ struct ContentView: View {
                    let content = message["content"] as? String {
                     return sanitizeCompletion(content)
                 }
-            } catch { print("[Completion][Fallback][OpenAI] error: \(error)") }
+            } catch {
+                debugLog("[Completion][Fallback][OpenAI] request failed")
+            }
         }
         // Try Gemini
         if !geminiAPIToken.isEmpty {
             do {
                 let model = "gemini-1.5-flash-latest"
-                let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(geminiAPIToken)"
+                let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"
                 guard let url = URL(string: endpoint) else { return "" }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
+                request.setValue(geminiAPIToken, forHTTPHeaderField: "x-goog-api-key")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 let prompt = """
                 Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
@@ -385,7 +390,9 @@ struct ContentView: View {
                    let text = parts.first?["text"] as? String {
                     return sanitizeCompletion(text)
                 }
-            } catch { print("[Completion][Fallback][Gemini] error: \(error)") }
+            } catch {
+                debugLog("[Completion][Fallback][Gemini] request failed")
+            }
         }
         // Try Anthropic
         if !anthropicAPIToken.isEmpty {
@@ -424,7 +431,9 @@ struct ContentView: View {
                    let text = first["text"] as? String {
                     return sanitizeCompletion(text)
                 }
-            } catch { print("[Completion][Fallback][Anthropic] error: \(error)") }
+            } catch {
+                debugLog("[Completion][Fallback][Anthropic] request failed")
+            }
         }
         return ""
     }
@@ -491,7 +500,7 @@ struct ContentView: View {
                 await MainActor.run { lastProviderUsed = "Grok (fallback to Apple)" }
                 return res
             } catch {
-                print("[Completion][Grok] request failed: \(error)")
+                debugLog("[Completion][Grok] request failed")
                 let res = await appleModelCompletion(prefix: prefix, language: language)
                 await MainActor.run { lastProviderUsed = "Grok (fallback to Apple)" }
                 return res
@@ -536,7 +545,7 @@ struct ContentView: View {
                 await MainActor.run { lastProviderUsed = "OpenAI (fallback to Apple)" }
                 return res
             } catch {
-                print("[Completion][OpenAI] request failed: \(error)")
+                debugLog("[Completion][OpenAI] request failed")
                 let res = await appleModelCompletion(prefix: prefix, language: language)
                 await MainActor.run { lastProviderUsed = "OpenAI (fallback to Apple)" }
                 return res
@@ -549,7 +558,7 @@ struct ContentView: View {
             }
             do {
                 let model = "gemini-1.5-flash-latest"
-                let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(geminiAPIToken)"
+                let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"
                 guard let url = URL(string: endpoint) else {
                     let res = await appleModelCompletion(prefix: prefix, language: language)
                     await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
@@ -557,6 +566,7 @@ struct ContentView: View {
                 }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
+                request.setValue(geminiAPIToken, forHTTPHeaderField: "x-goog-api-key")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 let prompt = """
                 Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
@@ -584,7 +594,7 @@ struct ContentView: View {
                 await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
                 return res
             } catch {
-                print("[Completion][Gemini] request failed: \(error)")
+                debugLog("[Completion][Gemini] request failed")
                 let res = await appleModelCompletion(prefix: prefix, language: language)
                 await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
                 return res
@@ -636,7 +646,7 @@ struct ContentView: View {
                 await MainActor.run { lastProviderUsed = "Anthropic (fallback to Apple)" }
                 return res
             } catch {
-                print("[Completion][Anthropic] request failed: \(error)")
+                debugLog("[Completion][Anthropic] request failed")
                 let res = await appleModelCompletion(prefix: prefix, language: language)
                 await MainActor.run { lastProviderUsed = "Anthropic (fallback to Apple)" }
                 return res
@@ -667,6 +677,12 @@ struct ContentView: View {
         }
 
         return result
+    }
+
+    private func debugLog(_ message: String) {
+#if DEBUG
+        print(message)
+#endif
     }
 
     @ViewBuilder

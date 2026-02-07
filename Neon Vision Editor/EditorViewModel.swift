@@ -196,7 +196,7 @@ class EditorViewModel: ObservableObject {
                 try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].isDirty = false
             } catch {
-                print("Error saving file: \(error)")
+                debugLog("Failed to save file.")
             }
         } else {
             saveFileAs(tab: tab)
@@ -228,13 +228,13 @@ class EditorViewModel: ObservableObject {
                 tabs[index].name = url.lastPathComponent
                 tabs[index].isDirty = false
             } catch {
-                print("Error saving file: \(error)")
+                debugLog("Failed to save file.")
             }
         }
 #else
         // iOS/iPadOS: explicit Save As panel is not available here yet.
         // Keep document dirty so user can export/share via future document APIs.
-        print("Save As is currently only available on macOS.")
+        debugLog("Save As is currently only available on macOS.")
 #endif
     }
     
@@ -262,12 +262,12 @@ class EditorViewModel: ObservableObject {
                 tabs.append(newTab)
                 selectedTabID = newTab.id
             } catch {
-                print("Error opening file: \(error)")
+                debugLog("Failed to open file.")
             }
         }
 #else
         // iOS/iPadOS: document picker flow can be added here.
-        print("Open File panel is currently only available on macOS.")
+        debugLog("Open File panel is currently only available on macOS.")
 #endif
     }
     
@@ -285,7 +285,7 @@ class EditorViewModel: ObservableObject {
             tabs.append(newTab)
             selectedTabID = newTab.id
         } catch {
-            print("Error opening file: \(error)")
+            debugLog("Failed to open file.")
         }
     }
 
@@ -301,5 +301,11 @@ class EditorViewModel: ObservableObject {
     func wordCount(for text: String) -> Int {
         text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }.count
+    }
+
+    private func debugLog(_ message: String) {
+#if DEBUG
+        print(message)
+#endif
     }
 }

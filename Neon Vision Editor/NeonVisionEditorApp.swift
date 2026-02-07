@@ -48,6 +48,10 @@ struct NeonVisionEditorApp: App {
     @State private var showGrokError: Bool = false
     @State private var grokErrorMessage: String = ""
 
+    init() {
+        SecureTokenStore.migrateLegacyUserDefaultsTokens()
+    }
+
     var body: some Scene {
 #if os(macOS)
         WindowGroup {
@@ -230,9 +234,9 @@ struct NeonVisionEditorApp: App {
                             let contentPrefix = String(tab.content.prefix(1000))
                             let prompt = "Suggest improvements for this \(tab.language) code: \(contentPrefix)"
 
-                            let grokToken = UserDefaults.standard.string(forKey: "GrokAPIToken") ?? ""
-                            let openAIToken = UserDefaults.standard.string(forKey: "OpenAIAPIToken") ?? ""
-                            let geminiToken = UserDefaults.standard.string(forKey: "GeminiAPIToken") ?? ""
+                            let grokToken = SecureTokenStore.token(for: .grok)
+                            let openAIToken = SecureTokenStore.token(for: .openAI)
+                            let geminiToken = SecureTokenStore.token(for: .gemini)
 
                             let client: AIClient? = {
                                 #if USE_FOUNDATION_MODELS

@@ -99,10 +99,10 @@ final class GeminiAIClient: AIClient {
         return AsyncStream { continuation in
             Task {
                 do {
-                    var comps = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
-                    comps.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-                    var request = URLRequest(url: comps.url!)
+                    let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
+                    var request = URLRequest(url: url)
                     request.httpMethod = "POST"
+                    request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     let body: [String: Any] = [
                         "contents": [[

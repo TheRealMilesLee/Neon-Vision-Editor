@@ -43,7 +43,7 @@ struct APISupportSettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: .infinity)
                         .onChange(of: grokAPIToken) { _, new in
-                            UserDefaults.standard.set(new, forKey: "GrokAPIToken")
+                            SecureTokenStore.setToken(new, for: .grok)
                         }
                 }
                 LabeledContent("OpenAI") {
@@ -51,7 +51,7 @@ struct APISupportSettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: .infinity)
                         .onChange(of: openAIAPIToken) { _, new in
-                            UserDefaults.standard.set(new, forKey: "OpenAIAPIToken")
+                            SecureTokenStore.setToken(new, for: .openAI)
                         }
                 }
                 LabeledContent("Gemini") {
@@ -59,7 +59,7 @@ struct APISupportSettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: .infinity)
                         .onChange(of: geminiAPIToken) { _, new in
-                            UserDefaults.standard.set(new, forKey: "GeminiAPIToken")
+                            SecureTokenStore.setToken(new, for: .gemini)
                         }
                 }
                 LabeledContent("Anthropic") {
@@ -67,7 +67,7 @@ struct APISupportSettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: .infinity)
                         .onChange(of: anthropicAPIToken) { _, new in
-                            UserDefaults.standard.set(new, forKey: "AnthropicAPIToken")
+                            SecureTokenStore.setToken(new, for: .anthropic)
                         }
                 }
             }
