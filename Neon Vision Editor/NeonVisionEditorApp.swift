@@ -48,8 +48,18 @@ struct NeonVisionEditorApp: App {
     @State private var showGrokError: Bool = false
     @State private var grokErrorMessage: String = ""
 
+    private var appleAIStatusMenuLabel: String {
+        if appleAIStatus.contains("Ready") { return "AI: Ready" }
+        if appleAIStatus.contains("Checking") { return "AI: Checking" }
+        if appleAIStatus.contains("Unavailable") { return "AI: Unavailable" }
+        if appleAIStatus.contains("Error") { return "AI: Error" }
+        return "AI: Status"
+    }
+
     init() {
         SecureTokenStore.migrateLegacyUserDefaultsTokens()
+        // Safety reset: avoid stale NORMAL-mode state making editor appear non-editable.
+        UserDefaults.standard.set(false, forKey: "EditorVimModeEnabled")
     }
 
     var body: some Scene {
@@ -212,7 +222,7 @@ struct NeonVisionEditorApp: App {
                 }
             }
 
-            CommandMenu("View") {
+            CommandGroup(after: .toolbar) {
                 Toggle("Toggle Sidebar", isOn: $viewModel.showSidebar)
                     .keyboardShortcut("s", modifiers: [.command, .option])
 
@@ -229,9 +239,20 @@ struct NeonVisionEditorApp: App {
                 Button("Toggle Translucent Window Background") {
                     NotificationCenter.default.post(name: .toggleTranslucencyRequested, object: !enableTranslucentWindow)
                 }
+
+                Divider()
+
+                Button("Show Welcome Tour") {
+                    NotificationCenter.default.post(name: .showWelcomeTourRequested, object: nil)
+                }
             }
 
             CommandMenu("Editor") {
+                Button("Quick Open…") {
+                    NotificationCenter.default.post(name: .showQuickSwitcherRequested, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: .command)
+
                 Button("Clear Editor") {
                     NotificationCenter.default.post(name: .clearEditorRequested, object: nil)
                 }
@@ -244,6 +265,13 @@ struct NeonVisionEditorApp: App {
                     NotificationCenter.default.post(name: .showFindReplaceRequested, object: nil)
                 }
                 .keyboardShortcut("f", modifiers: .command)
+
+                Divider()
+
+                Button("Toggle Vim Mode") {
+                    NotificationCenter.default.post(name: .toggleVimModeRequested, object: nil)
+                }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
             }
 
             CommandMenu("Tools") {
@@ -288,10 +316,10 @@ struct NeonVisionEditorApp: App {
                 Toggle("Use Apple Intelligence", isOn: $useAppleIntelligence)
             }
 
-            CommandMenu("Diagnostics") {
-                Text(appleAIStatus)
+            CommandMenu("Diag") {
+                Text(appleAIStatusMenuLabel)
                 Divider()
-                Button("Re-run Apple Intelligence Health Check") {
+                Button("Run AI Check") {
                     Task {
                         #if USE_FOUNDATION_MODELS
                         do {
@@ -312,7 +340,7 @@ struct NeonVisionEditorApp: App {
                 }
 
                 if let ms = appleAIRoundTripMS {
-                    Text(String(format: "Last round-trip: %.1f ms", ms))
+                    Text(String(format: "RTT: %.1f ms", ms))
                         .foregroundStyle(.secondary)
                 }
             }

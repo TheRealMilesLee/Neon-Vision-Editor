@@ -82,6 +82,12 @@ struct ContentView: View {
     @State var iosExportDocument: PlainTextDocument = PlainTextDocument(text: "")
     @State var iosExportFilename: String = "Untitled.txt"
     @State var iosExportTabID: UUID? = nil
+    @State var showQuickSwitcher: Bool = false
+    @State var quickSwitcherQuery: String = ""
+    @State var vimModeEnabled: Bool = UserDefaults.standard.bool(forKey: "EditorVimModeEnabled")
+    @State var vimInsertMode: Bool = true
+    @AppStorage("HasSeenWelcomeTourV1") var hasSeenWelcomeTourV1: Bool = false
+    @State var showWelcomeTour: Bool = false
 
 #if USE_FOUNDATION_MODELS
     var appleModelAvailable: Bool { true }
@@ -772,6 +778,19 @@ struct ContentView: View {
             .presentationDetents([.medium, .large])
         }
 #endif
+        .sheet(isPresented: $showQuickSwitcher) {
+            QuickFileSwitcherPanel(
+                query: $quickSwitcherQuery,
+                items: quickSwitcherItems,
+                onSelect: { selectQuickSwitcherItem($0) }
+            )
+        }
+        .sheet(isPresented: $showWelcomeTour) {
+            WelcomeTourView {
+                hasSeenWelcomeTourV1 = true
+                showWelcomeTour = false
+            }
+        }
         .confirmationDialog("Save changes before closing?", isPresented: $showUnsavedCloseDialog, titleVisibility: .visible) {
             Button("Save") { saveAndClosePendingTab() }
             Button("Don't Save", role: .destructive) { discardAndClosePendingTab() }
@@ -814,6 +833,11 @@ struct ContentView: View {
             }
 
             applyWindowTranslucency(enableTranslucentWindow)
+            if !hasSeenWelcomeTourV1 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    showWelcomeTour = true
+                }
+            }
         }
     }
 
@@ -1075,8 +1099,26 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { _ in
             showFindReplace = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showQuickSwitcherRequested)) { _ in
+            quickSwitcherQuery = ""
+            showQuickSwitcher = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showWelcomeTourRequested)) { _ in
+            showWelcomeTour = true
+        }
         .onReceive(NotificationCenter.default.publisher(for: .toggleProjectStructureSidebarRequested)) { _ in
             showProjectStructureSidebar.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleVimModeRequested)) { _ in
+            vimModeEnabled.toggle()
+            UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimModeEnabled")
+            // Keep caret visible after toggling; Esc switches to NORMAL.
+            vimInsertMode = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .vimModeStateDidChange)) { notif in
+            if let isInsert = notif.userInfo?["insertMode"] as? Bool {
+                vimInsertMode = isInsert
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showAPISettingsRequested)) { _ in
             showAISelectorPopover = false
@@ -1116,7 +1158,7 @@ struct ContentView: View {
     var wordCountView: some View {
         HStack {
             Spacer()
-            Text("\(caretStatus) • Words: \(viewModel.wordCount(for: currentContent))")
+            Text("\(caretStatus) • Words: \(viewModel.wordCount(for: currentContent))\(vimStatusSuffix)")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
                 .padding(.bottom, 8)
@@ -1165,6 +1207,66 @@ struct ContentView: View {
 #else
         .background(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.systemBackground)))
 #endif
+    }
+
+    private var vimStatusSuffix: String {
+#if os(macOS)
+        guard vimModeEnabled else { return "" }
+        return vimInsertMode ? " • Vim: INSERT" : " • Vim: NORMAL"
+#else
+        return ""
+#endif
+    }
+
+    private var quickSwitcherItems: [QuickFileSwitcherPanel.Item] {
+        var items: [QuickFileSwitcherPanel.Item] = []
+        let fileURLSet = Set(viewModel.tabs.compactMap { $0.fileURL?.standardizedFileURL.path })
+
+        for tab in viewModel.tabs {
+            let subtitle = tab.fileURL?.path ?? "Open tab"
+            items.append(
+                QuickFileSwitcherPanel.Item(
+                    id: "tab:\(tab.id.uuidString)",
+                    title: tab.name,
+                    subtitle: subtitle
+                )
+            )
+        }
+
+        for url in projectFileURLs(from: projectTreeNodes) {
+            let standardized = url.standardizedFileURL.path
+            if fileURLSet.contains(standardized) { continue }
+            items.append(
+                QuickFileSwitcherPanel.Item(
+                    id: "file:\(standardized)",
+                    title: url.lastPathComponent,
+                    subtitle: standardized
+                )
+            )
+        }
+
+        let query = quickSwitcherQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return Array(items.prefix(300)) }
+        return Array(
+            items.filter {
+                $0.title.lowercased().contains(query) || $0.subtitle.lowercased().contains(query)
+            }
+            .prefix(300)
+        )
+    }
+
+    private func selectQuickSwitcherItem(_ item: QuickFileSwitcherPanel.Item) {
+        if item.id.hasPrefix("tab:") {
+            let raw = String(item.id.dropFirst(4))
+            if let id = UUID(uuidString: raw) {
+                viewModel.selectedTabID = id
+            }
+            return
+        }
+        if item.id.hasPrefix("file:") {
+            let path = String(item.id.dropFirst(5))
+            openProjectFile(url: URL(fileURLWithPath: path))
+        }
     }
 
 }

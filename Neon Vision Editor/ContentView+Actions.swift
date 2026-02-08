@@ -375,4 +375,16 @@ extension ContentView {
         }
         return nodes
     }
+
+    func projectFileURLs(from nodes: [ProjectTreeNode]) -> [URL] {
+        var results: [URL] = []
+        for node in nodes {
+            if node.isDirectory {
+                results.append(contentsOf: projectFileURLs(from: node.children))
+            } else {
+                results.append(node.url)
+            }
+        }
+        return results
+    }
 }

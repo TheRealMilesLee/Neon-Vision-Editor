@@ -6,11 +6,49 @@ import AppKit
 
 final class AcceptingTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
     override var isOpaque: Bool { false }
+    private let vimModeDefaultsKey = "EditorVimModeEnabled"
+    private var isVimInsertMode: Bool = true
+    private var vimObservers: [NSObjectProtocol] = []
+    private var didConfigureVimMode: Bool = false
 
     // We want the caret at the *start* of the paste.
     private var pendingPasteCaretLocation: Int?
+
+    deinit {
+        for observer in vimObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if !didConfigureVimMode {
+            configureVimMode()
+            didConfigureVimMode = true
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        window?.makeFirstResponder(self)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let didBecome = super.becomeFirstResponder()
+        if didBecome, UserDefaults.standard.bool(forKey: vimModeDefaultsKey) {
+            // Re-enter INSERT whenever editor focus is regained.
+            isVimInsertMode = true
+            postVimModeState()
+        }
+        return didBecome
+    }
 
     // MARK: - Drag & Drop: insert file contents instead of file path
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -102,6 +140,71 @@ final class AcceptingTextView: NSTextView {
         super.insertText(insertString, replacementRange: replacementRange)
     }
 
+    override func keyDown(with event: NSEvent) {
+        // Temporary safety fallback: bypass Vim interception until focus/editing is stable.
+        super.keyDown(with: event)
+        return
+
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command) || flags.contains(.option) || flags.contains(.control) {
+            super.keyDown(with: event)
+            return
+        }
+
+        let vimModeEnabled = UserDefaults.standard.bool(forKey: vimModeDefaultsKey)
+        guard vimModeEnabled else {
+            super.keyDown(with: event)
+            return
+        }
+
+        if !isVimInsertMode {
+            let key = event.charactersIgnoringModifiers ?? ""
+            switch key {
+            case "h":
+                moveLeft(nil)
+            case "j":
+                moveDown(nil)
+            case "k":
+                moveUp(nil)
+            case "l":
+                moveRight(nil)
+            case "w":
+                moveWordForward(nil)
+            case "b":
+                moveWordBackward(nil)
+            case "0":
+                moveToBeginningOfLine(nil)
+            case "$":
+                moveToEndOfLine(nil)
+            case "x":
+                deleteForward(nil)
+            case "p":
+                paste(nil)
+            case "i":
+                isVimInsertMode = true
+                postVimModeState()
+            case "a":
+                moveRight(nil)
+                isVimInsertMode = true
+                postVimModeState()
+            case "\u{1B}":
+                break
+            default:
+                break
+            }
+            return
+        }
+
+        // Escape exits insert mode.
+        if event.keyCode == 53 || event.characters == "\u{1B}" {
+            isVimInsertMode = false
+            postVimModeState()
+            return
+        }
+
+        super.keyDown(with: event)
+    }
+
     // Paste: capture insertion point and enforce caret position after paste across async updates.
     override func paste(_ sender: Any?) {
         // Capture where paste begins (start of insertion/replacement)
@@ -165,6 +268,32 @@ final class AcceptingTextView: NSTextView {
         // Important: clear only after we've enforced at least once.
         // The delayed calls will no-op once this is nil.
         pendingPasteCaretLocation = nil
+    }
+
+    private func postVimModeState() {
+        NotificationCenter.default.post(
+            name: .vimModeStateDidChange,
+            object: nil,
+            userInfo: ["insertMode": isVimInsertMode]
+        )
+    }
+
+    private func configureVimMode() {
+        // Always start with a visible caret; users can switch to NORMAL with Esc.
+        isVimInsertMode = true
+        postVimModeState()
+
+        let observer = NotificationCenter.default.addObserver(
+            forName: .toggleVimModeRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            // After toggling Vim mode, keep INSERT active to avoid "missing cursor" confusion.
+            self.isVimInsertMode = true
+            self.postVimModeState()
+        }
+        vimObservers.append(observer)
     }
 }
 
@@ -291,6 +420,9 @@ struct CustomTextEditor: NSViewRepresentable {
     // Keep NSTextView in sync with SwiftUI state and schedule highlighting when needed.
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         if let textView = nsView.documentView as? NSTextView {
+            textView.isEditable = true
+            textView.isSelectable = true
+
             if textView.string != text {
                 textView.string = text
             }
@@ -318,6 +450,13 @@ struct CustomTextEditor: NSViewRepresentable {
 
             textView.invalidateIntrinsicContentSize()
             nsView.reflectScrolledClipView(nsView.contentView)
+
+            if NSApp.modalWindow == nil,
+               let window = nsView.window,
+               window.attachedSheet == nil,
+               window.firstResponder !== textView {
+                window.makeFirstResponder(textView)
+            }
 
             // Only schedule highlight if needed (e.g., language/color scheme changes or external text updates)
             context.coordinator.parent = self

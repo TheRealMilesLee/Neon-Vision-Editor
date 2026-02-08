@@ -127,6 +127,232 @@ struct FindReplacePanel: View {
     }
 }
 
+struct QuickFileSwitcherPanel: View {
+    struct Item: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String
+    }
+
+    @Binding var query: String
+    let items: [Item]
+    let onSelect: (Item) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Quick Open")
+                .font(.headline)
+            TextField("Search files and tabs", text: $query)
+                .textFieldStyle(.roundedBorder)
+
+            List(items) { item in
+                Button {
+                    onSelect(item)
+                    dismiss()
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .lineLimit(1)
+                        Text(item.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+
+            HStack {
+                Text("\(items.count) results")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Close") { dismiss() }
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 520, minHeight: 380)
+    }
+}
+
+struct WelcomeTourView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    struct TourPage: Identifiable {
+        let id = UUID()
+        let title: String
+        let subtitle: String
+        let bullets: [String]
+        let iconName: String
+        let colors: [Color]
+    }
+
+    let onFinish: () -> Void
+    @State private var selectedIndex: Int = 0
+
+    private let pages: [TourPage] = [
+        TourPage(
+            title: "A Fast, Focused Editor",
+            subtitle: "Built for quick edits and flow.",
+            bullets: [
+                "Tabbed editing with per-file language support",
+                "Automatic syntax highlighting for many formats",
+                "Word count, caret status, and complete toolbar options"
+            ],
+            iconName: "doc.text.magnifyingglass",
+            colors: [Color(red: 0.96, green: 0.48, blue: 0.28), Color(red: 0.99, green: 0.78, blue: 0.35)]
+        ),
+        TourPage(
+            title: "Smart Assistance",
+            subtitle: "Use local or cloud AI models when you want.",
+            bullets: [
+                "Apple Intelligence integration (when available)",
+                "Optional Grok, OpenAI, Gemini, and Anthropic providers",
+                "AI providers are used for simple code completion and suggestions",
+                "API keys stored securely in Keychain"
+            ],
+            iconName: "sparkles",
+            colors: [Color(red: 0.20, green: 0.55, blue: 0.95), Color(red: 0.21, green: 0.86, blue: 0.78)]
+        ),
+        TourPage(
+            title: "Power User Features",
+            subtitle: "Navigate large projects quickly.",
+            bullets: [
+                "Quick Open with Cmd+P",
+                "All sidebars: document outline and project structure",
+                "Find & Replace and full editor/view toolbar actions",
+                "Lightweight Vim-style workflow support on macOS"
+            ],
+            iconName: "bolt.circle",
+            colors: [Color(red: 0.22, green: 0.72, blue: 0.43), Color(red: 0.08, green: 0.42, blue: 0.73)]
+        )
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TabView(selection: $selectedIndex) {
+                ForEach(Array(pages.enumerated()), id: \.offset) { idx, page in
+                    tourCard(for: page)
+                        .tag(idx)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 18)
+                }
+            }
+#if os(iOS)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+#else
+            .tabViewStyle(.automatic)
+#endif
+
+            HStack(spacing: 8) {
+                ForEach(0..<pages.count, id: \.self) { idx in
+                    Capsule()
+                        .fill(idx == selectedIndex ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .frame(width: idx == selectedIndex ? 14 : 6, height: 5)
+                }
+            }
+            .padding(.top, 4)
+            .padding(.bottom, 10)
+
+            HStack {
+                Button("Skip") { onFinish() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if selectedIndex < pages.count - 1 {
+                    Button("Next") {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            selectedIndex += 1
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Get Started") { onFinish() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
+        }
+        .padding(14)
+        .background(
+            LinearGradient(
+                colors: colorScheme == .dark
+                    ? [Color(red: 0.09, green: 0.10, blue: 0.14), Color(red: 0.13, green: 0.16, blue: 0.22)]
+                    : [Color(red: 0.98, green: 0.99, blue: 1.00), Color(red: 0.93, green: 0.96, blue: 0.99)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+#if os(macOS)
+        .frame(minWidth: 840, minHeight: 580)
+#else
+        .presentationDetents([.large])
+#endif
+    }
+
+    @ViewBuilder
+    private func tourCard(for page: TourPage) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Spacer(minLength: 0)
+
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: page.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 56, height: 56)
+                    Image(systemName: page.iconName)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(page.title)
+                        .font(.system(size: 28, weight: .bold))
+                    Text(page.subtitle)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ForEach(page.bullets, id: \.self) { bullet in
+                HStack(alignment: .top, spacing: 10) {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.85))
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 7)
+                    Text(bullet)
+                        .font(.system(size: 15))
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(colorScheme == .dark ? .regularMaterial : .ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(
+                            colorScheme == .dark ? Color.white.opacity(0.16) : Color.white.opacity(0.55),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(
+                    color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08),
+                    radius: 18,
+                    x: 0,
+                    y: 8
+                )
+        )
+    }
+}
+
 extension Notification.Name {
     static let moveCursorToLine = Notification.Name("moveCursorToLine")
     static let caretPositionDidChange = Notification.Name("caretPositionDidChange")
@@ -138,6 +364,10 @@ extension Notification.Name {
     static let toggleProjectStructureSidebarRequested = Notification.Name("toggleProjectStructureSidebarRequested")
     static let showAPISettingsRequested = Notification.Name("showAPISettingsRequested")
     static let selectAIModelRequested = Notification.Name("selectAIModelRequested")
+    static let showQuickSwitcherRequested = Notification.Name("showQuickSwitcherRequested")
+    static let showWelcomeTourRequested = Notification.Name("showWelcomeTourRequested")
+    static let toggleVimModeRequested = Notification.Name("toggleVimModeRequested")
+    static let vimModeStateDidChange = Notification.Name("vimModeStateDidChange")
 }
 
 extension NSRange {
