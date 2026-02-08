@@ -8,14 +8,33 @@ import AppKit
 
 #if os(macOS)
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    weak var viewModel: EditorViewModel?
+    weak var viewModel: EditorViewModel? {
+        didSet {
+            guard let viewModel else { return }
+            Task { @MainActor in
+                self.flushPendingURLs(into: viewModel)
+            }
+        }
+    }
+    private var pendingOpenURLs: [URL] = []
 
     func application(_ application: NSApplication, open urls: [URL]) {
         Task { @MainActor in
-            for url in urls {
-                self.viewModel?.openFile(url: url)
+            let target = WindowViewModelRegistry.shared.activeViewModel() ?? self.viewModel
+            if let target {
+                urls.forEach { target.openFile(url: $0) }
+            } else {
+                self.pendingOpenURLs.append(contentsOf: urls)
             }
         }
+    }
+
+    @MainActor
+    private func flushPendingURLs(into viewModel: EditorViewModel) {
+        guard !pendingOpenURLs.isEmpty else { return }
+        let urls = pendingOpenURLs
+        pendingOpenURLs.removeAll()
+        urls.forEach { viewModel.openFile(url: $0) }
     }
 }
 

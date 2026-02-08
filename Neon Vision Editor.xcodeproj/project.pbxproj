@@ -285,6 +285,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				"GENERATE_INFOPLIST_FILE[sdk=macosx*]" = NO;
+				"INFOPLIST_FILE[sdk=macosx*]" = "Info-macOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Neon Vision Editor";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -358,6 +360,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				"GENERATE_INFOPLIST_FILE[sdk=macosx*]" = NO;
+				"INFOPLIST_FILE[sdk=macosx*]" = "Info-macOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Neon Vision Editor";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";

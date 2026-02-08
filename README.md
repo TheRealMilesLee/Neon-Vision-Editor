@@ -118,6 +118,8 @@ If macOS blocks first launch:
 - Added extension and dotfile mapping for `.cob`, `.cbl`, `.cobol`, `.env*`, `.proto`, `.graphql`, `.gql`, `.rst`, and `.conf`.
 - Added language picker entries for the new languages across toolbar and command menus.
 - Added sample fixtures for manual verification of new language detection and highlighting.
+- Finder/Open With now opens files in the active window when available.
+- Added macOS document-type registration for supported extensions.
 
 ### v0.4.2-beta (summary)
 

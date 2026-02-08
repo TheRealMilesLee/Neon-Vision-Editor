@@ -10,9 +10,11 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 - Syntax highlighting for **COBOL**, **Dotenv**, **Proto**, **GraphQL**, **reStructuredText**, and **Nginx**.
 - Language picker/menu entries for the new languages.
 - Sample fixtures for manual verification of detection and highlighting.
+- macOS document-type registration for supported file extensions.
 
 ### Improved
 - Extension and dotfile language detection for `.cob`, `.cbl`, `.cobol`, `.env*`, `.proto`, `.graphql`, `.gql`, `.rst`, and `.conf`.
+- Opening files from Finder/Open With now reuses the active window when available.
 
 ## [v0.4.2-beta] - 2026-02-08
 
