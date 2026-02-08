@@ -5,40 +5,42 @@
 </p>
 
 <h4 align="center">
-  A lightweight, modern macOS text editor focused on speed, readability, and fast automatic syntax highlighting. 
+  A lightweight, modern editor focused on speed, readability, and automatic syntax highlighting.
 </h4>
 
 <p align="center">
-  It is intentionally minimal: quick edits, fast file access, no IDE bloat.
+  Minimal by design: quick edits, fast file access, no IDE bloat.
 </p>
 
 <p align="center">
-Release Download: https://github.com/h3pdesign/Neon-Vision-Editor/releases
-</p>
-
-<p align="center">
-.  .  .
+  Release Download: <a href="https://github.com/h3pdesign/Neon-Vision-Editor/releases">GitHub Releases</a>
 </p>
 
 > Status: **beta**  
-> Platform target: **macOS 26 (Tahoe)**
-> Built/tested with Xcode
+> Latest release: **v0.4.2-beta**  
+> Platform target: **macOS 26 (Tahoe)**  
 > Apple Silicon: tested / Intel: not tested
 
 ## Download
 
-Prebuilt binaries are available via **GitHub Releases**:
+Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.1-beta**
+- Latest release: **v0.4.2-beta**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *not yet*
 
-If you don’t want to build from source, this is the recommended path:
+## Getting Started (30 Seconds)
 
-- Download the `.zip` or `.dmg` from **Releases**
-- Move the app to `/Applications`
+1. Install using `curl` or Homebrew (below), or download the latest `.zip`/`.dmg` from [Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
+2. Move `Neon Vision Editor.app` to `/Applications`.
+3. Launch the app.
+4. Open a file with `Cmd+O`.
+5. Use `Cmd+P` for Quick Open and `Cmd+F` for Find & Replace.
+6. Toggle Vim mode with `Cmd+Shift+V` if needed.
 
-## Quick install (curl)
+## Install
+
+### Quick install (curl)
 
 Install the latest release directly:
 
@@ -52,111 +54,108 @@ Install without admin password prompts (user-local app folder):
 curl -fsSL https://raw.githubusercontent.com/h3pdesign/Neon-Vision-Editor/main/scripts/install.sh | sh -s -- --appdir "$HOME/Applications"
 ```
 
-#### Gatekeeper (macOS 26 Tahoe)
+### Homebrew
 
-If macOS blocks the app on first launch:
+```bash
+brew tap h3pdesign/tap
+brew install --cask neon-vision-editor
+```
 
-1. Open **System Settings**
-2. Go to **Privacy & Security**
-3. Scroll down to the **Security** section
-4. You will see a message that *Neon Vision Editor* was blocked
-5. Click **Open Anyway**
-6. Confirm the dialog
+If Homebrew asks for an admin password, it is usually because casks install into `/Applications`.
+Use this to avoid that:
 
-After this, the app will launch normally.
-  
-## Why this exists
+```bash
+brew install --cask --appdir="$HOME/Applications" neon-vision-editor
+```
 
-Modern IDEs are powerful but heavy.  
-Classic macOS editors are fast but stagnant.
+### Gatekeeper (macOS 26 Tahoe)
 
-Neon Vision Editor sits in between:
-- Open files instantly
-- Read code comfortably
-- Edit without friction
-- Close the app without guilt
+If macOS blocks first launch:
 
-No background indexing. No telemetry. No plugin sprawl.
+1. Open **System Settings**.
+2. Go to **Privacy & Security**.
+3. In **Security**, find the blocked app message.
+4. Click **Open Anyway**.
+5. Confirm the dialog.
+
+## Features
+
+- Fast loading for regular and large text files.
+- Regex Find/Replace with Replace All.
+- Project tree sidebar plus Quick Open (`Cmd+P`).
+- Optional Vim mode (basic normal/insert workflow).
+- Automatic syntax highlighting for many languages and formats.
+- Native Swift/AppKit editor experience.
+- No telemetry.
 
 <p align="left">
   <img src="NeonVisionEditorApp.png" alt="Neon Vision Editor App" width="1100"/>
 </p>
 
-## Features
+## Keyboard Shortcuts
 
-- Performance: Fast loading, including large text files. 
-- Editing: Regex Find/Replace with Replace All. 
-- Navigation: Project tree sidebar; Cmd+P Quick Open and file switcher. 
-- Vim: Optional Vim mode (basic normal-mode navigation). 
-- Languages: Automatic syntax highlighting for common languages (Python, PHP, C/C++, JavaScript, HTML, CSS, and more). 
-- UI: Clean, minimal UI optimized for readability; native macOS 26 (Tahoe) look & behavior. 
-- Built with: Swift + AppKit.
+| Shortcut | Action |
+|---|---|
+| `Cmd+N` | New Window |
+| `Cmd+T` | New Tab |
+| `Cmd+O` | Open File |
+| `Cmd+S` | Save |
+| `Cmd+W` | Close Tab |
+| `Cmd+P` | Quick Open |
+| `Cmd+F` | Find & Replace |
+| `Cmd+Shift+V` | Toggle Vim Mode |
+| `Cmd+Option+S` | Toggle Sidebar |
+| `Cmd+Option+L` | Toggle Line Wrap |
+| `Cmd+Shift+D` | Toggle Brain Dump Mode |
 
-## Changelog 
+## Changelog
 
-### Editor
-- Added regex-capable Find/Replace with Replace All and quick toolbar access. 
-- Improved focus and editor interaction behavior overall. 
-- Added Cmd+P Quick Open plus a quick file switcher panel integration. 
-- Extended editor command handling for faster navigation and file switching. 
-- Kept fallback behavior to protect caret focus and text input stability. 
+### v0.4.2-beta (summary)
 
-### Project navigation
-- Added a right-side project structure panel with recursive folder tree browsing. 
+- Fixed toolbar/menu actions to target the active window only.
+- Fixed multi-window command routing to use the focused window model.
+- Unified persistence behavior for Brain Dump and translucent window toggles.
+- Removed duplicate `Cmd+F` binding conflict in toolbar wiring.
+- Verified command-system changes on macOS and iOS simulator builds.
+- Release note: no pull requests were associated with this release tag.
 
-### Vim mode
-- Added basic Vim navigation and a Quick Open workflow in the editor. 
-- Added Vim mode toggle support to the editor command set. 
-- Implemented core normal-mode movement keys (h/j/k/l) and insert-mode transitions. 
-- Wired Vim mode state updates through notifications for UI/status sync. 
+Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
-### Windows & UI
-- Added a dedicated New Window flow that opens blank/isolated windows. 
-- Added richer window controls in the toolbar (including sidebar/window toggles). 
-- Improved sidebar and window-state handling across the app. 
-- Improved translucency support in editor/window surfaces. 
-- Removed the extra inner-edge border and tuned card/container visual balance. 
+## Known Limitations
 
-### Language support & highlighting
-- Added/expanded local language detection heuristics. 
-- Improved syntax highlighting behavior (including Markdown edge cases). 
-- Added comprehensive PHP and CSV language support. 
-- Refined JSON/TOML syntax highlighting. 
+- Not notarized yet.
+- Intel Macs are not fully validated.
+- Vim support is intentionally basic (not full Vim emulation).
+- iOS/iPad editor functionality is still more limited than macOS.
 
-### Onboarding & docs
-- Documented Homebrew installation. 
-- Added a first-launch Welcome Tour sheet with richer feature messaging. 
-- Kept iOS/iPad paged tour behavior while using a macOS-compatible TabView style. 
+## Privacy & Security
 
-### Menus
-- Consolidated duplicate View menu entries into the system View menu. 
-- Shortened Diagnostics menu labels and entries (compact status/check/RTT text). 
+- API keys are stored in Keychain (`SecureTokenStore`), not `UserDefaults`.
+- Network traffic uses HTTPS.
+- No telemetry.
+- Security policy and reporting details: [`SECURITY.md`](SECURITY.md).
 
-### Internal & distribution
-- Refactored the large ContentView into modular files/extensions for easier maintenance and faster iteration. 
-- Hardened security and improved App Store distribution readiness.
+## Release Integrity
 
+- Tag: `v0.4.2-beta`
+- Tagged commit: `bc7ce77f6e08c3a751b5f80ac60ab2045956e736`
+- Verify local tag target:
 
-## Non-goals (by design)
+```bash
+git rev-parse --verify v0.4.2-beta
+```
 
--  **X** No plugin system (for now)
--  **X** No code intelligence (LSP, refactors) but simple autocomplete
--  **X** No Electron, no cross-platform abstraction layer
+- Verify downloaded artifact checksum locally:
 
-This is **not** an IDE. That is intentional.
+```bash
+shasum -a 256 <downloaded-file>
+```
 
 ## Requirements
 
 - macOS 26 (Tahoe)
 - Xcode compatible with macOS 26 toolchain
 - Apple Silicon recommended
-
-## Support
-
-If you find Neon Vision Editor useful and want to support its development:
-
-- Patreon: https://www.patreon.com/h3p
-- Other options: https://h3p.me/home
 
 ## Build from source
 
@@ -166,25 +165,14 @@ cd Neon-Vision-Editor
 open "Neon Vision Editor.xcodeproj"
 ```
 
-## Homebrew install option
+## Support
 
-If you use Homebrew, you can install via cask:
+If you want to support development:
 
-```bash
-brew tap h3pdesign/tap
-brew install --cask neon-vision-editor
-```
-
-If Homebrew asks for an admin password, it is usually because it installs casks into `/Applications`.
-To avoid that, use:
-
-```bash
-brew install --cask --appdir="$HOME/Applications" neon-vision-editor
-```
+- [Patreon](https://www.patreon.com/h3p)
+- [Other options](https://h3p.me/home)
 
 ## License
 
 Neon Vision Editor is licensed under the MIT License.
 See [`LICENSE`](LICENSE).
-
-
