@@ -421,6 +421,17 @@ final class WindowViewModelRegistry {
     func activeViewModel() -> EditorViewModel? {
         viewModel(for: NSApp.keyWindow?.windowNumber ?? NSApp.mainWindow?.windowNumber)
     }
+
+    func viewModel(containing url: URL) -> (windowNumber: Int, viewModel: EditorViewModel)? {
+        let target = url.resolvingSymlinksInPath().standardizedFileURL
+        for (number, ref) in storage {
+            guard let vm = ref.value else { continue }
+            if vm.hasOpenFile(url: target) {
+                return (number, vm)
+            }
+        }
+        return nil
+    }
 }
 
 private final class WindowObserverView: NSView {

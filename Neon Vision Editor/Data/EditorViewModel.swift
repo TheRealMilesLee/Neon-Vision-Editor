@@ -318,10 +318,7 @@ class EditorViewModel: ObservableObject {
     }
     
     func openFile(url: URL) {
-        if let existingIndex = indexOfOpenTab(for: url) {
-            selectedTabID = tabs[existingIndex].id
-            return
-        }
+        if focusTabIfOpen(for: url) { return }
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
             let extLang = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()]
@@ -337,6 +334,18 @@ class EditorViewModel: ObservableObject {
         } catch {
             debugLog("Failed to open file.")
         }
+    }
+
+    func hasOpenFile(url: URL) -> Bool {
+        indexOfOpenTab(for: url) != nil
+    }
+
+    func focusTabIfOpen(for url: URL) -> Bool {
+        if let existingIndex = indexOfOpenTab(for: url) {
+            selectedTabID = tabs[existingIndex].id
+            return true
+        }
+        return false
     }
 
     private func indexOfOpenTab(for url: URL) -> Int? {

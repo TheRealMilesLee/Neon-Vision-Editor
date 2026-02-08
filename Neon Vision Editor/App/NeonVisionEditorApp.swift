@@ -20,13 +20,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         Task { @MainActor in
-            let target = WindowViewModelRegistry.shared.activeViewModel() ?? self.viewModel
-            if let target {
-                urls.forEach { target.openFile(url: $0) }
-            } else {
-                self.pendingOpenURLs.append(contentsOf: urls)
+            for url in urls {
+                if let existing = WindowViewModelRegistry.shared.viewModel(containing: url) {
+                    _ = existing.viewModel.focusTabIfOpen(for: url)
+                    if let window = NSApp.window(withWindowNumber: existing.windowNumber) {
+                        window.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                    continue
+                }
+                let target = WindowViewModelRegistry.shared.activeViewModel() ?? self.viewModel
+                if let target {
+                    target.openFile(url: url)
+                } else {
+                    self.pendingOpenURLs.append(url)
+                }
             }
         }
+    }
+
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        return NSApp.windows.isEmpty && pendingOpenURLs.isEmpty
     }
 
     @MainActor
@@ -131,6 +145,7 @@ struct NeonVisionEditorApp: App {
                 }
         }
         .defaultSize(width: 1000, height: 600)
+        .handlesExternalEvents(matching: ["*"])
 
         WindowGroup("New Window", id: "blank-window") {
             DetachedWindowContentView(
@@ -139,6 +154,7 @@ struct NeonVisionEditorApp: App {
             )
         }
         .defaultSize(width: 1000, height: 600)
+        .handlesExternalEvents(matching: [])
 
         .commands {
             CommandGroup(replacing: .newItem) {
