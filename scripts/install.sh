@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="${REPO:-h3pdesign/Neon-Vision-Editor}"
+APP_NAME="Neon Vision Editor.app"
+INSTALL_DIR="/Applications"
+
+usage() {
+  cat <<EOF
+Install Neon Vision Editor from the latest GitHub release.
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh -s -- --appdir "\$HOME/Applications"
+
+Options:
+  --appdir PATH   Install destination (default: /Applications)
+EOF
+}
+
+while [ "${1:-}" != "" ]; do
+  case "$1" in
+    --appdir)
+      shift
+      INSTALL_DIR="${1:-}"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+  shift || true
+done
+
+mkdir -p "${INSTALL_DIR}"
+
+TMP_DIR="$(mktemp -d)"
+cleanup() {
+  if [ -n "${MOUNT_POINT:-}" ] && mount | grep -q "on ${MOUNT_POINT} "; then
+    hdiutil detach "${MOUNT_POINT}" -quiet || true
+  fi
+  rm -rf "${TMP_DIR}"
+}
+trap cleanup EXIT
+
+echo "Fetching latest release metadata for ${REPO}..."
+RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"
+
+ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | grep -Eo 'https://[^"]+\.(zip|dmg)' | head -n 1 || true)"
+if [ -z "${ASSET_URL}" ]; then
+  echo "Could not find a .zip or .dmg asset in the latest release." >&2
+  exit 1
+fi
+
+ASSET_FILE="${TMP_DIR}/$(basename "${ASSET_URL}")"
+echo "Downloading $(basename "${ASSET_URL}")..."
+curl -fL "${ASSET_URL}" -o "${ASSET_FILE}"
+
+APP_PATH=""
+case "${ASSET_FILE}" in
+  *.zip)
+    echo "Extracting archive..."
+    ditto -xk "${ASSET_FILE}" "${TMP_DIR}/extract"
+    APP_PATH="$(find "${TMP_DIR}/extract" -maxdepth 3 -name "${APP_NAME}" -print -quit)"
+    ;;
+  *.dmg)
+    echo "Mounting disk image..."
+    MOUNT_POINT="$(hdiutil attach "${ASSET_FILE}" -nobrowse -quiet | awk '/\/Volumes\// {print $3; exit}')"
+    if [ -z "${MOUNT_POINT}" ]; then
+      echo "Failed to mount DMG." >&2
+      exit 1
+    fi
+    APP_PATH="$(find "${MOUNT_POINT}" -maxdepth 3 -name "${APP_NAME}" -print -quit)"
+    ;;
+esac
+
+if [ -z "${APP_PATH}" ] || [ ! -d "${APP_PATH}" ]; then
+  echo "Could not find ${APP_NAME} in downloaded asset." >&2
+  exit 1
+fi
+
+echo "Installing to ${INSTALL_DIR}..."
+if [ -d "${INSTALL_DIR}/${APP_NAME}" ]; then
+  rm -rf "${INSTALL_DIR}/${APP_NAME}"
+fi
+ditto "${APP_PATH}" "${INSTALL_DIR}/${APP_NAME}"
+
+echo
+echo "Installed: ${INSTALL_DIR}/${APP_NAME}"
+if [ "${INSTALL_DIR}" = "/Applications" ] && [ ! -w "/Applications" ]; then
+  echo "Tip: use --appdir \"\$HOME/Applications\" to avoid admin password prompts."
+fi

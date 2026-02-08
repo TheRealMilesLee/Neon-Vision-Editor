@@ -34,19 +34,48 @@ class EditorViewModel: ObservableObject {
     private let languageMap: [String: String] = [
         "swift": "swift",
         "py": "python",
+        "pyi": "python",
         "js": "javascript",
+        "mjs": "javascript",
+        "cjs": "javascript",
+        "ts": "typescript",
+        "tsx": "typescript",
         "php": "php",
         "phtml": "php",
         "csv": "csv",
         "tsv": "csv",
+        "toml": "toml",
+        "ini": "ini",
+        "conf": "ini",
+        "yaml": "yaml",
+        "yml": "yaml",
+        "xml": "xml",
+        "sql": "sql",
+        "java": "java",
+        "kt": "kotlin",
+        "kts": "kotlin",
+        "go": "go",
+        "rb": "ruby",
+        "rs": "rust",
+        "ps1": "powershell",
+        "psm1": "powershell",
         "html": "html",
+        "htm": "html",
         "css": "css",
         "c": "c",
         "cpp": "cpp",
+        "cc": "cpp",
+        "hpp": "cpp",
+        "hh": "cpp",
         "h": "c",
         //"cs": "csharp",  // Removed this line as per instructions
+        "m": "objective-c",
+        "mm": "objective-c",
         "json": "json",
+        "jsonc": "json",
+        "json5": "json",
         "md": "markdown",
+        "markdown": "markdown",
         "sh": "bash",
         "bash": "bash",
         "zsh": "zsh"
@@ -230,6 +259,10 @@ class EditorViewModel: ObservableObject {
                 try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].fileURL = url
                 tabs[index].name = url.lastPathComponent
+                if let mapped = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()] {
+                    tabs[index].language = mapped
+                    tabs[index].languageLocked = true
+                }
                 tabs[index].isDirty = false
             } catch {
                 debugLog("Failed to save file.")
@@ -255,7 +288,7 @@ class EditorViewModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url {
             do {
                 let content = try String(contentsOf: url, encoding: .utf8)
-                let extLang = languageMap[url.pathExtension.lowercased()]
+                let extLang = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()]
                 let detectedLang = extLang ?? LanguageDetector.shared.detect(text: content, name: url.lastPathComponent, fileURL: url).lang
                 let newTab = TabData(name: url.lastPathComponent,
                                      content: content,
@@ -278,7 +311,7 @@ class EditorViewModel: ObservableObject {
     func openFile(url: URL) {
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
-            let extLang = languageMap[url.pathExtension.lowercased()]
+            let extLang = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()]
             let detectedLang = extLang ?? LanguageDetector.shared.detect(text: content, name: url.lastPathComponent, fileURL: url).lang
             let newTab = TabData(name: url.lastPathComponent,
                                  content: content,
@@ -298,6 +331,10 @@ class EditorViewModel: ObservableObject {
         if let fileURL {
             tabs[index].fileURL = fileURL
             tabs[index].name = fileURL.lastPathComponent
+            if let mapped = LanguageDetector.shared.preferredLanguage(for: fileURL) ?? languageMap[fileURL.pathExtension.lowercased()] {
+                tabs[index].language = mapped
+                tabs[index].languageLocked = true
+            }
         }
         tabs[index].isDirty = false
     }

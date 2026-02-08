@@ -38,6 +38,20 @@ If you don’t want to build from source, this is the recommended path:
 - Download the `.zip` or `.dmg` from **Releases**
 - Move the app to `/Applications`
 
+## Quick install (curl)
+
+Install the latest release directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/h3pdesign/Neon-Vision-Editor/main/scripts/install.sh | sh
+```
+
+Install without admin password prompts (user-local app folder):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/h3pdesign/Neon-Vision-Editor/main/scripts/install.sh | sh -s -- --appdir "$HOME/Applications"
+```
+
 #### Gatekeeper (macOS 26 Tahoe)
 
 If macOS blocks the app on first launch:
@@ -131,5 +145,17 @@ If you use Homebrew, you can install via cask:
 brew tap h3pdesign/tap
 brew install --cask neon-vision-editor
 ```
+
+If Homebrew asks for an admin password, it is usually because it installs casks into `/Applications`.
+To avoid that, use:
+
+```bash
+brew install --cask --appdir="$HOME/Applications" neon-vision-editor
+```
+
+## License
+
+Neon Vision Editor is licensed under the MIT License.
+See [`LICENSE`](LICENSE).
 
 

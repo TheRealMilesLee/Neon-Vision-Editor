@@ -14,31 +14,81 @@ public struct LanguageDetector {
     private let extensionMap: [String: String] = [
         "swift": "swift",
         "py": "python",
+        "pyi": "python",
         "js": "javascript",
+        "mjs": "javascript",
+        "cjs": "javascript",
+        "ts": "typescript",
+        "tsx": "typescript",
         "php": "php",
         "phtml": "php",
         "csv": "csv",
         "tsv": "csv",
-        "ts": "javascript",
+        "toml": "toml",
+        "ini": "ini",
+        "conf": "ini",
+        "yaml": "yaml",
+        "yml": "yaml",
+        "xml": "xml",
+        "sql": "sql",
+        "java": "java",
+        "kt": "kotlin",
+        "kts": "kotlin",
+        "go": "go",
+        "rb": "ruby",
+        "rs": "rust",
+        "ps1": "powershell",
+        "psm1": "powershell",
         "html": "html",
+        "htm": "html",
         "css": "css",
         "c": "c",
         "cpp": "cpp",
         "cc": "cpp",
         "hpp": "cpp",
+        "hh": "cpp",
         "h": "c",
+        "m": "objective-c",
+        "mm": "objective-c",
         "cs": "csharp",
         "json": "json",
+        "jsonc": "json",
+        "json5": "json",
         "md": "markdown",
+        "markdown": "markdown",
         "sh": "bash",
         "bash": "bash",
         "zsh": "zsh"
+    ]
+
+    private let dotfileMap: [String: String] = [
+        ".zshrc": "zsh",
+        ".zprofile": "zsh",
+        ".zlogin": "zsh",
+        ".zlogout": "zsh",
+        ".bashrc": "bash",
+        ".bash_profile": "bash",
+        ".bash_login": "bash",
+        ".bash_logout": "bash",
+        ".profile": "bash",
+        ".env": "ini",
+        ".gitconfig": "ini"
     ]
 
     public struct Result {
         public let lang: String
         public let scores: [String: Int]
         public let confidence: Int // difference between top-1 and top-2
+    }
+
+    public func preferredLanguage(for fileURL: URL?) -> String? {
+        guard let fileURL else { return nil }
+        let fileName = fileURL.lastPathComponent.lowercased()
+        if let mapped = dotfileMap[fileName] {
+            return mapped
+        }
+        let ext = fileURL.pathExtension.lowercased()
+        return extensionMap[ext]
     }
 
     // Main API
@@ -91,13 +141,18 @@ public struct LanguageDetector {
         func count(of needle: String) -> Int { t.components(separatedBy: needle).count - 1 }
 
         // 0) Extension prior
-        let ext: String? = {
-            if let url = fileURL { return url.pathExtension.lowercased() }
-            if let name = name { return URL(fileURLWithPath: name).pathExtension.lowercased() }
-            return nil
-        }()
-        if let ext, let lang = extensionMap[ext] {
-            bump(lang, 80) // strong prior from extension
+        if let byURL = preferredLanguage(for: fileURL) {
+            bump(byURL, 80)
+        } else if let name {
+            let lowerName = name.lowercased()
+            if let mapped = dotfileMap[lowerName] {
+                bump(mapped, 80)
+            } else {
+                let ext = URL(fileURLWithPath: lowerName).pathExtension.lowercased()
+                if let mapped = extensionMap[ext] {
+                    bump(mapped, 80)
+                }
+            }
         }
 
         // 1) Explicit fenced hints
