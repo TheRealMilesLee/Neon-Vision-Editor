@@ -10,6 +10,7 @@ final class AcceptingTextView: NSTextView {
     override var mouseDownCanMoveWindow: Bool { false }
     override var isOpaque: Bool { false }
     private let vimModeDefaultsKey = "EditorVimModeEnabled"
+    private let vimInterceptionDefaultsKey = "EditorVimInterceptionEnabled"
     private var isVimInsertMode: Bool = true
     private var vimObservers: [NSObjectProtocol] = []
     private var didConfigureVimMode: Bool = false
@@ -141,9 +142,11 @@ final class AcceptingTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
-        // Temporary safety fallback: bypass Vim interception until focus/editing is stable.
-        super.keyDown(with: event)
-        return
+        // Safety default: bypass Vim interception unless explicitly enabled.
+        if !UserDefaults.standard.bool(forKey: vimInterceptionDefaultsKey) {
+            super.keyDown(with: event)
+            return
+        }
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags.contains(.command) || flags.contains(.option) || flags.contains(.control) {
