@@ -39,8 +39,14 @@ final class AcceptingTextView: NSTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        cancelPendingPasteCaretEnforcement()
         super.mouseDown(with: event)
         window?.makeFirstResponder(self)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        cancelPendingPasteCaretEnforcement()
+        super.scrollWheel(with: event)
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -515,6 +521,11 @@ final class AcceptingTextView: NSTextView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
             self?.applyPendingPasteCaret()
         }
+    }
+
+    private func cancelPendingPasteCaretEnforcement() {
+        pendingPasteCaretLocation = nil
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(applyPendingPasteCaret), object: nil)
     }
 
     @objc private func applyPendingPasteCaret() {
