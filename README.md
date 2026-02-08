@@ -20,7 +20,7 @@ Release Download: https://github.com/h3pdesign/Neon-Vision-Editor/releases
 .  .  .
 </p>
 
-> Status: **alpha / beta**  
+> Status: **beta**  
 > Platform target: **macOS 26 (Tahoe)**
 > Built/tested with Xcode
 > Apple Silicon: tested / Intel: not tested
@@ -84,29 +84,58 @@ No background indexing. No telemetry. No plugin sprawl.
 
 ## Features
 
-- Fast loading, including large text files
-- Automatic applied syntax highlighting for common languages  
-  (Python, PHP, C/C++, JavaScript, HTML, CSS, and others)
-- Clean, minimal UI optimized for readability
-- Native macOS 26 (Tahoe) look & behavior
-- Built with Swift and AppKit
+- Performance: Fast loading, including large text files. 
+- Editing: Regex Find/Replace with Replace All. 
+- Navigation: Project tree sidebar; Cmd+P Quick Open and file switcher. 
+- Vim: Optional Vim mode (basic normal-mode navigation). 
+- Languages: Automatic syntax highlighting for common languages (Python, PHP, C/C++, JavaScript, HTML, CSS, and more). 
+- UI: Clean, minimal UI optimized for readability; native macOS 26 (Tahoe) look & behavior. 
+- Built with: Swift + AppKit.
 
-## What’s new (feature-focused) in latest release
+## Changelog 
 
-### Major editor UX expansion:
+### Editor
+- Added regex-capable Find/Replace with Replace All and quick toolbar access. 
+- Improved focus and editor interaction behavior overall. 
+- Added Cmd+P Quick Open plus a quick file switcher panel integration. 
+- Extended editor command handling for faster navigation and file switching. 
+- Kept fallback behavior to protect caret focus and text input stability. 
 
-- Added regex-capable Find/Replace with Replace All and quick toolbar access.
-- Added a right-side project structure panel with recursive folder tree browsing.
-- Added a dedicated New Window flow that opens blank/isolated windows.
-- Added richer window controls in the toolbar (including sidebar/window toggles).
-- Improved translucency support in editor/window surfaces.
-- Better sidebar and window-state handling across the app.
-- Smarter language/editor behavior:
-- Added/expanded local language detection heuristics.
-- Improved syntax highlighting behavior (including markdown edge cases).
-- Improved focus and editor interaction behavior in general.
-- Internal quality improvements:
-- Large ContentView refactor into modular files/extensions for easier maintenance and faster iteration.
+### Project navigation
+- Added a right-side project structure panel with recursive folder tree browsing. 
+
+### Vim mode
+- Added basic Vim navigation and a Quick Open workflow in the editor. 
+- Added Vim mode toggle support to the editor command set. 
+- Implemented core normal-mode movement keys (h/j/k/l) and insert-mode transitions. 
+- Wired Vim mode state updates through notifications for UI/status sync. 
+
+### Windows & UI
+- Added a dedicated New Window flow that opens blank/isolated windows. 
+- Added richer window controls in the toolbar (including sidebar/window toggles). 
+- Improved sidebar and window-state handling across the app. 
+- Improved translucency support in editor/window surfaces. 
+- Removed the extra inner-edge border and tuned card/container visual balance. 
+
+### Language support & highlighting
+- Added/expanded local language detection heuristics. 
+- Improved syntax highlighting behavior (including Markdown edge cases). 
+- Added comprehensive PHP and CSV language support. 
+- Refined JSON/TOML syntax highlighting. 
+
+### Onboarding & docs
+- Documented Homebrew installation. 
+- Added a first-launch Welcome Tour sheet with richer feature messaging. 
+- Kept iOS/iPad paged tour behavior while using a macOS-compatible TabView style. 
+
+### Menus
+- Consolidated duplicate View menu entries into the system View menu. 
+- Shortened Diagnostics menu labels and entries (compact status/check/RTT text). 
+
+### Internal & distribution
+- Refactored the large ContentView into modular files/extensions for easier maintenance and faster iteration. 
+- Hardened security and improved App Store distribution readiness.
+
 
 ## Non-goals (by design)
 
