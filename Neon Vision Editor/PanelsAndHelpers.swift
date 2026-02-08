@@ -1,6 +1,9 @@
 import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 struct PlainTextDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.plainText, .text, .sourceCode] }
@@ -368,9 +371,82 @@ extension Notification.Name {
     static let showWelcomeTourRequested = Notification.Name("showWelcomeTourRequested")
     static let toggleVimModeRequested = Notification.Name("toggleVimModeRequested")
     static let vimModeStateDidChange = Notification.Name("vimModeStateDidChange")
+    static let toggleSidebarRequested = Notification.Name("toggleSidebarRequested")
+    static let toggleBrainDumpModeRequested = Notification.Name("toggleBrainDumpModeRequested")
+    static let toggleLineWrapRequested = Notification.Name("toggleLineWrapRequested")
 }
 
 extension NSRange {
     func toOptional() -> NSRange? { self.location == NSNotFound ? nil : self }
 }
+
+enum EditorCommandUserInfo {
+    static let windowNumber = "targetWindowNumber"
+}
+
+#if os(macOS)
+private final class WeakEditorViewModelRef {
+    weak var value: EditorViewModel?
+    init(_ value: EditorViewModel) { self.value = value }
+}
+
+@MainActor
+final class WindowViewModelRegistry {
+    static let shared = WindowViewModelRegistry()
+    private var storage: [Int: WeakEditorViewModelRef] = [:]
+
+    private init() {}
+
+    func register(_ viewModel: EditorViewModel, for windowNumber: Int) {
+        storage[windowNumber] = WeakEditorViewModelRef(viewModel)
+    }
+
+    func unregister(windowNumber: Int) {
+        storage.removeValue(forKey: windowNumber)
+    }
+
+    func viewModel(for windowNumber: Int?) -> EditorViewModel? {
+        guard let windowNumber else { return nil }
+        if let vm = storage[windowNumber]?.value {
+            return vm
+        }
+        storage.removeValue(forKey: windowNumber)
+        return nil
+    }
+
+    func activeViewModel() -> EditorViewModel? {
+        viewModel(for: NSApp.keyWindow?.windowNumber ?? NSApp.mainWindow?.windowNumber)
+    }
+}
+
+private final class WindowObserverView: NSView {
+    var onWindowChange: ((NSWindow?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChange?(window)
+    }
+}
+
+struct WindowAccessor: NSViewRepresentable {
+    let onWindowChange: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = WindowObserverView(frame: .zero)
+        view.onWindowChange = onWindowChange
+        DispatchQueue.main.async {
+            onWindowChange(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? WindowObserverView else { return }
+        view.onWindowChange = onWindowChange
+        DispatchQueue.main.async {
+            onWindowChange(view.window)
+        }
+    }
+}
+#endif
 

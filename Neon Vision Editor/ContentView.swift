@@ -88,6 +88,9 @@ struct ContentView: View {
     @State var vimInsertMode: Bool = true
     @AppStorage("HasSeenWelcomeTourV1") var hasSeenWelcomeTourV1: Bool = false
     @State var showWelcomeTour: Bool = false
+#if os(macOS)
+    @State private var hostWindowNumber: Int? = nil
+#endif
 
 #if USE_FOUNDATION_MODELS
     var appleModelAvailable: Bool { true }
@@ -691,6 +694,133 @@ struct ContentView: View {
 #endif
     }
 
+#if os(macOS)
+    private func matchesCurrentWindow(_ notif: Notification) -> Bool {
+        guard let target = notif.userInfo?[EditorCommandUserInfo.windowNumber] as? Int else {
+            return true
+        }
+        guard let hostWindowNumber else { return false }
+        return target == hostWindowNumber
+    }
+
+    private func updateWindowRegistration(_ window: NSWindow?) {
+        let number = window?.windowNumber
+        if hostWindowNumber != number, let old = hostWindowNumber {
+            WindowViewModelRegistry.shared.unregister(windowNumber: old)
+        }
+        hostWindowNumber = number
+        if let number {
+            WindowViewModelRegistry.shared.register(viewModel, for: number)
+        }
+    }
+#else
+    private func matchesCurrentWindow(_ notif: Notification) -> Bool { true }
+#endif
+
+    private func withBaseEditorEvents<Content: View>(_ view: Content) -> some View {
+        view
+            .onReceive(NotificationCenter.default.publisher(for: .caretPositionDidChange)) { notif in
+                if let line = notif.userInfo?["line"] as? Int, let col = notif.userInfo?["column"] as? Int {
+                    caretStatus = "Ln \(line), Col \(col)"
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
+                if let pasted = notif.object as? String {
+                    let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
+                    currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
+                }
+            }
+    }
+
+    private func withCommandEvents<Content: View>(_ view: Content) -> some View {
+        view
+            .onReceive(NotificationCenter.default.publisher(for: .clearEditorRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                clearEditorContent()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleCodeCompletionRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                isAutoCompletionEnabled.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showFindReplace = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showQuickSwitcherRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                quickSwitcherQuery = ""
+                showQuickSwitcher = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showWelcomeTourRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showWelcomeTour = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleProjectStructureSidebarRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showProjectStructureSidebar.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleVimModeRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                vimModeEnabled.toggle()
+                UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimModeEnabled")
+                UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimInterceptionEnabled")
+                vimInsertMode = !vimModeEnabled
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                toggleSidebarFromToolbar()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleBrainDumpModeRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                viewModel.isBrainDumpMode.toggle()
+                UserDefaults.standard.set(viewModel.isBrainDumpMode, forKey: "BrainDumpModeEnabled")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleLineWrapRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                viewModel.isLineWrapEnabled.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleTranslucencyRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                if let enabled = notif.object as? Bool {
+                    enableTranslucentWindow = enabled
+                    UserDefaults.standard.set(enabled, forKey: "EnableTranslucentWindow")
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .vimModeStateDidChange)) { notif in
+                if let isInsert = notif.userInfo?["insertMode"] as? Bool {
+                    vimInsertMode = isInsert
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showAPISettingsRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showAISelectorPopover = false
+                showAPISettings = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .selectAIModelRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                guard let modelRawValue = notif.object as? String,
+                      let model = AIModel(rawValue: modelRawValue) else { return }
+                selectedModel = model
+            }
+    }
+
+    private func withTypingEvents<Content: View>(_ view: Content) -> some View {
+#if os(macOS)
+        view
+            .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
+                guard isAutoCompletionEnabled && !viewModel.isBrainDumpMode else { return }
+                lastCompletionWorkItem?.cancel()
+                let work = DispatchWorkItem {
+                    performInlineCompletion()
+                }
+                lastCompletionWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            }
+#else
+        view
+#endif
+    }
+
     @ViewBuilder
     private var platformLayout: some View {
 #if os(macOS)
@@ -839,6 +969,19 @@ struct ContentView: View {
                 }
             }
         }
+#if os(macOS)
+        .background(
+            WindowAccessor { window in
+                updateWindowRegistration(window)
+            }
+            .frame(width: 0, height: 0)
+        )
+        .onDisappear {
+            if let number = hostWindowNumber {
+                WindowViewModelRegistry.shared.unregister(windowNumber: number)
+            }
+        }
+#endif
     }
 
     private var shouldUseSplitView: Bool {
@@ -1025,9 +1168,8 @@ struct ContentView: View {
     }
 
     // MARK: Main editor stack: hosts the NSTextView-backed editor, status line, and toolbar.
-    @ViewBuilder
     var editorView: some View {
-        HStack(spacing: 0) {
+        let content = HStack(spacing: 0) {
             VStack(spacing: 0) {
                 if !viewModel.isBrainDumpMode {
                     tabBarView
@@ -1078,69 +1220,14 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onReceive(NotificationCenter.default.publisher(for: .caretPositionDidChange)) { notif in
-            // Update status line when caret moves
-            if let line = notif.userInfo?["line"] as? Int, let col = notif.userInfo?["column"] as? Int {
-                caretStatus = "Ln \(line), Col \(col)"
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
-            if let pasted = notif.object as? String {
-                let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
-                currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .clearEditorRequested)) { _ in
-            clearEditorContent()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleCodeCompletionRequested)) { _ in
-            isAutoCompletionEnabled.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { _ in
-            showFindReplace = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showQuickSwitcherRequested)) { _ in
-            quickSwitcherQuery = ""
-            showQuickSwitcher = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showWelcomeTourRequested)) { _ in
-            showWelcomeTour = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleProjectStructureSidebarRequested)) { _ in
-            showProjectStructureSidebar.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleVimModeRequested)) { _ in
-            vimModeEnabled.toggle()
-            UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimModeEnabled")
-            UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimInterceptionEnabled")
-            // Match editor behavior: Vim ON starts in NORMAL, OFF behaves as INSERT.
-            vimInsertMode = !vimModeEnabled
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .vimModeStateDidChange)) { notif in
-            if let isInsert = notif.userInfo?["insertMode"] as? Bool {
-                vimInsertMode = isInsert
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showAPISettingsRequested)) { _ in
-            showAISelectorPopover = false
-            showAPISettings = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .selectAIModelRequested)) { notif in
-            guard let modelRawValue = notif.object as? String,
-                  let model = AIModel(rawValue: modelRawValue) else { return }
-            selectedModel = model
-        }
-#if os(macOS)
-        .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
-            guard isAutoCompletionEnabled && !viewModel.isBrainDumpMode else { return }
-            lastCompletionWorkItem?.cancel()
-            let work = DispatchWorkItem {
-                performInlineCompletion()
-            }
-            lastCompletionWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
-        }
-#endif
+
+        let withEvents = withTypingEvents(
+            withCommandEvents(
+                withBaseEditorEvents(content)
+            )
+        )
+
+        return withEvents
         .onChange(of: enableTranslucentWindow) { _, newValue in
             applyWindowTranslucency(newValue)
         }
@@ -1148,9 +1235,9 @@ struct ContentView: View {
             editorToolbarContent
         }
 #if os(macOS)
-        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: .windowToolbar)
+        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: ToolbarPlacement.windowToolbar)
 #else
-        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.systemBackground)), for: .navigationBar)
+        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.systemBackground)), for: ToolbarPlacement.navigationBar)
 #endif
     }
 

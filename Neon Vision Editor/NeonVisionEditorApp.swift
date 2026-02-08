@@ -42,12 +42,12 @@ struct NeonVisionEditorApp: App {
     @State private var useAppleIntelligence: Bool = true
     @State private var appleAIStatus: String = "Apple Intelligence: Checking…"
     @State private var appleAIRoundTripMS: Double? = nil
-    @State private var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 #endif
     @State private var showGrokError: Bool = false
     @State private var grokErrorMessage: String = ""
 
+    #if os(macOS)
     private var appleAIStatusMenuLabel: String {
         if appleAIStatus.contains("Ready") { return "AI: Ready" }
         if appleAIStatus.contains("Checking") { return "AI: Checking" }
@@ -55,12 +55,35 @@ struct NeonVisionEditorApp: App {
         if appleAIStatus.contains("Error") { return "AI: Error" }
         return "AI: Status"
     }
+    #endif
 
     init() {
         SecureTokenStore.migrateLegacyUserDefaultsTokens()
         // Safety reset: avoid stale NORMAL-mode state making editor appear non-editable.
         UserDefaults.standard.set(false, forKey: "EditorVimModeEnabled")
     }
+
+#if os(macOS)
+    private var activeWindowNumber: Int? {
+        NSApp.keyWindow?.windowNumber ?? NSApp.mainWindow?.windowNumber
+    }
+
+    private var activeEditorViewModel: EditorViewModel {
+        WindowViewModelRegistry.shared.activeViewModel() ?? viewModel
+    }
+
+    private func postWindowCommand(_ name: Notification.Name, object: Any? = nil) {
+        var userInfo: [AnyHashable: Any] = [:]
+        if let activeWindowNumber {
+            userInfo[EditorCommandUserInfo.windowNumber] = activeWindowNumber
+        }
+        NotificationCenter.default.post(
+            name: name,
+            object: object,
+            userInfo: userInfo.isEmpty ? nil : userInfo
+        )
+    }
+#endif
 
     var body: some Scene {
 #if os(macOS)
@@ -87,23 +110,6 @@ struct NeonVisionEditorApp: App {
                     appleAIStatus = "Apple Intelligence: Unavailable (build without USE_FOUNDATION_MODELS)"
                     #endif
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .toggleTranslucencyRequested)) { notif in
-                    if let enabled = notif.object as? Bool {
-                        enableTranslucentWindow = enabled
-                        if let window = NSApp.windows.first {
-                            window.isOpaque = !enabled
-                            window.backgroundColor = enabled ? .clear : NSColor.windowBackgroundColor
-                            window.titlebarAppearsTransparent = enabled
-                        }
-                    }
-                }
-                .onAppear {
-                    if let window = NSApp.windows.first {
-                        window.isOpaque = !enableTranslucentWindow
-                        window.backgroundColor = enableTranslucentWindow ? .clear : NSColor.windowBackgroundColor
-                        window.titlebarAppearsTransparent = enableTranslucentWindow
-                    }
-                }
         }
         .defaultSize(width: 1000, height: 600)
 
@@ -123,49 +129,53 @@ struct NeonVisionEditorApp: App {
                 .keyboardShortcut("n", modifiers: .command)
 
                 Button("New Tab") {
-                    viewModel.addNewTab()
+                    activeEditorViewModel.addNewTab()
                 }
                 .keyboardShortcut("t", modifiers: .command)
             }
 
             CommandGroup(after: .newItem) {
                 Button("Open File...") {
-                    viewModel.openFile()
+                    activeEditorViewModel.openFile()
                 }
                 .keyboardShortcut("o", modifiers: .command)
             }
 
             CommandGroup(replacing: .saveItem) {
                 Button("Save") {
-                    if let tab = viewModel.selectedTab {
-                        viewModel.saveFile(tab: tab)
+                    let current = activeEditorViewModel
+                    if let tab = current.selectedTab {
+                        current.saveFile(tab: tab)
                     }
                 }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(viewModel.selectedTab == nil)
+                .disabled(activeEditorViewModel.selectedTab == nil)
 
                 Button("Save As...") {
-                    if let tab = viewModel.selectedTab {
-                        viewModel.saveFileAs(tab: tab)
+                    let current = activeEditorViewModel
+                    if let tab = current.selectedTab {
+                        current.saveFileAs(tab: tab)
                     }
                 }
-                .disabled(viewModel.selectedTab == nil)
+                .disabled(activeEditorViewModel.selectedTab == nil)
 
                 Button("Rename") {
-                    viewModel.showingRename = true
-                    viewModel.renameText = viewModel.selectedTab?.name ?? "Untitled"
+                    let current = activeEditorViewModel
+                    current.showingRename = true
+                    current.renameText = current.selectedTab?.name ?? "Untitled"
                 }
-                .disabled(viewModel.selectedTab == nil)
+                .disabled(activeEditorViewModel.selectedTab == nil)
 
                 Divider()
 
                 Button("Close Tab") {
-                    if let tab = viewModel.selectedTab {
-                        viewModel.closeTab(tab: tab)
+                    let current = activeEditorViewModel
+                    if let tab = current.selectedTab {
+                        current.closeTab(tab: tab)
                     }
                 }
                 .keyboardShortcut("w", modifiers: .command)
-                .disabled(viewModel.selectedTab == nil)
+                .disabled(activeEditorViewModel.selectedTab == nil)
             }
 
             CommandMenu("Language") {
@@ -190,86 +200,94 @@ struct NeonVisionEditorApp: App {
                         }
                     }()
                     Button(label) {
-                        if let tab = viewModel.selectedTab {
-                            viewModel.updateTabLanguage(tab: tab, language: lang)
+                        let current = activeEditorViewModel
+                        if let tab = current.selectedTab {
+                            current.updateTabLanguage(tab: tab, language: lang)
                         }
                     }
-                    .disabled(viewModel.selectedTab == nil)
+                    .disabled(activeEditorViewModel.selectedTab == nil)
                 }
             }
 
             CommandMenu("AI") {
                 Button("API Settings…") {
-                    NotificationCenter.default.post(name: .showAPISettingsRequested, object: nil)
+                    postWindowCommand(.showAPISettingsRequested)
                 }
 
                 Divider()
 
                 Button("Use Apple Intelligence") {
-                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.appleIntelligence.rawValue)
+                    postWindowCommand(.selectAIModelRequested, object: AIModel.appleIntelligence.rawValue)
                 }
                 Button("Use Grok") {
-                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.grok.rawValue)
+                    postWindowCommand(.selectAIModelRequested, object: AIModel.grok.rawValue)
                 }
                 Button("Use OpenAI") {
-                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.openAI.rawValue)
+                    postWindowCommand(.selectAIModelRequested, object: AIModel.openAI.rawValue)
                 }
                 Button("Use Gemini") {
-                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.gemini.rawValue)
+                    postWindowCommand(.selectAIModelRequested, object: AIModel.gemini.rawValue)
                 }
                 Button("Use Anthropic") {
-                    NotificationCenter.default.post(name: .selectAIModelRequested, object: AIModel.anthropic.rawValue)
+                    postWindowCommand(.selectAIModelRequested, object: AIModel.anthropic.rawValue)
                 }
             }
 
             CommandGroup(after: .toolbar) {
-                Toggle("Toggle Sidebar", isOn: $viewModel.showSidebar)
+                Button("Toggle Sidebar") {
+                    postWindowCommand(.toggleSidebarRequested)
+                }
                     .keyboardShortcut("s", modifiers: [.command, .option])
 
                 Button("Toggle Project Structure Sidebar") {
-                    NotificationCenter.default.post(name: .toggleProjectStructureSidebarRequested, object: nil)
+                    postWindowCommand(.toggleProjectStructureSidebarRequested)
                 }
 
-                Toggle("Brain Dump Mode", isOn: $viewModel.isBrainDumpMode)
+                Button("Brain Dump Mode") {
+                    postWindowCommand(.toggleBrainDumpModeRequested)
+                }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
 
-                Toggle("Line Wrap", isOn: $viewModel.isLineWrapEnabled)
+                Button("Line Wrap") {
+                    postWindowCommand(.toggleLineWrapRequested)
+                }
                     .keyboardShortcut("l", modifiers: [.command, .option])
 
                 Button("Toggle Translucent Window Background") {
-                    NotificationCenter.default.post(name: .toggleTranslucencyRequested, object: !enableTranslucentWindow)
+                    let next = !UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
+                    UserDefaults.standard.set(next, forKey: "EnableTranslucentWindow")
+                    postWindowCommand(.toggleTranslucencyRequested, object: next)
                 }
 
                 Divider()
 
                 Button("Show Welcome Tour") {
-                    NotificationCenter.default.post(name: .showWelcomeTourRequested, object: nil)
+                    postWindowCommand(.showWelcomeTourRequested)
                 }
             }
 
             CommandMenu("Editor") {
                 Button("Quick Open…") {
-                    NotificationCenter.default.post(name: .showQuickSwitcherRequested, object: nil)
+                    postWindowCommand(.showQuickSwitcherRequested)
                 }
                 .keyboardShortcut("p", modifiers: .command)
 
                 Button("Clear Editor") {
-                    NotificationCenter.default.post(name: .clearEditorRequested, object: nil)
+                    postWindowCommand(.clearEditorRequested)
                 }
 
                 Button("Toggle Code Completion") {
-                    NotificationCenter.default.post(name: .toggleCodeCompletionRequested, object: nil)
+                    postWindowCommand(.toggleCodeCompletionRequested)
                 }
 
                 Button("Find & Replace") {
-                    NotificationCenter.default.post(name: .showFindReplaceRequested, object: nil)
+                    postWindowCommand(.showFindReplaceRequested)
                 }
-                .keyboardShortcut("f", modifiers: .command)
 
                 Divider()
 
                 Button("Toggle Vim Mode") {
-                    NotificationCenter.default.post(name: .toggleVimModeRequested, object: nil)
+                    postWindowCommand(.toggleVimModeRequested)
                 }
                 .keyboardShortcut("v", modifiers: [.command, .shift])
             }
@@ -277,7 +295,8 @@ struct NeonVisionEditorApp: App {
             CommandMenu("Tools") {
                 Button("Suggest Code") {
                     Task {
-                        if let tab = viewModel.selectedTab {
+                        let current = activeEditorViewModel
+                        if let tab = current.selectedTab {
                             let contentPrefix = String(tab.content.prefix(1000))
                             let prompt = "Suggest improvements for this \(tab.language) code: \(contentPrefix)"
 
@@ -306,12 +325,12 @@ struct NeonVisionEditorApp: App {
                             var aggregated = ""
                             for await chunk in client.streamSuggestions(prompt: prompt) { aggregated += chunk }
 
-                            viewModel.updateTabContent(tab: tab, content: tab.content + "\n\n// AI Suggestion:\n" + aggregated)
+                            current.updateTabContent(tab: tab, content: tab.content + "\n\n// AI Suggestion:\n" + aggregated)
                         }
                     }
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
-                .disabled(viewModel.selectedTab == nil)
+                .disabled(activeEditorViewModel.selectedTab == nil)
 
                 Toggle("Use Apple Intelligence", isOn: $useAppleIntelligence)
             }

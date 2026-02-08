@@ -420,7 +420,6 @@ extension ContentView {
             }) {
                 Image(systemName: "magnifyingglass")
             }
-            .keyboardShortcut("f", modifiers: .command)
             .help("Find & Replace")
 
             Button(action: {
