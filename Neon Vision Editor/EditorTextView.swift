@@ -14,6 +14,7 @@ final class AcceptingTextView: NSTextView {
     private var isVimInsertMode: Bool = true
     private var vimObservers: [NSObjectProtocol] = []
     private var didConfigureVimMode: Bool = false
+    private let dropReadChunkSize = 64 * 1024
 
     // We want the caret at the *start* of the paste.
     private var pendingPasteCaretLocation: Int?
@@ -65,49 +66,246 @@ final class AcceptingTextView: NSTextView {
            let first = nsurls.first {
             let url: URL = first as URL
             let didAccess = url.startAccessingSecurityScopedResource()
-            defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-            do {
-                // Read file contents with security-scoped access
-                let content: String
-                if let data = try? Data(contentsOf: url) {
-                    if let s = String(data: data, encoding: .utf8) {
-                        content = s
-                    } else if let s = String(data: data, encoding: .utf16) {
-                        content = s
-                    } else {
-                        content = try String(contentsOf: url, encoding: .utf8)
+            let selectionAtDrop = clampedSelectionRange()
+            let fileName = url.lastPathComponent
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let attrSize = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+            let resourceSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? 0
+            let totalBytes = max(attrSize, resourceSize)
+            let largeFileMode = totalBytes >= 1_000_000
+
+            NotificationCenter.default.post(
+                name: .droppedFileLoadStarted,
+                object: nil,
+                userInfo: [
+                    "fileName": fileName,
+                    "totalBytes": totalBytes,
+                    "largeFileMode": largeFileMode,
+                    "isDeterminate": totalBytes > 0
+                ]
+            )
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                defer {
+                    if didAccess {
+                        url.stopAccessingSecurityScopedResource()
                     }
-                } else {
-                    content = try String(contentsOf: url, encoding: .utf8)
                 }
-                // Replace current selection with the dropped file contents
-                let nsContent = content as NSString
-                let sel = selectedRange()
-                undoManager?.disableUndoRegistration()
-                textStorage?.beginEditing()
-                textStorage?.mutableString.replaceCharacters(in: sel, with: nsContent as String)
-                textStorage?.endEditing()
-                undoManager?.enableUndoRegistration()
-                // Notify the text system so delegates/SwiftUI binding update
-                self.didChangeText()
-                // Move caret to the end of inserted content and reveal range
-                let newLoc = sel.location + nsContent.length
-                setSelectedRange(NSRange(location: newLoc, length: 0))
-                // Ensure the full inserted range is visible
-                let insertedRange = NSRange(location: sel.location, length: nsContent.length)
-                scrollRangeToVisible(insertedRange)
-                
-                NotificationCenter.default.post(name: .pastedText, object: content)
-                
-                return true
-            } catch {
-                return false
+                guard let self else { return }
+
+                do {
+                    let data = try self.readDroppedFileData(at: url, totalBytes: totalBytes) { fraction in
+                        NotificationCenter.default.post(
+                            name: .droppedFileLoadProgress,
+                            object: nil,
+                            userInfo: [
+                                "fraction": fraction * 0.55,
+                                "fileName": "Reading file",
+                                "largeFileMode": largeFileMode
+                            ]
+                        )
+                    }
+                    let content = self.decodeDroppedFileText(data, fileURL: url)
+
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.applyDroppedContentInChunks(
+                            content,
+                            at: selectionAtDrop,
+                            fileName: fileName,
+                            largeFileMode: largeFileMode || data.count >= 1_000_000
+                        ) { success, insertedLength in
+                            guard success else {
+                                NotificationCenter.default.post(
+                                    name: .droppedFileLoadFinished,
+                                    object: nil,
+                                    userInfo: [
+                                        "success": false,
+                                        "fileName": fileName,
+                                        "largeFileMode": largeFileMode || data.count >= 1_000_000,
+                                        "message": "Failed while applying dropped content."
+                                    ]
+                                )
+                                return
+                            }
+
+                            let newLoc = selectionAtDrop.location + insertedLength
+                            self.setSelectedRange(NSRange(location: newLoc, length: 0))
+                            self.scrollRangeToVisible(NSRange(location: selectionAtDrop.location, length: insertedLength))
+                            self.didChangeText()
+
+                            NotificationCenter.default.post(name: .droppedFileURL, object: url)
+                            if insertedLength <= 120_000 {
+                                NotificationCenter.default.post(name: .pastedText, object: content)
+                            }
+                            NotificationCenter.default.post(
+                                name: .droppedFileLoadFinished,
+                                object: nil,
+                                userInfo: [
+                                    "success": true,
+                                    "fileName": fileName,
+                                    "largeFileMode": largeFileMode || data.count >= 1_000_000
+                                ]
+                            )
+                        }
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(
+                            name: .droppedFileLoadFinished,
+                            object: nil,
+                            userInfo: [
+                                "success": false,
+                                "fileName": fileName,
+                                "largeFileMode": largeFileMode,
+                                "message": error.localizedDescription
+                            ]
+                        )
+                    }
+                }
             }
+            return true
         }
         return false
     }
 
-    // MARK: - Typing helpers (your existing behavior)
+    private func applyDroppedContentInChunks(
+        _ content: String,
+        at selection: NSRange,
+        fileName: String,
+        largeFileMode: Bool,
+        completion: @escaping (Bool, Int) -> Void
+    ) {
+        let nsContent = content as NSString
+        let safeSelection = clampedRange(selection, forTextLength: (string as NSString).length)
+        let total = nsContent.length
+        if total == 0 {
+            completion(true, 0)
+            return
+        }
+        NotificationCenter.default.post(
+            name: .droppedFileLoadProgress,
+            object: nil,
+            userInfo: [
+                "fraction": 0.70,
+                "fileName": "Applying file",
+                "largeFileMode": largeFileMode
+            ]
+        )
+
+        let replaceSucceeded: Bool
+        if let storage = textStorage {
+            undoManager?.disableUndoRegistration()
+            storage.beginEditing()
+            storage.mutableString.replaceCharacters(in: safeSelection, with: content)
+            storage.endEditing()
+            undoManager?.enableUndoRegistration()
+            replaceSucceeded = true
+        } else {
+            // Fallback for environments where textStorage is temporarily unavailable.
+            let current = string as NSString
+            if safeSelection.location <= current.length &&
+                safeSelection.location + safeSelection.length <= current.length {
+                let replaced = current.replacingCharacters(in: safeSelection, with: content)
+                string = replaced
+                replaceSucceeded = true
+            } else {
+                replaceSucceeded = false
+            }
+        }
+
+        NotificationCenter.default.post(
+            name: .droppedFileLoadProgress,
+            object: nil,
+            userInfo: [
+                "fraction": replaceSucceeded ? 1.0 : 0.0,
+                "fileName": replaceSucceeded ? "Reading file" : "Import failed",
+                "largeFileMode": largeFileMode
+            ]
+        )
+
+        completion(replaceSucceeded, replaceSucceeded ? total : 0)
+    }
+
+    private func clampedSelectionRange() -> NSRange {
+        clampedRange(selectedRange(), forTextLength: (string as NSString).length)
+    }
+
+    private func clampedRange(_ range: NSRange, forTextLength length: Int) -> NSRange {
+        guard length >= 0 else { return NSRange(location: 0, length: 0) }
+        if range.location == NSNotFound {
+            return NSRange(location: length, length: 0)
+        }
+        let safeLocation = min(max(0, range.location), length)
+        let maxLen = max(0, length - safeLocation)
+        let safeLength = min(max(0, range.length), maxLen)
+        return NSRange(location: safeLocation, length: safeLength)
+    }
+
+    private func readDroppedFileData(
+        at url: URL,
+        totalBytes: Int64,
+        progress: @escaping (Double) -> Void
+    ) throws -> Data {
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+
+            var data = Data()
+            if totalBytes > 0, totalBytes <= Int64(Int.max) {
+                data.reserveCapacity(Int(totalBytes))
+            }
+
+            var loadedBytes: Int64 = 0
+            var lastReported: Double = -1
+
+            while true {
+                let chunk = try handle.read(upToCount: dropReadChunkSize) ?? Data()
+                if chunk.isEmpty { break }
+                data.append(chunk)
+                loadedBytes += Int64(chunk.count)
+
+                if totalBytes > 0 {
+                    let fraction = min(1.0, Double(loadedBytes) / Double(totalBytes))
+                    if fraction - lastReported >= 0.02 || fraction >= 1.0 {
+                        lastReported = fraction
+                        DispatchQueue.main.async {
+                            progress(fraction)
+                        }
+                    }
+                }
+            }
+
+            if totalBytes > 0, lastReported < 1.0 {
+                DispatchQueue.main.async {
+                    progress(1.0)
+                }
+            }
+            return data
+        } catch {
+            // Fallback path for URLs/FileHandle edge cases in sandboxed drag-drop.
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            DispatchQueue.main.async {
+                progress(1.0)
+            }
+            return data
+        }
+    }
+
+    private func decodeDroppedFileText(_ data: Data, fileURL: URL) -> String {
+        let encodings: [String.Encoding] = [.utf8, .utf16, .utf16LittleEndian, .utf16BigEndian, .windowsCP1252, .isoLatin1]
+        for encoding in encodings {
+            if let decoded = String(data: data, encoding: encoding) {
+                return decoded
+            }
+        }
+        if let fallback = try? String(contentsOf: fileURL, encoding: .utf8) {
+            return fallback
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    // MARK: - Typing helpers (existing behavior)
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
         guard let s = insertString as? String else {
             super.insertText(insertString, replacementRange: replacementRange)
@@ -308,6 +506,7 @@ struct CustomTextEditor: NSViewRepresentable {
     let colorScheme: ColorScheme
     let fontSize: CGFloat
     @Binding var isLineWrapEnabled: Bool
+    let isLargeFileMode: Bool
     let translucentBackgroundEnabled: Bool
 
     // Toggle soft-wrapping by adjusting text container sizing and scroller visibility.
@@ -391,12 +590,12 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
 
         // Install line number ruler
-        scrollView.hasVerticalRuler = true
-        scrollView.rulersVisible = true
+        scrollView.hasVerticalRuler = !isLargeFileMode
+        scrollView.rulersVisible = !isLargeFileMode
         scrollView.verticalRulerView = LineNumberRulerView(textView: textView)
 
         // Apply wrapping and seed initial content
-        applyWrapMode(isWrapped: isLineWrapEnabled, textView: textView, scrollView: scrollView)
+        applyWrapMode(isWrapped: isLineWrapEnabled && !isLargeFileMode, textView: textView, scrollView: scrollView)
 
         // Seed initial text
         textView.string = text
@@ -444,7 +643,9 @@ struct CustomTextEditor: NSViewRepresentable {
                 textView.drawsBackground = true
             }
             // Keep the text container width in sync & relayout
-            applyWrapMode(isWrapped: isLineWrapEnabled, textView: textView, scrollView: nsView)
+            nsView.hasVerticalRuler = !isLargeFileMode
+            nsView.rulersVisible = !isLargeFileMode
+            applyWrapMode(isWrapped: isLineWrapEnabled && !isLargeFileMode, textView: textView, scrollView: nsView)
 
             // Force immediate reflow after toggling wrap
             if let container = textView.textContainer, let lm = textView.layoutManager {
@@ -538,6 +739,13 @@ struct CustomTextEditor: NSViewRepresentable {
                 }
                 return result
             }()
+
+            if parent.isLargeFileMode {
+                self.lastHighlightedText = text
+                self.lastLanguage = lang
+                self.lastColorScheme = scheme
+                return
+            }
 
             // Skip expensive highlighting for very large documents
             let nsLen = (text as NSString).length
@@ -643,6 +851,13 @@ struct CustomTextEditor: NSViewRepresentable {
             NotificationCenter.default.post(name: .caretPositionDidChange, object: nil, userInfo: ["line": line, "column": col])
 
             // Highlight current line
+            if parent.isLargeFileMode {
+                return
+            }
+            if ns.length > 300_000 {
+                // Large documents: skip full-range background rewrites to keep UI responsive.
+                return
+            }
             let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
             let fullRange = NSRange(location: 0, length: ns.length)
             tv.textStorage?.beginEditing()
@@ -775,6 +990,7 @@ struct CustomTextEditor: UIViewRepresentable {
     let colorScheme: ColorScheme
     let fontSize: CGFloat
     @Binding var isLineWrapEnabled: Bool
+    let isLargeFileMode: Bool
     let translucentBackgroundEnabled: Bool
 
     func makeUIView(context: Context) -> LineNumberedTextViewContainer {
@@ -790,10 +1006,15 @@ struct CustomTextEditor: UIViewRepresentable {
         textView.smartQuotesType = .no
         textView.smartInsertDeleteType = .no
         textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
-        textView.textContainer.lineBreakMode = isLineWrapEnabled ? .byWordWrapping : .byClipping
-        textView.textContainer.widthTracksTextView = isLineWrapEnabled
+        textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
+        textView.textContainer.widthTracksTextView = isLineWrapEnabled && !isLargeFileMode
 
-        container.updateLineNumbers(for: text, fontSize: fontSize)
+        if isLargeFileMode {
+            container.lineNumberView.isHidden = true
+        } else {
+            container.lineNumberView.isHidden = false
+            container.updateLineNumbers(for: text, fontSize: fontSize)
+        }
         context.coordinator.container = container
         context.coordinator.textView = textView
         context.coordinator.scheduleHighlightIfNeeded(currentText: text)
@@ -810,9 +1031,14 @@ struct CustomTextEditor: UIViewRepresentable {
             textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
         textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
-        textView.textContainer.lineBreakMode = isLineWrapEnabled ? .byWordWrapping : .byClipping
-        textView.textContainer.widthTracksTextView = isLineWrapEnabled
-        uiView.updateLineNumbers(for: text, fontSize: fontSize)
+        textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
+        textView.textContainer.widthTracksTextView = isLineWrapEnabled && !isLargeFileMode
+        if isLargeFileMode {
+            uiView.lineNumberView.isHidden = true
+        } else {
+            uiView.lineNumberView.isHidden = false
+            uiView.updateLineNumbers(for: text, fontSize: fontSize)
+        }
         context.coordinator.syncLineNumberScroll()
         context.coordinator.scheduleHighlightIfNeeded(currentText: text)
     }
@@ -841,6 +1067,13 @@ struct CustomTextEditor: UIViewRepresentable {
             let text = currentText ?? textView.text ?? ""
             let lang = parent.language
             let scheme = parent.colorScheme
+
+            if parent.isLargeFileMode {
+                lastHighlightedText = text
+                lastLanguage = lang
+                lastColorScheme = scheme
+                return
+            }
 
             if text == lastHighlightedText && lang == lastLanguage && scheme == lastColorScheme {
                 return

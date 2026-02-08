@@ -51,6 +51,9 @@ class EditorViewModel: ObservableObject {
         "yml": "yaml",
         "xml": "xml",
         "sql": "sql",
+        "log": "log",
+        "vim": "vim",
+        "ipynb": "ipynb",
         "java": "java",
         "kt": "kotlin",
         "kts": "kotlin",
@@ -67,7 +70,7 @@ class EditorViewModel: ObservableObject {
         "cc": "cpp",
         "hpp": "cpp",
         "hh": "cpp",
-        "h": "c",
+        "h": "cpp",
         //"cs": "csharp",  // Removed this line as per instructions
         "m": "objective-c",
         "mm": "objective-c",

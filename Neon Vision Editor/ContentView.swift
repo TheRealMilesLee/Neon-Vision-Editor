@@ -86,6 +86,11 @@ struct ContentView: View {
     @State var quickSwitcherQuery: String = ""
     @State var vimModeEnabled: Bool = UserDefaults.standard.bool(forKey: "EditorVimModeEnabled")
     @State var vimInsertMode: Bool = true
+    @State var droppedFileLoadInProgress: Bool = false
+    @State var droppedFileProgressDeterminate: Bool = true
+    @State var droppedFileLoadProgress: Double = 0
+    @State var droppedFileLoadLabel: String = ""
+    @State var largeFileModeEnabled: Bool = false
     @AppStorage("HasSeenWelcomeTourV1") var hasSeenWelcomeTourV1: Bool = false
     @State var showWelcomeTour: Bool = false
 #if os(macOS)
@@ -724,12 +729,57 @@ struct ContentView: View {
                     caretStatus = "Ln \(line), Col \(col)"
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
-                if let pasted = notif.object as? String {
-                    let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
-                    currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
-                }
+        .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
+            if let pasted = notif.object as? String {
+                let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
+                currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .droppedFileURL)) { notif in
+            guard let fileURL = notif.object as? URL else { return }
+            if let preferred = LanguageDetector.shared.preferredLanguage(for: fileURL) {
+                currentLanguageBinding.wrappedValue = preferred
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadStarted)) { notif in
+            droppedFileLoadInProgress = true
+            droppedFileProgressDeterminate = (notif.userInfo?["isDeterminate"] as? Bool) ?? true
+            droppedFileLoadProgress = 0
+            droppedFileLoadLabel = "Reading file"
+            largeFileModeEnabled = (notif.userInfo?["largeFileMode"] as? Bool) ?? false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadProgress)) { notif in
+            // Recover even if "started" was missed.
+            droppedFileLoadInProgress = true
+            let fraction: Double = {
+                if let v = notif.userInfo?["fraction"] as? Double { return v }
+                if let v = notif.userInfo?["fraction"] as? NSNumber { return v.doubleValue }
+                if let v = notif.userInfo?["fraction"] as? Float { return Double(v) }
+                if let v = notif.userInfo?["fraction"] as? CGFloat { return Double(v) }
+                return droppedFileLoadProgress
+            }()
+            droppedFileLoadProgress = min(max(fraction, 0), 1)
+            if (notif.userInfo?["largeFileMode"] as? Bool) == true {
+                largeFileModeEnabled = true
+            }
+            if let name = notif.userInfo?["fileName"] as? String, !name.isEmpty {
+                droppedFileLoadLabel = name
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadFinished)) { notif in
+            let success = (notif.userInfo?["success"] as? Bool) ?? true
+            droppedFileLoadProgress = success ? 1 : 0
+            if (notif.userInfo?["largeFileMode"] as? Bool) == true {
+                largeFileModeEnabled = true
+            }
+            if !success, let message = notif.userInfo?["message"] as? String, !message.isEmpty {
+                findStatusMessage = "Drop failed: \(message)"
+                droppedFileLoadLabel = "Import failed"
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + (success ? 0.35 : 2.5)) {
+                droppedFileLoadInProgress = false
+            }
+        }
     }
 
     private func withCommandEvents<Content: View>(_ view: Content) -> some View {
@@ -1040,7 +1090,7 @@ struct ContentView: View {
     /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
-        let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
+        let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
 
         #if USE_FOUNDATION_MODELS
         // Attempt a lightweight model-based detection via AppleIntelligenceAIClient if available
@@ -1182,6 +1232,7 @@ struct ContentView: View {
                     colorScheme: colorScheme,
                     fontSize: editorFontSize,
                     isLineWrapEnabled: $viewModel.isLineWrapEnabled,
+                    isLargeFileMode: largeFileModeEnabled,
                     translucentBackgroundEnabled: enableTranslucentWindow
                 )
                 .id(currentLanguage)
@@ -1234,6 +1285,28 @@ struct ContentView: View {
         .toolbar {
             editorToolbarContent
         }
+        .overlay(alignment: .topTrailing) {
+            if droppedFileLoadInProgress {
+                HStack(spacing: 8) {
+                    if droppedFileProgressDeterminate {
+                        ProgressView(value: droppedFileLoadProgress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 120)
+                    } else {
+                        ProgressView()
+                            .frame(width: 16)
+                    }
+                    Text(droppedFileProgressDeterminate ? "\(droppedFileLoadLabel) \(importProgressPercentText)" : "\(droppedFileLoadLabel) Loading…")
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+                .padding(.top, viewModel.isBrainDumpMode ? 12 : 50)
+                .padding(.trailing, 12)
+            }
+        }
 #if os(macOS)
         .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: ToolbarPlacement.windowToolbar)
 #else
@@ -1244,9 +1317,40 @@ struct ContentView: View {
     // Status line: caret location + live word count from the view model.
     @ViewBuilder
     var wordCountView: some View {
-        HStack {
+        HStack(spacing: 10) {
+            if droppedFileLoadInProgress {
+                HStack(spacing: 8) {
+                    if droppedFileProgressDeterminate {
+                        ProgressView(value: droppedFileLoadProgress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 130)
+                    } else {
+                        ProgressView()
+                            .frame(width: 18)
+                    }
+                    Text(droppedFileProgressDeterminate ? "\(droppedFileLoadLabel) \(importProgressPercentText)" : "\(droppedFileLoadLabel) Loading…")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 12)
+            }
+
+            if largeFileModeEnabled {
+                Text("Large File Mode")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.secondary.opacity(0.16))
+                    )
+            }
             Spacer()
-            Text("\(caretStatus) • Words: \(viewModel.wordCount(for: currentContent))\(vimStatusSuffix)")
+            Text(largeFileModeEnabled
+                 ? "\(caretStatus)\(vimStatusSuffix)"
+                 : "\(caretStatus) • Words: \(viewModel.wordCount(for: currentContent))\(vimStatusSuffix)")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
                 .padding(.bottom, 8)
@@ -1304,6 +1408,12 @@ struct ContentView: View {
 #else
         return ""
 #endif
+    }
+
+    private var importProgressPercentText: String {
+        let clamped = min(max(droppedFileLoadProgress, 0), 1)
+        if clamped > 0, clamped < 0.01 { return "1%" }
+        return "\(Int(clamped * 100))%"
     }
 
     private var quickSwitcherItems: [QuickFileSwitcherPanel.Item] {

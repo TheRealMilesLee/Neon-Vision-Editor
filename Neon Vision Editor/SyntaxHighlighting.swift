@@ -288,6 +288,29 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             #"^;.*$"#: colors.comment,
             #"^\w+\s*=\s*.*$"#: colors.property
         ]
+    case "vim":
+        return [
+            #"\b(set|let|if|endif|for|endfor|while|endwhile|function|endfunction|command|autocmd|syntax|highlight|nnoremap|inoremap|vnoremap|map|nmap|imap|vmap)\b"#: colors.keyword,
+            #"\$[A-Za-z_][A-Za-z0-9_]*|[gbwtslv]:[A-Za-z_][A-Za-z0-9_]*"#: colors.variable,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"^\s*\".*$"#: colors.comment,
+            #"\b[0-9]+\b"#: colors.number
+        ]
+    case "log":
+        return [
+            #"\b(ERROR|ERR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE)\b"#: colors.keyword,
+            #"\b[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:.+-Z]+\b"#: colors.meta,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"(Exception|Traceback|Caused by:).*"#: colors.attribute
+        ]
+    case "ipynb":
+        return [
+            #"\"(cells|metadata|source|outputs|execution_count|cell_type|kernelspec|language_info)\"\s*:"#: colors.property,
+            #"\"([^\"\\]|\\.)*\""#: colors.string,
+            #"\b(-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)\b"#: colors.number,
+            #"\b(true|false|null)\b"#: colors.keyword,
+            #"[{}\[\],:]"#: colors.meta
+        ]
     case "csharp":
         return [
             #"\b(class|interface|enum|struct|namespace|using|public|private|protected|internal|static|readonly|sealed|abstract|virtual|override|async|await|new|return|if|else|for|foreach|while|do|switch|case|break|continue|try|catch|finally|throw)\b"#: colors.keyword,

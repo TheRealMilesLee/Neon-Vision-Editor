@@ -6,6 +6,14 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 
 ## [v0.4.2-beta] - 2026-02-08
 
+### Added
+- Syntax highlighting profiles for **Vim** (`.vim`), **Log** (`.log`), and **Jupyter Notebook JSON** (`.ipynb`).
+- Language picker/menu entries for `vim`, `log`, and `ipynb` across toolbar and app command menus.
+
+### Improved
+- Extension and dotfile language detection for `.vim`, `.log`, `.ipynb`, and `.vimrc`.
+- Header-file default mapping by treating `.h` as `cpp` for more practical C/C++ highlighting.
+
 ### Fixed
 - Scoped toolbar and menu commands to the active window to avoid cross-window side effects.
 - Routed command actions to the focused window's `EditorViewModel` in multi-window workflows.

@@ -117,6 +117,10 @@ If macOS blocks first launch:
 - Unified persistence behavior for Brain Dump and translucent window toggles.
 - Removed duplicate `Cmd+F` binding conflict in toolbar wiring.
 - Verified command-system changes on macOS and iOS simulator builds.
+- Added syntax highlighting support for `vim`, `log`, and `ipynb` files.
+- Added extension-based auto-detection for `.vim`, `.log`, `.ipynb`, and `.vimrc`.
+- Improved header file default highlighting by mapping `.h` to `cpp`.
+- Added language picker entries for **Vim**, **Log**, and **Jupyter Notebook**.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 

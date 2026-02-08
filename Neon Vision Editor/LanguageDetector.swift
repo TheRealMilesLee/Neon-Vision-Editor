@@ -31,6 +31,9 @@ public struct LanguageDetector {
         "yml": "yaml",
         "xml": "xml",
         "sql": "sql",
+        "log": "log",
+        "vim": "vim",
+        "ipynb": "ipynb",
         "java": "java",
         "kt": "kotlin",
         "kts": "kotlin",
@@ -47,7 +50,7 @@ public struct LanguageDetector {
         "cc": "cpp",
         "hpp": "cpp",
         "hh": "cpp",
-        "h": "c",
+        "h": "cpp",
         "m": "objective-c",
         "mm": "objective-c",
         "cs": "csharp",
@@ -71,6 +74,7 @@ public struct LanguageDetector {
         ".bash_login": "bash",
         ".bash_logout": "bash",
         ".profile": "bash",
+        ".vimrc": "vim",
         ".env": "ini",
         ".gitconfig": "ini"
     ]
