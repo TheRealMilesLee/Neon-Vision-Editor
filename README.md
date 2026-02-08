@@ -121,6 +121,7 @@ If macOS blocks first launch:
 - Added extension-based auto-detection for `.vim`, `.log`, `.ipynb`, and `.vimrc`.
 - Improved header file default highlighting by mapping `.h` to `cpp`.
 - Added language picker entries for **Vim**, **Log**, and **Jupyter Notebook**.
+- Fixed drag & drop import of larger text and csv files
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
