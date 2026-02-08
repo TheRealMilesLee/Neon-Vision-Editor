@@ -44,8 +44,8 @@ final class AcceptingTextView: NSTextView {
     override func becomeFirstResponder() -> Bool {
         let didBecome = super.becomeFirstResponder()
         if didBecome, UserDefaults.standard.bool(forKey: vimModeDefaultsKey) {
-            // Re-enter INSERT whenever editor focus is regained.
-            isVimInsertMode = true
+            // Re-enter NORMAL whenever Vim mode is active.
+            isVimInsertMode = false
             postVimModeState()
         }
         return didBecome
@@ -282,8 +282,8 @@ final class AcceptingTextView: NSTextView {
     }
 
     private func configureVimMode() {
-        // Always start with a visible caret; users can switch to NORMAL with Esc.
-        isVimInsertMode = true
+        // Vim enabled starts in NORMAL; disabled uses regular insert typing.
+        isVimInsertMode = !UserDefaults.standard.bool(forKey: vimModeDefaultsKey)
         postVimModeState()
 
         let observer = NotificationCenter.default.addObserver(
@@ -292,8 +292,9 @@ final class AcceptingTextView: NSTextView {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            // After toggling Vim mode, keep INSERT active to avoid "missing cursor" confusion.
-            self.isVimInsertMode = true
+            // Enter NORMAL when Vim mode is enabled; INSERT when disabled.
+            let enabled = UserDefaults.standard.bool(forKey: self.vimModeDefaultsKey)
+            self.isVimInsertMode = !enabled
             self.postVimModeState()
         }
         vimObservers.append(observer)

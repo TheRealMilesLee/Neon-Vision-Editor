@@ -1112,8 +1112,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .toggleVimModeRequested)) { _ in
             vimModeEnabled.toggle()
             UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimModeEnabled")
-            // Keep caret visible after toggling; Esc switches to NORMAL.
-            vimInsertMode = true
+            UserDefaults.standard.set(vimModeEnabled, forKey: "EditorVimInterceptionEnabled")
+            // Match editor behavior: Vim ON starts in NORMAL, OFF behaves as INSERT.
+            vimInsertMode = !vimModeEnabled
         }
         .onReceive(NotificationCenter.default.publisher(for: .vimModeStateDidChange)) { notif in
             if let isInsert = notif.userInfo?["insertMode"] as? Bool {
@@ -1211,7 +1212,7 @@ struct ContentView: View {
 
     private var vimStatusSuffix: String {
 #if os(macOS)
-        guard vimModeEnabled else { return "" }
+        guard vimModeEnabled else { return " • Vim: OFF" }
         return vimInsertMode ? " • Vim: INSERT" : " • Vim: NORMAL"
 #else
         return ""
