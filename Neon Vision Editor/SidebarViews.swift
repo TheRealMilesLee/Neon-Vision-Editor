@@ -42,6 +42,9 @@ struct SidebarView: View {
     // Naive line-scanning TOC: looks for language-specific declarations or headers.
     func generateTableOfContents() -> [String] {
         guard !content.isEmpty else { return ["No content available"] }
+        if (content as NSString).length >= 400_000 {
+            return ["Large file detected: TOC disabled for performance"]
+        }
         let lines = content.components(separatedBy: .newlines)
         var toc: [String] = []
 

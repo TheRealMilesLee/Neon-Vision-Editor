@@ -726,7 +726,11 @@ struct ContentView: View {
         view
             .onReceive(NotificationCenter.default.publisher(for: .caretPositionDidChange)) { notif in
                 if let line = notif.userInfo?["line"] as? Int, let col = notif.userInfo?["column"] as? Int {
-                    caretStatus = "Ln \(line), Col \(col)"
+                    if line <= 0 {
+                        caretStatus = "Pos \(col)"
+                    } else {
+                        caretStatus = "Ln \(line), Col \(col)"
+                    }
                 }
             }
         .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
@@ -751,6 +755,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadProgress)) { notif in
             // Recover even if "started" was missed.
             droppedFileLoadInProgress = true
+            if let determinate = notif.userInfo?["isDeterminate"] as? Bool {
+                droppedFileProgressDeterminate = determinate
+            }
             let fraction: Double = {
                 if let v = notif.userInfo?["fraction"] as? Double { return v }
                 if let v = notif.userInfo?["fraction"] as? NSNumber { return v.doubleValue }
@@ -769,6 +776,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadFinished)) { notif in
             let success = (notif.userInfo?["success"] as? Bool) ?? true
             droppedFileLoadProgress = success ? 1 : 0
+            droppedFileProgressDeterminate = true
             if (notif.userInfo?["largeFileMode"] as? Bool) == true {
                 largeFileModeEnabled = true
             }

@@ -15,6 +15,7 @@ final class AcceptingTextView: NSTextView {
     private var vimObservers: [NSObjectProtocol] = []
     private var didConfigureVimMode: Bool = false
     private let dropReadChunkSize = 64 * 1024
+    fileprivate var isApplyingDroppedContent: Bool = false
 
     // We want the caret at the *start* of the paste.
     private var pendingPasteCaretLocation: Int?
@@ -130,8 +131,11 @@ final class AcceptingTextView: NSTextView {
                             }
 
                             let newLoc = selectionAtDrop.location + insertedLength
-                            self.setSelectedRange(NSRange(location: newLoc, length: 0))
-                            self.scrollRangeToVisible(NSRange(location: selectionAtDrop.location, length: insertedLength))
+                            let caretLoc = largeFileMode ? selectionAtDrop.location : newLoc
+                            self.setSelectedRange(NSRange(location: caretLoc, length: 0))
+                            // Scrolling a full multi-MB inserted range is extremely expensive.
+                            // Keep viewport work bounded by scrolling only to the caret.
+                            self.scrollRangeToVisible(NSRange(location: caretLoc, length: 0))
                             self.didChangeText()
 
                             NotificationCenter.default.post(name: .droppedFileURL, object: url)
@@ -192,6 +196,68 @@ final class AcceptingTextView: NSTextView {
                 "largeFileMode": largeFileMode
             ]
         )
+
+        // Large payloads: prefer one atomic replace after yielding one runloop turn so
+        // progress updates can render before the heavy text-system mutation begins.
+        if total >= 300_000 {
+            isApplyingDroppedContent = true
+            NotificationCenter.default.post(
+                name: .droppedFileLoadProgress,
+                object: nil,
+                userInfo: [
+                    "fraction": 0.90,
+                    "fileName": "Applying file",
+                    "largeFileMode": largeFileMode,
+                    "isDeterminate": true
+                ]
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else {
+                    completion(false, 0)
+                    return
+                }
+
+                let replaceSucceeded: Bool
+                if let storage = self.textStorage {
+                    let liveSafeSelection = self.clampedRange(safeSelection, forTextLength: storage.length)
+                    self.undoManager?.disableUndoRegistration()
+                    storage.beginEditing()
+                    if storage.length == 0 && liveSafeSelection.location == 0 && liveSafeSelection.length == 0 {
+                        storage.mutableString.setString(content)
+                    } else {
+                        storage.mutableString.replaceCharacters(in: liveSafeSelection, with: content)
+                    }
+                    storage.endEditing()
+                    self.undoManager?.enableUndoRegistration()
+                    replaceSucceeded = true
+                } else {
+                    let current = self.string as NSString
+                    if safeSelection.location <= current.length &&
+                        safeSelection.location + safeSelection.length <= current.length {
+                        let replaced = current.replacingCharacters(in: safeSelection, with: content)
+                        self.string = replaced
+                        replaceSucceeded = true
+                    } else {
+                        replaceSucceeded = false
+                    }
+                }
+
+                self.isApplyingDroppedContent = false
+                NotificationCenter.default.post(
+                    name: .droppedFileLoadProgress,
+                    object: nil,
+                    userInfo: [
+                        "fraction": replaceSucceeded ? 1.0 : 0.0,
+                        "fileName": replaceSucceeded ? "Reading file" : "Import failed",
+                        "largeFileMode": largeFileMode,
+                        "isDeterminate": true
+                    ]
+                )
+                completion(replaceSucceeded, replaceSucceeded ? total : 0)
+            }
+            return
+        }
 
         let replaceSucceeded: Bool
         if let storage = textStorage {
@@ -570,6 +636,7 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.allowsUndo = true
         textView.textColor = .labelColor
         textView.insertionPointColor = .controlAccentColor
+        textView.layoutManager?.allowsNonContiguousLayout = true
 
         // Disable smart substitutions/detections that can interfere with selection when recoloring
         textView.isAutomaticTextCompletionEnabled = false
@@ -626,7 +693,8 @@ struct CustomTextEditor: NSViewRepresentable {
             textView.isEditable = true
             textView.isSelectable = true
 
-            if textView.string != text {
+            let isDropApplyInFlight = (textView as? AcceptingTextView)?.isApplyingDroppedContent ?? false
+            if !isDropApplyInFlight && textView.string != text {
                 textView.string = text
             }
             if textView.font?.pointSize != fontSize {
@@ -665,7 +733,9 @@ struct CustomTextEditor: NSViewRepresentable {
 
             // Only schedule highlight if needed (e.g., language/color scheme changes or external text updates)
             context.coordinator.parent = self
-            context.coordinator.scheduleHighlightIfNeeded()
+            if !isDropApplyInFlight {
+                context.coordinator.scheduleHighlightIfNeeded()
+            }
         }
     }
 
@@ -823,6 +893,11 @@ struct CustomTextEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            if let accepting = textView as? AcceptingTextView, accepting.isApplyingDroppedContent {
+                // Drop-import chunking mutates storage many times; defer expensive binding/highlight work
+                // until the final didChangeText emitted after import completion.
+                return
+            }
             // Update SwiftUI binding, caret status, and rehighlight.
             parent.text = textView.string
             updateCaretStatusAndHighlight()
@@ -839,6 +914,14 @@ struct CustomTextEditor: NSViewRepresentable {
             let ns = tv.string as NSString
             let sel = tv.selectedRange()
             let location = sel.location
+            if parent.isLargeFileMode || ns.length > 300_000 {
+                NotificationCenter.default.post(
+                    name: .caretPositionDidChange,
+                    object: nil,
+                    userInfo: ["line": 0, "column": location]
+                )
+                return
+            }
             let prefix = ns.substring(to: min(location, ns.length))
             let line = prefix.reduce(1) { $1 == "\n" ? $0 + 1 : $0 }
             let col: Int = {
@@ -851,13 +934,6 @@ struct CustomTextEditor: NSViewRepresentable {
             NotificationCenter.default.post(name: .caretPositionDidChange, object: nil, userInfo: ["line": line, "column": col])
 
             // Highlight current line
-            if parent.isLargeFileMode {
-                return
-            }
-            if ns.length > 300_000 {
-                // Large documents: skip full-range background rewrites to keep UI responsive.
-                return
-            }
             let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
             let fullRange = NSRange(location: 0, length: ns.length)
             tv.textStorage?.beginEditing()

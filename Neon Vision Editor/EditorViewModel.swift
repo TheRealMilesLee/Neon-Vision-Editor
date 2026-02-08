@@ -107,6 +107,17 @@ class EditorViewModel: ObservableObject {
             if content != previous {
                 tabs[index].isDirty = true
             }
+
+            let isLargeContent = (content as NSString).length >= 1_000_000
+            if isLargeContent {
+                let nameExt = URL(fileURLWithPath: tabs[index].name).pathExtension.lowercased()
+                if !tabs[index].languageLocked,
+                   let mapped = LanguageDetector.shared.preferredLanguage(for: tabs[index].fileURL) ??
+                                languageMap[nameExt] {
+                    tabs[index].language = mapped
+                }
+                return
+            }
             
             // Early lock to Swift if clearly Swift-specific tokens are present
             let lower = content.lowercased()
