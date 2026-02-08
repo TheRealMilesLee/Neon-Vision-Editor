@@ -309,21 +309,7 @@ class EditorViewModel: ObservableObject {
         panel.showsHiddenFiles = true
 
         if panel.runModal() == .OK, let url = panel.url {
-            do {
-                let content = try String(contentsOf: url, encoding: .utf8)
-                let extLang = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()]
-                let detectedLang = extLang ?? LanguageDetector.shared.detect(text: content, name: url.lastPathComponent, fileURL: url).lang
-                let newTab = TabData(name: url.lastPathComponent,
-                                     content: content,
-                                     language: detectedLang,
-                                     fileURL: url,
-                                     languageLocked: extLang != nil,
-                                     isDirty: false)
-                tabs.append(newTab)
-                selectedTabID = newTab.id
-            } catch {
-                debugLog("Failed to open file.")
-            }
+            openFile(url: url)
         }
 #else
         // iOS/iPadOS: document picker flow can be added here.
@@ -332,6 +318,10 @@ class EditorViewModel: ObservableObject {
     }
     
     func openFile(url: URL) {
+        if let existingIndex = indexOfOpenTab(for: url) {
+            selectedTabID = tabs[existingIndex].id
+            return
+        }
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
             let extLang = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()]
@@ -346,6 +336,14 @@ class EditorViewModel: ObservableObject {
             selectedTabID = newTab.id
         } catch {
             debugLog("Failed to open file.")
+        }
+    }
+
+    private func indexOfOpenTab(for url: URL) -> Int? {
+        let target = url.resolvingSymlinksInPath().standardizedFileURL
+        return tabs.firstIndex { tab in
+            guard let fileURL = tab.fileURL else { return false }
+            return fileURL.resolvingSymlinksInPath().standardizedFileURL == target
         }
     }
 
