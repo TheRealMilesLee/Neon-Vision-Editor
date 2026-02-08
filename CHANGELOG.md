@@ -16,6 +16,97 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 ### Notes
 - No pull requests were associated with the commits included in this release tag.
 
+## [v0.4.1-beta] - 2026-02-07
+
+### Improved
+- Prepared App Store security and distribution readiness for the `v0.4.1-beta` release.
+- Added release/distribution documentation and checklist updates for submission flow.
+
+## [v0.4.0-beta] - 2026-02-07
+
+### Improved
+- Improved editor UX across macOS, iOS, and iPadOS layouts.
+- Refined cross-platform editor behavior and UI polish for the first beta line.
+
+## [v0.3.3-alpha] - 2026-02-06
+
+### Documentation
+- Updated README content and presentation.
+
+## [v0.3.2-alpha] - 2026-02-06
+
+### Changed
+- Refactored the editor architecture by splitting `ContentView` into focused files/extensions.
+
+### Added
+- Right-side project structure sidebar with recursive folder tree browsing.
+- Dedicated blank-window flow with isolated editor state.
+- Enhanced find/replace controls (regex, case-sensitive, replace-all status).
+
+### Fixed
+- Markdown highlighting over-coloring edge cases.
+- Window/sidebar translucency consistency and post-refactor access-control issues.
+
+## [v0.3.1-alpha] - 2026-02-06
+
+### Fixed
+- Line number ruler scrolling and update behavior.
+- Translucency rendering conflicts in line-number drawing.
+
+## [v0.3.0-alpha] - 2026-02-06
+
+### Changed
+- Established the `v0.3.x` alpha release line.
+- Consolidated docs/release presentation updates and baseline packaging cleanup for the next iteration.
+
+## [v0.2.9-alpha] - 2026-02-05
+
+### Improved
+- Improved Apple Foundation Models integration and streaming reliability.
+- Added stronger availability checks and fallback behavior for model completion.
+
+### Fixed
+- Fixed streaming delta handling and optional-unwrapping issues in Apple FM output flow.
+
+## [v0.2.8-1-alpha] - 2026-02-05
+
+### Notes
+- Re-tag of the Apple Foundation Models integration/stability update line.
+- No functional differences documented from `v0.2.9-alpha` content.
+
+## [v0.2.8-alpha] - 2026-02-05
+
+### Improved
+- Improved Apple Foundation Models integration and health-check behavior.
+- Added synchronous and streaming completion APIs with graceful fallback.
+
+### Fixed
+- Fixed stream content delta computation and robustness in partial-response handling.
+
+## [v0.2.7-alpha] - 2026-02-04
+
+### Added
+- Added Grok and Gemini provider support for inline code completion.
+
+### Fixed
+- Fixed exhaustive switch coverage in AI client factory/provider routing.
+
+## [v0.2.6-alpha] - 2026-01-31
+
+### Changed
+- Packaged and uploaded the next alpha iteration for distribution.
+
+## [v0.2.5-alpha] - 2026-01-25
+
+### Improved
+- Delayed hover popovers to reduce accidental toolbar popups.
+- Improved auto language detection after drag-and-drop editor input.
+
+## [v0.2.4-alpha] - 2026-01-25
+
+### Changed
+- Integrated upstream/mainline changes as part of alpha iteration merge.
+
 ## [v0.2.3-alpha] - 2026-01-23
 
 ### Improved
