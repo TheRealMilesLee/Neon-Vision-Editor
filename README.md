@@ -61,6 +61,8 @@ brew tap h3pdesign/tap
 brew install --cask neon-vision-editor
 ```
 
+Tap repository: [h3pdesign/homebrew-tap](https://github.com/h3pdesign/homebrew-tap)
+
 If Homebrew asks for an admin password, it is usually because casks install into `/Applications`.
 Use this to avoid that:
 
