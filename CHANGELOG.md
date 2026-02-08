@@ -13,9 +13,6 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 - Removed duplicate `Cmd+F` shortcut binding conflict between toolbar and command menu.
 - Stabilized command/event handling across macOS and iOS builds.
 
-### Notes
-- No pull requests were associated with the commits included in this release tag.
-
 ## [v0.4.1-beta] - 2026-02-07
 
 ### Improved
