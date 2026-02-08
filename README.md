@@ -117,7 +117,6 @@ If macOS blocks first launch:
 - Unified persistence behavior for Brain Dump and translucent window toggles.
 - Removed duplicate `Cmd+F` binding conflict in toolbar wiring.
 - Verified command-system changes on macOS and iOS simulator builds.
-- Release note: no pull requests were associated with this release tag.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
