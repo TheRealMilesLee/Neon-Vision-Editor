@@ -1,0 +1,59 @@
+name: Update cask from releases
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Update cask
+        env:
+          APP_REPO: h3pdesign/Neon-Vision-Editor
+          ASSET_NAME: Neon.Vision.Editor.app.zip
+          CASK_PATH: Casks/neon-vision-editor.rb
+        run: |
+          set -euo pipefail
+          release_json="$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${APP_REPO}/releases/latest")"
+          tag="$(echo "$release_json" | jq -r '.tag_name')"
+          version="${tag#v}"
+          asset_url="$(echo "$release_json" | jq -r --arg name "$ASSET_NAME" '.assets[] | select(.name==$name) | .browser_download_url')"
+          if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
+            echo "Asset $ASSET_NAME not found on latest release."
+            exit 1
+          fi
+          curl -fsSL "$asset_url" -o "$ASSET_NAME"
+          sha256="$(shasum -a 256 "$ASSET_NAME" | awk '{print $1}')"
+
+          ruby -e "path=ENV['CASK_PATH']; data=File.read(path); data.sub!(/version \"[^\"]+\"/, \"version \\\"#{ENV['VERSION']}\\\"\"); data.sub!(/sha256 \"[^\"]+\"/, \"sha256 \\\"#{ENV['SHA256']}\\\"\"); data.sub!(/url \"[^\"]+\"/, \"url \\\"#{ENV['URL']}\\\"\"); File.write(path, data)" \
+            VERSION="$version" SHA256="$sha256" URL="$asset_url"
+
+          rm -f "$ASSET_NAME"
+          echo "$version" > .cask-version
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/neon-vision-editor.rb
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          version="$(cat .cask-version 2>/dev/null || true)"
+          if [ -z "$version" ]; then
+            git commit -m "Update neon-vision-editor cask"
+          else
+            git commit -m "Update neon-vision-editor cask to v${version}"
+          fi
+          git push
