@@ -1,0 +1,12 @@
+schema {
+  query: Query
+}
+
+type Query {
+  document(id: ID!): Document
+}
+
+type Document {
+  id: ID!
+  name: String
+}

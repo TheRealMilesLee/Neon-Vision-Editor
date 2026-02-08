@@ -319,6 +319,51 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
             #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment
         ]
+    case "cobol":
+        return [
+            #"(?i)\b(identification|environment|data|procedure|division|section|program-id|author|installati?on|date-written|date-compiled|working-storage|linkage|file-control|input-output|select|assign|fd|01|77|88|level|pic|picture|value|values|move|add|subtract|multiply|divide|compute|if|else|end-if|evaluate|when|perform|until|varying|go|to|goback|stop|run|call|accept|display|open|close|read|write|rewrite|delete|string|unstring|initialize|set|inspect)\b"#: colors.keyword,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"(?m)^\s*\*.*$|(?m)^\s*\*>.*$"#: colors.comment
+        ]
+    case "dotenv":
+        return [
+            #"(?m)^\s*[A-Z_][A-Z0-9_]*\s*="#: colors.property,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"(?m)#.*$"#: colors.comment
+        ]
+    case "proto":
+        return [
+            #"\b(syntax|package|import|option|message|enum|service|rpc|returns|repeated|map|oneof|reserved|required|optional)\b"#: colors.keyword,
+            #"\b(int32|int64|uint32|uint64|sint32|sint64|fixed32|fixed64|sfixed32|sfixed64|bool|string|bytes|double|float)\b"#: colors.type,
+            #"\"[^\"]*\""#: colors.string,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"//.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment
+        ]
+    case "graphql":
+        return [
+            #"\b(type|interface|enum|union|input|scalar|schema|extend|implements|directive|on|query|mutation|subscription|fragment)\b"#: colors.keyword,
+            #"\b([A-Z][A-Za-z0-9_]*)\b"#: colors.type,
+            #"\"[^\"]*\""#: colors.string,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"(?m)#.*$"#: colors.comment
+        ]
+    case "rst":
+        return [
+            #"(?m)^\s*([=\-`:'\"~^_*+<>#]{3,})\s*$"#: colors.keyword,
+            #"(?m)^\s*\.\.\s+[A-Za-z-]+::.*$"#: colors.meta,
+            #"(?m)^:?[A-Za-z-]+:\s+.*$"#: colors.property,
+            #"\*\*[^*]+\*\*"#: colors.def,
+            #"(?m)#.*$"#: colors.comment
+        ]
+    case "nginx":
+        return [
+            #"\b(http|server|location|upstream|map|if|set|return|rewrite|proxy_pass|listen|server_name|root|index|try_files|include|error_page|access_log|error_log|gzip|ssl|add_header)\b"#: colors.keyword,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"(?m)#.*$"#: colors.comment,
+            #"[{};]"#: colors.meta
+        ]
     case "standard":
         return [
             // Strings (double/single/backtick)

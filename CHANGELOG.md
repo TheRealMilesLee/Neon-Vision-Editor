@@ -4,6 +4,16 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.3-beta] - 2026-02-08
+
+### Added
+- Syntax highlighting for **COBOL**, **Dotenv**, **Proto**, **GraphQL**, **reStructuredText**, and **Nginx**.
+- Language picker/menu entries for the new languages.
+- Sample fixtures for manual verification of detection and highlighting.
+
+### Improved
+- Extension and dotfile language detection for `.cob`, `.cbl`, `.cobol`, `.env*`, `.proto`, `.graphql`, `.gql`, `.rst`, and `.conf`.
+
 ## [v0.4.2-beta] - 2026-02-08
 
 ### Added

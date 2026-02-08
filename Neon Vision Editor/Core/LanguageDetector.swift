@@ -26,7 +26,6 @@ public struct LanguageDetector {
         "tsv": "csv",
         "toml": "toml",
         "ini": "ini",
-        "conf": "ini",
         "yaml": "yaml",
         "yml": "yaml",
         "xml": "xml",
@@ -59,6 +58,16 @@ public struct LanguageDetector {
         "json5": "json",
         "md": "markdown",
         "markdown": "markdown",
+        "env": "dotenv",
+        "proto": "proto",
+        "graphql": "graphql",
+        "gql": "graphql",
+        "rst": "rst",
+        "conf": "nginx",
+        "nginx": "nginx",
+        "cob": "cobol",
+        "cbl": "cobol",
+        "cobol": "cobol",
         "sh": "bash",
         "bash": "bash",
         "zsh": "zsh"
@@ -75,7 +84,8 @@ public struct LanguageDetector {
         ".bash_logout": "bash",
         ".profile": "bash",
         ".vimrc": "vim",
-        ".env": "ini",
+        ".env": "dotenv",
+        ".envrc": "dotenv",
         ".gitconfig": "ini"
     ]
 
@@ -88,6 +98,9 @@ public struct LanguageDetector {
     public func preferredLanguage(for fileURL: URL?) -> String? {
         guard let fileURL else { return nil }
         let fileName = fileURL.lastPathComponent.lowercased()
+        if fileName.hasPrefix(".env") {
+            return "dotenv"
+        }
         if let mapped = dotfileMap[fileName] {
             return mapped
         }
@@ -131,6 +144,11 @@ public struct LanguageDetector {
             "csv": 0,
             "python": 0,
             "javascript": 0,
+            "dotenv": 0,
+            "proto": 0,
+            "graphql": 0,
+            "rst": 0,
+            "nginx": 0,
             "cpp": 0,
             "c": 0,
             "css": 0,
@@ -166,11 +184,20 @@ public struct LanguageDetector {
         if t.contains("```php") { bump("php", 100) }
         if t.contains("```csharp") || t.contains("```cs") { bump("csharp", 100) }
         if t.contains("```cpp") || t.contains("```c++") { bump("cpp", 100) }
+        if t.contains("```proto") { bump("proto", 100) }
+        if t.contains("```graphql") || t.contains("```gql") { bump("graphql", 100) }
+        if t.contains("```dotenv") || t.contains("```env") { bump("dotenv", 100) }
+        if t.contains("```rst") { bump("rst", 100) }
 
         // 2) Single-language quick checks
         if let first = trimmed.first, (first == "{" || first == "[") && t.contains(":") { bump("json", 90) }
         if t.contains("<html") || t.contains("<body") || t.contains("</") { bump("html", 90) }
         if t.contains("<?php") || t.contains("<?=") { bump("php", 90) }
+        if t.contains("syntax = \"proto") { bump("proto", 90) }
+        if t.contains("schema {") || t.contains("type query") { bump("graphql", 70) }
+        if t.contains("server {") || t.contains("http {") || t.contains("location /") { bump("nginx", 70) }
+        if t.contains(".. toctree::") || t.contains(".. code-block::") { bump("rst", 70) }
+        if t.range(of: #"(?m)^[A-Z_][A-Z0-9_]*\s*="#, options: .regularExpression) != nil { bump("dotenv", 70) }
         if raw.contains(",") && raw.contains("\n") {
             let lines = raw.split(separator: "\n", omittingEmptySubsequences: true)
             if lines.count >= 2 {
@@ -277,7 +304,20 @@ public struct LanguageDetector {
             bump("css", 8)
         }
 
-        // 10) Markdown
+        // 10) Proto
+        if t.contains("message ") || t.contains("enum ") || t.contains("rpc ") { bump("proto", 10) }
+
+        // 11) GraphQL
+        if t.contains("type ") && t.contains("{") && t.contains("}") { bump("graphql", 8) }
+        if t.contains("fragment ") || t.contains("mutation") || t.contains("subscription") { bump("graphql", 8) }
+
+        // 12) Nginx
+        if t.contains("proxy_pass") || t.contains("server_name") || t.contains("error_log") { bump("nginx", 8) }
+
+        // 13) reStructuredText
+        if t.contains("::") && t.contains("\n====") { bump("rst", 6) }
+
+        // 14) Markdown
         if t.contains("\n# ") || t.hasPrefix("# ") || t.contains("\n- ") || t.contains("\n* ") { bump("markdown", 8) }
 
         // Conflict resolution tweaks

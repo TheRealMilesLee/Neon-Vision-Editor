@@ -17,7 +17,7 @@
 </p>
 
 > Status: **beta**  
-> Latest release: **v0.4.2-beta**  
+> Latest release: **v0.4.3-beta**  
 > Platform target: **macOS 26 (Tahoe)**  
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.2-beta**
+- Latest release: **v0.4.3-beta**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *not yet*
 
@@ -112,18 +112,26 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.3-beta (summary)
+
+- Added syntax highlighting for **COBOL**, **Dotenv**, **Proto**, **GraphQL**, **reStructuredText**, and **Nginx**.
+- Added extension and dotfile mapping for `.cob`, `.cbl`, `.cobol`, `.env*`, `.proto`, `.graphql`, `.gql`, `.rst`, and `.conf`.
+- Added language picker entries for the new languages across toolbar and command menus.
+- Added sample fixtures for manual verification of new language detection and highlighting.
+
 ### v0.4.2-beta (summary)
 
 - Fixed toolbar/menu actions to target the active window only.
 - Fixed multi-window command routing to use the focused window model.
 - Unified persistence behavior for Brain Dump and translucent window toggles.
 - Removed duplicate `Cmd+F` binding conflict in toolbar wiring.
-- Verified command-system changes on macOS and iOS simulator builds.
-- Added syntax highlighting support for `vim`, `log`, and `ipynb` files.
+- Added syntax highlighting support for `vim`, `log`, and `ipynb`.
 - Added extension-based auto-detection for `.vim`, `.log`, `.ipynb`, and `.vimrc`.
-- Improved header file default highlighting by mapping `.h` to `cpp`.
-- Added language picker entries for **Vim**, **Log**, and **Jupyter Notebook**.
-- Fixed drag & drop import of larger text and csv files
+
+### v0.4.1-beta (summary)
+
+- App Store security and distribution readiness updates.
+- Added release/distribution documentation and checklist updates.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -143,12 +151,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.2-beta`
+- Tag: `v0.4.3-beta`
 - Tagged commit: `bc7ce77f6e08c3a751b5f80ac60ab2045956e736`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.2-beta
+git rev-parse --verify v0.4.3-beta
 ```
 
 - Verify downloaded artifact checksum locally:

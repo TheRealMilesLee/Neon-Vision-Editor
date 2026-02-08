@@ -42,10 +42,16 @@ extension ContentView {
     @ViewBuilder
     private var languagePickerControl: some View {
         Picker("Language", selection: currentLanguageBinding) {
-            ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+            ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                 let label: String = {
                     switch lang {
                     case "php": return "PHP"
+                    case "cobol": return "COBOL"
+                    case "dotenv": return "Dotenv"
+                    case "proto": return "Proto"
+                    case "graphql": return "GraphQL"
+                    case "rst": return "reStructuredText"
+                    case "nginx": return "Nginx"
                     case "objective-c": return "Objective-C"
                     case "csharp": return "C#"
                     case "cpp": return "C++"
@@ -291,10 +297,16 @@ extension ContentView {
 #else
         ToolbarItemGroup(placement: .automatic) {
             Picker("Language", selection: currentLanguageBinding) {
-                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                     let label: String = {
                         switch lang {
                         case "php": return "PHP"
+                        case "cobol": return "COBOL"
+                        case "dotenv": return "Dotenv"
+                        case "proto": return "Proto"
+                        case "graphql": return "GraphQL"
+                        case "rst": return "reStructuredText"
+                        case "nginx": return "Nginx"
                         case "objective-c": return "Objective‑C"
                         case "csharp": return "C#"
                         case "cpp": return "C++"
