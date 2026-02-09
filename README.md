@@ -186,7 +186,7 @@ open "Neon Vision Editor.xcodeproj"
 If you want to support development:
 
 - [Patreon](https://www.patreon.com/h3p)
-- [Other options](https://h3p.me/home)
+- [My site h3p.me](https://h3p.me/home)
 
 ## License
 
