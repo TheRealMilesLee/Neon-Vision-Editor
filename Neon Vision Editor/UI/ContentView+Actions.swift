@@ -356,7 +356,7 @@ extension ContentView {
         return readChildren(of: root)
     }
 
-    private func setProjectFolder(_ folderURL: URL) {
+    func setProjectFolder(_ folderURL: URL) {
 #if canImport(UIKit)
         if let previous = projectFolderSecurityURL {
             previous.stopAccessingSecurityScopedResource()
