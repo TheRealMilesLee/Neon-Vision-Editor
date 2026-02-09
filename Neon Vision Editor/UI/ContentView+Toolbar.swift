@@ -41,8 +41,8 @@ extension ContentView {
 
     @ViewBuilder
     private var languagePickerControl: some View {
-        Picker("Language", selection: currentLanguagePickerBinding) {
-            ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+        Picker("Language", selection: currentLanguageBinding) {
+            ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                 let label: String = {
                     switch lang {
                     case "php": return "PHP"
@@ -54,7 +54,6 @@ extension ContentView {
                     case "nginx": return "Nginx"
                     case "objective-c": return "Objective-C"
                     case "csharp": return "C#"
-                    case "c": return "C"
                     case "cpp": return "C++"
                     case "json": return "JSON"
                     case "xml": return "XML"
@@ -138,14 +137,6 @@ extension ContentView {
     }
 
     @ViewBuilder
-    private var insertTemplateControl: some View {
-        Button(action: { insertTemplateForCurrentLanguage() }) {
-            Image(systemName: "doc.badge.plus")
-        }
-        .help("Insert Template for Current Language")
-    }
-
-    @ViewBuilder
     private var openFileControl: some View {
         Button(action: { openFileFromToolbar() }) {
             Image(systemName: "folder")
@@ -196,7 +187,7 @@ extension ContentView {
 
     @ViewBuilder
     private var autoCompletionControl: some View {
-        Button(action: { toggleAutoCompletion() }) {
+        Button(action: { isAutoCompletionEnabled.toggle() }) {
             Image(systemName: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
         }
         .help(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion")
@@ -216,12 +207,8 @@ extension ContentView {
     @ViewBuilder
     private var moreActionsControl: some View {
         Menu {
-            Button(action: { toggleAutoCompletion() }) {
+            Button(action: { isAutoCompletionEnabled.toggle() }) {
                 Label(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion", systemImage: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
-            }
-
-            Button(action: { insertTemplateForCurrentLanguage() }) {
-                Label("Insert Template", systemImage: "doc.badge.plus")
             }
 
             Button(action: { openFileFromToolbar() }) {
@@ -309,8 +296,8 @@ extension ContentView {
         }
 #else
         ToolbarItemGroup(placement: .automatic) {
-            Picker("Language", selection: currentLanguagePickerBinding) {
-                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+            Picker("Language", selection: currentLanguageBinding) {
+                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                     let label: String = {
                         switch lang {
                         case "php": return "PHP"
@@ -322,7 +309,6 @@ extension ContentView {
                         case "nginx": return "Nginx"
                         case "objective-c": return "Objective‑C"
                         case "csharp": return "C#"
-                        case "c": return "C"
                         case "cpp": return "C++"
                         case "json": return "JSON"
                         case "xml": return "XML"
@@ -398,14 +384,7 @@ extension ContentView {
             .help("Clear Editor")
 
             Button(action: {
-                insertTemplateForCurrentLanguage()
-            }) {
-                Image(systemName: "doc.badge.plus")
-            }
-            .help("Insert Template for Current Language")
-
-            Button(action: {
-                toggleAutoCompletion()
+                isAutoCompletionEnabled.toggle()
             }) {
                 Image(systemName: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
             }

@@ -70,7 +70,7 @@ class EditorViewModel: ObservableObject {
         "hpp": "cpp",
         "hh": "cpp",
         "h": "cpp",
-        "cs": "csharp",
+        //"cs": "csharp",  // Removed this line as per instructions
         "m": "objective-c",
         "mm": "objective-c",
         "json": "json",
@@ -98,7 +98,7 @@ class EditorViewModel: ObservableObject {
     }
     
     func addNewTab() {
-        let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: "plain", fileURL: nil, languageLocked: true)
+        let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: "swift", fileURL: nil)
         tabs.append(newTab)
         selectedTabID = newTab.id
     }

@@ -45,7 +45,7 @@ struct ContentView: View {
     // Single-document fallback state (used when no tab model is selected)
     @State var selectedModel: AIModel = .appleIntelligence
     @State var singleContent: String = ""
-    @State var singleLanguage: String = "plain"
+    @State var singleLanguage: String = "swift"
     @State var caretStatus: String = "Ln 1, Col 1"
     @State var editorFontSize: CGFloat = 14
     @State var lastProviderUsed: String = "Apple"
@@ -59,7 +59,6 @@ struct ContentView: View {
     // Debounce handle for inline completion
     @State var lastCompletionWorkItem: DispatchWorkItem?
     @State var isAutoCompletionEnabled: Bool = false
-    @State private var isApplyingCompletion: Bool = false
     @State var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
 
     // Added missing popover UI state
@@ -93,14 +92,10 @@ struct ContentView: View {
     @State var droppedFileLoadLabel: String = ""
     @State var largeFileModeEnabled: Bool = false
     @AppStorage("HasSeenWelcomeTourV1") var hasSeenWelcomeTourV1: Bool = false
-    @AppStorage("WelcomeTourSeenRelease") var welcomeTourSeenRelease: String = ""
     @State var showWelcomeTour: Bool = false
 #if os(macOS)
     @State private var hostWindowNumber: Int? = nil
 #endif
-    @State private var showLanguageSetupPrompt: Bool = false
-    @State private var languagePromptSelection: String = "plain"
-    @State private var languagePromptInsertTemplate: Bool = false
 
 #if USE_FOUNDATION_MODELS
     var appleModelAvailable: Bool { true }
@@ -281,16 +276,25 @@ struct ContentView: View {
 
         let suggestion = await generateModelCompletion(prefix: contextPrefix, language: currentLanguage)
 
+        guard !suggestion.isEmpty else { return }
+
+        // Insert suggestion after caret without duplicating existing text and without scrolling
         await MainActor.run {
-            guard let accepting = textView as? AcceptingTextView else { return }
             let currentText = textView.string as NSString
+            let insertionRange = NSRange(location: sel.location, length: 0)
+            // Check for duplication: skip if suggestion prefix matches next characters after caret
             let nextRangeLength = min(suggestion.count, currentText.length - sel.location)
             let nextText = nextRangeLength > 0 ? currentText.substring(with: NSRange(location: sel.location, length: nextRangeLength)) : ""
-            if suggestion.isEmpty || nextText.starts(with: suggestion) {
-                accepting.clearInlineSuggestion()
+            if nextText.starts(with: suggestion) {
+                // Already present, do nothing
                 return
             }
-            accepting.showInlineSuggestion(suggestion, at: sel.location)
+            // Insert the suggestion
+            textView.insertText(suggestion, replacementRange: insertionRange)
+            // Restore the selection to after inserted text
+            textView.setSelectedRange(NSRange(location: sel.location + (suggestion as NSString).length, length: 0))
+            // Scroll to visible range of inserted text
+            textView.scrollRangeToVisible(NSRange(location: sel.location + (suggestion as NSString).length, length: 0))
         }
 #else
         // iOS inline completion hook can be added for UITextView selection APIs.
@@ -680,27 +684,10 @@ struct ContentView: View {
             result = String(result[..<closingFenceRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Keep a single line only
-        if let firstLine = result.components(separatedBy: .newlines).first {
-            result = firstLine
-        }
-
-        // Trim leading whitespace so the ghost text aligns at the caret
-        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Keep the completion short and code-like
-        if result.count > 40 {
-            let idx = result.index(result.startIndex, offsetBy: 40)
-            result = String(result[..<idx])
-            if let lastSpace = result.lastIndex(of: " ") {
-                result = String(result[..<lastSpace])
-            }
-        }
-
-        // Filter out suggestions that are mostly prose
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_()[]{}.,;:+-/*=<>!|&%?\"'` \t")
-        if result.unicodeScalars.contains(where: { !allowed.contains($0) }) {
-            return ""
+        // Take only up to 2 lines to avoid big insertions
+        let lines = result.components(separatedBy: .newlines)
+        if lines.count > 2 {
+            result = lines.prefix(2).joined(separator: "\n")
         }
 
         return result
@@ -811,7 +798,7 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleCodeCompletionRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
-                toggleAutoCompletion()
+                isAutoCompletionEnabled.toggle()
             }
             .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
@@ -879,13 +866,13 @@ struct ContentView: View {
 #if os(macOS)
         view
             .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
-                guard isAutoCompletionEnabled && !viewModel.isBrainDumpMode && !isApplyingCompletion else { return }
+                guard isAutoCompletionEnabled && !viewModel.isBrainDumpMode else { return }
                 lastCompletionWorkItem?.cancel()
                 let work = DispatchWorkItem {
                     performInlineCompletion()
                 }
                 lastCompletionWorkItem = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
             }
 #else
         view
@@ -986,13 +973,9 @@ struct ContentView: View {
                 onSelect: { selectQuickSwitcherItem($0) }
             )
         }
-        .sheet(isPresented: $showLanguageSetupPrompt) {
-            languageSetupSheet
-        }
         .sheet(isPresented: $showWelcomeTour) {
             WelcomeTourView {
                 hasSeenWelcomeTourV1 = true
-                welcomeTourSeenRelease = WelcomeTourView.releaseID
                 showWelcomeTour = false
             }
         }
@@ -1038,7 +1021,7 @@ struct ContentView: View {
             }
 
             applyWindowTranslucency(enableTranslucentWindow)
-            if !hasSeenWelcomeTourV1 || welcomeTourSeenRelease != WelcomeTourView.releaseID {
+            if !hasSeenWelcomeTourV1 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     showWelcomeTour = true
                 }
@@ -1108,243 +1091,14 @@ struct ContentView: View {
         }
     }
 
-    var currentLanguagePickerBinding: Binding<String> {
-        Binding(
-            get: { currentLanguageBinding.wrappedValue },
-            set: { newValue in
-                if let tab = viewModel.selectedTab {
-                    viewModel.updateTabLanguage(tab: tab, language: newValue)
-                } else {
-                    singleLanguage = newValue
-                }
-            }
-        )
-    }
-
     var currentContent: String { currentContentBinding.wrappedValue }
     var currentLanguage: String { currentLanguageBinding.wrappedValue }
-
-    func toggleAutoCompletion() {
-        let willEnable = !isAutoCompletionEnabled
-        if willEnable && viewModel.isBrainDumpMode {
-            viewModel.isBrainDumpMode = false
-            UserDefaults.standard.set(false, forKey: "BrainDumpModeEnabled")
-        }
-        isAutoCompletionEnabled.toggle()
-        if willEnable {
-#if USE_FOUNDATION_MODELS
-            AppleFM.isEnabled = true
-#endif
-            maybePromptForLanguageSetup()
-        }
-    }
-
-    private func maybePromptForLanguageSetup() {
-        guard currentLanguage == "plain" else { return }
-        languagePromptSelection = currentLanguage == "plain" ? "plain" : currentLanguage
-        languagePromptInsertTemplate = false
-        showLanguageSetupPrompt = true
-    }
-
-    private func applyLanguageSelection(language: String, insertTemplate: Bool) {
-        let contentIsEmpty = currentContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if let tab = viewModel.selectedTab {
-            viewModel.updateTabLanguage(tab: tab, language: language)
-            if insertTemplate, contentIsEmpty, let template = starterTemplate(for: language) {
-                viewModel.updateTabContent(tab: tab, content: template)
-            }
-        } else {
-            singleLanguage = language
-            if insertTemplate, contentIsEmpty, let template = starterTemplate(for: language) {
-                singleContent = template
-            }
-        }
-    }
-
-    private var languageSetupSheet: some View {
-        let contentIsEmpty = currentContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let canInsertTemplate = contentIsEmpty
-
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("Choose a language for code completion")
-                .font(.headline)
-            Text("You can change this later from the Language picker.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            Picker("Language", selection: $languagePromptSelection) {
-                ForEach(languageOptions, id: \.self) { lang in
-                    Text(languageLabel(for: lang)).tag(lang)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 240)
-
-            if canInsertTemplate {
-                Toggle("Insert starter template", isOn: $languagePromptInsertTemplate)
-            }
-
-            HStack {
-                Button("Use Plain Text") {
-                    applyLanguageSelection(language: "plain", insertTemplate: false)
-                    showLanguageSetupPrompt = false
-                }
-                Spacer()
-                Button("Use Selected Language") {
-                    applyLanguageSelection(language: languagePromptSelection, insertTemplate: languagePromptInsertTemplate)
-                    showLanguageSetupPrompt = false
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(minWidth: 340)
-    }
-
-    private var languageOptions: [String] {
-        ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
-    }
-
-    private func languageLabel(for lang: String) -> String {
-        switch lang {
-        case "php": return "PHP"
-        case "cobol": return "COBOL"
-        case "dotenv": return "Dotenv"
-        case "proto": return "Proto"
-        case "graphql": return "GraphQL"
-        case "rst": return "reStructuredText"
-        case "nginx": return "Nginx"
-        case "objective-c": return "Objective-C"
-        case "csharp": return "C#"
-        case "c": return "C"
-        case "cpp": return "C++"
-        case "json": return "JSON"
-        case "xml": return "XML"
-        case "yaml": return "YAML"
-        case "toml": return "TOML"
-        case "csv": return "CSV"
-        case "ini": return "INI"
-        case "sql": return "SQL"
-        case "vim": return "Vim"
-        case "log": return "Log"
-        case "ipynb": return "Jupyter Notebook"
-        case "html": return "HTML"
-        case "css": return "CSS"
-        case "standard": return "Standard"
-        default: return lang.capitalized
-        }
-    }
-
-    private func starterTemplate(for language: String) -> String? {
-        switch language {
-        case "swift":
-            return "import Foundation\n\n// TODO: Add code here\n"
-        case "python":
-            return "def main():\n    pass\n\n\nif __name__ == \"__main__\":\n    main()\n"
-        case "javascript":
-            return "\"use strict\";\n\nfunction main() {\n  // TODO: Add code here\n}\n\nmain();\n"
-        case "typescript":
-            return "function main(): void {\n  // TODO: Add code here\n}\n\nmain();\n"
-        case "java":
-            return "public class Main {\n    public static void main(String[] args) {\n        // TODO: Add code here\n    }\n}\n"
-        case "kotlin":
-            return "fun main() {\n    // TODO: Add code here\n}\n"
-        case "go":
-            return "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n"
-        case "ruby":
-            return "def main\n  # TODO: Add code here\nend\n\nmain\n"
-        case "rust":
-            return "fn main() {\n    // TODO: Add code here\n}\n"
-        case "php":
-            return "<?php\n\n// TODO: Add code here\n"
-        case "cobol":
-            return "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. MAIN.\n\n       PROCEDURE DIVISION.\n           DISPLAY \"TODO\".\n           STOP RUN.\n"
-        case "dotenv":
-            return "# TODO=VALUE\n"
-        case "proto":
-            return "syntax = \"proto3\";\n\npackage example;\n\nmessage Example {\n  string id = 1;\n}\n"
-        case "graphql":
-            return "type Query {\n  hello: String\n}\n"
-        case "rst":
-            return "Title\n=====\n\nWrite here.\n"
-        case "nginx":
-            return "server {\n    listen 80;\n    server_name example.com;\n\n    location / {\n        return 200 \"TODO\";\n    }\n}\n"
-        case "c":
-            return "#include <stdio.h>\n\nint main(void) {\n    // TODO: Add code here\n    return 0;\n}\n"
-        case "cpp":
-            return "#include <iostream>\n\nint main() {\n    // TODO: Add code here\n    return 0;\n}\n"
-        case "csharp":
-            return "using System;\n\npublic class Program {\n    public static void Main(string[] args) {\n        // TODO: Add code here\n    }\n}\n"
-        case "objective-c":
-            return "#import <Foundation/Foundation.h>\n\nint main(int argc, const char * argv[]) {\n    @autoreleasepool {\n        // TODO: Add code here\n    }\n    return 0;\n}\n"
-        case "html":
-            return "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Document</title>\n</head>\n<body>\n\n</body>\n</html>\n"
-        case "css":
-            return "/* TODO: Add styles here */\n\nbody {\n  margin: 0;\n}\n"
-        case "sql":
-            return "-- TODO: Add queries here\n"
-        case "markdown":
-            return "# Title\n\nWrite here.\n"
-        case "yaml":
-            return "# TODO: Add config here\n"
-        case "json":
-            return "{\n  \"todo\": true\n}\n"
-        case "xml":
-            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root>\n  <todo>true</todo>\n</root>\n"
-        case "toml":
-            return "# TODO = \"value\"\n"
-        case "csv":
-            return "col1,col2\nvalue1,value2\n"
-        case "ini":
-            return "[section]\nkey=value\n"
-        case "vim":
-            return "\" TODO: Add vim config here\n"
-        case "log":
-            return "INFO: TODO\n"
-        case "ipynb":
-            return "{\n  \"cells\": [],\n  \"metadata\": {},\n  \"nbformat\": 4,\n  \"nbformat_minor\": 5\n}\n"
-        case "bash":
-            return "#!/usr/bin/env bash\n\nset -euo pipefail\n\n# TODO: Add script here\n"
-        case "zsh":
-            return "#!/usr/bin/env zsh\n\nset -euo pipefail\n\n# TODO: Add script here\n"
-        case "powershell":
-            return "# TODO: Add script here\n"
-        case "standard":
-            return "// TODO: Add code here\n"
-        case "plain":
-            return "TODO\n"
-        default:
-            return "TODO\n"
-        }
-    }
-
-    func insertTemplateForCurrentLanguage() {
-        let language = currentLanguage
-        guard let template = starterTemplate(for: language) else { return }
-
-        if let tab = viewModel.selectedTab {
-            let content = tab.content
-            let updated: String
-            if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                updated = template
-            } else {
-                updated = content + (content.hasSuffix("\n") ? "\n" : "\n\n") + template
-            }
-            viewModel.updateTabContent(tab: tab, content: updated)
-        } else {
-            if singleContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                singleContent = template
-            } else {
-                singleContent = singleContent + (singleContent.hasSuffix("\n") ? "\n" : "\n\n") + template
-            }
-        }
-    }
 
     /// Detects language using Apple Foundation Models when available, with a heuristic fallback.
     /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
-        let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
+        let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
 
         #if USE_FOUNDATION_MODELS
         // Attempt a lightweight model-based detection via AppleIntelligenceAIClient if available

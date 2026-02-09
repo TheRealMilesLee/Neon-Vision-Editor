@@ -17,7 +17,7 @@
 </p>
 
 > Status: **beta**  
-> Latest release: **v0.4.4-beta**  
+> Latest release: **v0.4.3-beta**  
 > Platform target: **macOS 26 (Tahoe)**  
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.4-beta**
+- Latest release: **v0.4.3-beta**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *not yet*
 
@@ -83,14 +83,10 @@ If macOS blocks first launch:
 ## Features
 
 - Fast loading for regular and large text files.
-- Tabbed editing with per-file language support.
-- Automatic syntax highlighting for many languages and formats.
-- Inline code completion with Tab-to-accept ghost suggestions. **(NEW in v0.4.4-beta)**
-- Starter templates for all languages with one-click insert. **(NEW in v0.4.4-beta)**
 - Regex Find/Replace with Replace All.
 - Project tree sidebar plus Quick Open (`Cmd+P`).
 - Optional Vim mode (basic normal/insert workflow).
-- Multi-window workflow with focused-window commands.
+- Automatic syntax highlighting for many languages and formats.
 - Native Swift/AppKit editor experience.
 - No telemetry.
 
@@ -113,17 +109,8 @@ If macOS blocks first launch:
 | `Cmd+Option+S` | Toggle Sidebar |
 | `Cmd+Option+L` | Toggle Line Wrap |
 | `Cmd+Shift+D` | Toggle Brain Dump Mode |
-| `Tab` | Accept code completion (when shown) |
 
 ## Changelog
-
-### v0.4.4-beta (summary)
-
-- Added inline code completion ghost text with Tab-to-accept behavior.
-- Added starter templates for all languages and a toolbar insert button.
-- Improved language detection and mapping, including C and C# recognition.
-- Updated welcome tour with release highlights and a full toolbar/shortcut guide.
-- Added language detection tests and a standalone test target.
 
 ### v0.4.3-beta (summary)
 
@@ -162,17 +149,16 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 - API keys are stored in Keychain (`SecureTokenStore`), not `UserDefaults`.
 - Network traffic uses HTTPS.
 - No telemetry.
-- External AI requests only occur when code completion is enabled and a provider is selected.
 - Security policy and reporting details: [`SECURITY.md`](SECURITY.md).
 
 ## Release Integrity
 
-- Tag: `v0.4.4-beta`
-- Tagged commit: `TBD`
+- Tag: `v0.4.3-beta`
+- Tagged commit: `bc7ce77f6e08c3a751b5f80ac60ab2045956e736`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.4-beta
+git rev-parse --verify v0.4.3-beta
 ```
 
 - Verify downloaded artifact checksum locally:

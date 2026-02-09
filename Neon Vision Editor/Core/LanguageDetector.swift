@@ -4,9 +4,11 @@ public struct LanguageDetector {
     public static let shared = LanguageDetector()
     private init() {}
 
-    // Detection toggles (enabled by default)
-    public static var csharpDetectionEnabled: Bool = true
-    public static var cDetectionEnabled: Bool = true
+    // Temporary kill-switch for C# detection; set to true to re-enable
+    public static var csharpDetectionEnabled: Bool = false
+
+    // Temporary kill-switch for C detection; set to true to re-enable
+    public static var cDetectionEnabled: Bool = false
 
     // Known extension to language map
     private let extensionMap: [String: String] = [
@@ -142,12 +144,6 @@ public struct LanguageDetector {
             "csv": 0,
             "python": 0,
             "javascript": 0,
-            "typescript": 0,
-            "java": 0,
-            "kotlin": 0,
-            "go": 0,
-            "ruby": 0,
-            "rust": 0,
             "dotenv": 0,
             "proto": 0,
             "graphql": 0,
@@ -159,17 +155,6 @@ public struct LanguageDetector {
             "markdown": 0,
             "json": 0,
             "html": 0,
-            "sql": 0,
-            "xml": 0,
-            "yaml": 0,
-            "toml": 0,
-            "ini": 0,
-            "vim": 0,
-            "log": 0,
-            "ipynb": 0,
-            "powershell": 0,
-            "cobol": 0,
-            "objective-c": 0,
             "bash": 0,
             "zsh": 0
         ]
@@ -197,42 +182,21 @@ public struct LanguageDetector {
         if t.contains("```python") { bump("python", 100) }
         if t.contains("```js") || t.contains("```javascript") { bump("javascript", 100) }
         if t.contains("```php") { bump("php", 100) }
-        if t.contains("```ts") || t.contains("```typescript") { bump("typescript", 100) }
-        if t.contains("```java") { bump("java", 100) }
-        if t.contains("```kotlin") || t.contains("```kt") { bump("kotlin", 100) }
-        if t.contains("```go") { bump("go", 100) }
-        if t.contains("```ruby") || t.contains("```rb") { bump("ruby", 100) }
-        if t.contains("```rust") || t.contains("```rs") { bump("rust", 100) }
         if t.contains("```csharp") || t.contains("```cs") { bump("csharp", 100) }
         if t.contains("```cpp") || t.contains("```c++") { bump("cpp", 100) }
-        if t.contains("```c") { bump("c", 100) }
         if t.contains("```proto") { bump("proto", 100) }
         if t.contains("```graphql") || t.contains("```gql") { bump("graphql", 100) }
         if t.contains("```dotenv") || t.contains("```env") { bump("dotenv", 100) }
         if t.contains("```rst") { bump("rst", 100) }
-        if t.contains("```sql") { bump("sql", 100) }
-        if t.contains("```xml") { bump("xml", 100) }
-        if t.contains("```yaml") || t.contains("```yml") { bump("yaml", 100) }
-        if t.contains("```toml") { bump("toml", 100) }
-        if t.contains("```ini") { bump("ini", 100) }
-        if t.contains("```vim") { bump("vim", 100) }
-        if t.contains("```powershell") || t.contains("```ps1") { bump("powershell", 100) }
-        if t.contains("```cobol") { bump("cobol", 100) }
-        if t.contains("```objective-c") || t.contains("```objc") { bump("objective-c", 100) }
 
         // 2) Single-language quick checks
         if let first = trimmed.first, (first == "{" || first == "[") && t.contains(":") { bump("json", 90) }
-        if t.contains("<?xml") { bump("xml", 90) }
         if t.contains("<html") || t.contains("<body") || t.contains("</") { bump("html", 90) }
         if t.contains("<?php") || t.contains("<?=") { bump("php", 90) }
         if t.contains("syntax = \"proto") { bump("proto", 90) }
         if t.contains("schema {") || t.contains("type query") { bump("graphql", 70) }
         if t.contains("server {") || t.contains("http {") || t.contains("location /") { bump("nginx", 70) }
         if t.contains(".. toctree::") || t.contains(".. code-block::") { bump("rst", 70) }
-        if t.contains("[") && t.contains("]") && t.range(of: #"(?m)^\s*\[[^]]+\]\s*$"#, options: .regularExpression) != nil { bump("ini", 70) }
-        if t.range(of: #"(?m)^[A-Za-z0-9_.-]+\s*:\s+\S+"#, options: .regularExpression) != nil { bump("yaml", 60) }
-        if t.range(of: #"(?m)^\s*\w+\s*=\s*.+$"#, options: .regularExpression) != nil { bump("toml", 60) }
-        if t.contains("\"cells\"") && t.contains("\"cell_type\"") && t.contains("\"metadata\"") { bump("ipynb", 90) }
         if t.range(of: #"(?m)^[A-Z_][A-Z0-9_]*\s*="#, options: .regularExpression) != nil { bump("dotenv", 70) }
         if raw.contains(",") && raw.contains("\n") {
             let lines = raw.split(separator: "\n", omittingEmptySubsequences: true)
@@ -245,7 +209,6 @@ public struct LanguageDetector {
         }
         if t.contains("#!/bin/bash") || t.contains("#!/usr/bin/env bash") { bump("bash", 90) }
         if t.contains("#!/bin/zsh") || t.contains("#!/usr/bin/env zsh") { bump("zsh", 90) }
-        if t.contains("#!/bin/sh") || t.contains("#!/usr/bin/env sh") { bump("bash", 40) }
 
         // 3) Swift signals
         let swiftSignals = [
@@ -331,18 +294,10 @@ public struct LanguageDetector {
 
         // 7) JavaScript / TypeScript
         if t.contains("function ") || t.contains("=>") || t.contains("console.log") { bump("javascript", 15) }
-        if t.contains("interface ") || t.contains("type ") || t.contains("implements ") || t.contains("readonly ") || t.contains(" as const") {
-            bump("typescript", 16)
-        }
-        if t.contains(": string") || t.contains(": number") || t.contains(": boolean") {
-            bump("typescript", 10)
-        }
 
         // 8) C/C++
-        if t.contains("#include") { bump("c", 10); bump("cpp", 10) }
-        if t.contains("std::") { bump("cpp", 20) }
-        if t.contains("int main(") { bump("c", 6); bump("cpp", 6) }
-        if t.contains("printf(") || t.contains("scanf(") { bump("c", 8) }
+        if t.contains("#include") || t.contains("std::") { bump("cpp", 20) }
+        if t.contains("int main(") { bump("cpp", 8) }
 
         // 9) CSS
         if t.contains("{") && t.contains("}") && t.contains(":") && t.contains(";") && !t.contains("func ") {
@@ -364,56 +319,6 @@ public struct LanguageDetector {
 
         // 14) Markdown
         if t.contains("\n# ") || t.hasPrefix("# ") || t.contains("\n- ") || t.contains("\n* ") { bump("markdown", 8) }
-
-        // 15) Java
-        if t.contains("public class ") || t.contains("public static void main") || t.contains("package ") { bump("java", 18) }
-        if t.contains("import java.") { bump("java", 12) }
-
-        // 16) Kotlin
-        if t.contains("fun ") || t.contains("val ") || t.contains("var ") || t.contains("data class ") || t.contains("object ") { bump("kotlin", 12) }
-        if t.contains("suspend fun") || t.contains("companion object") { bump("kotlin", 12) }
-
-        // 17) Go
-        if t.contains("package main") || t.contains("func ") { bump("go", 14) }
-        if t.contains("import (") || t.contains("fmt.") { bump("go", 8) }
-
-        // 18) Ruby
-        if t.contains("\ndef ") || t.contains("\nclass ") || t.contains("\nmodule ") { bump("ruby", 12) }
-        if t.contains("\nend") || t.contains("puts ") { bump("ruby", 6) }
-
-        // 19) Rust
-        if t.contains("fn ") || t.contains("let mut ") || t.contains("use ") { bump("rust", 12) }
-        if t.contains("crate::") || t.contains("impl ") || t.contains("trait ") { bump("rust", 8) }
-
-        // 20) Objective-C
-        if t.contains("@interface") || t.contains("@implementation") || t.contains("#import <foundation") { bump("objective-c", 18) }
-
-        // 21) SQL
-        if t.contains("select ") || t.contains("insert ") || t.contains("update ") || t.contains("create table") { bump("sql", 14) }
-
-        // 22) XML
-        if t.contains("<?xml") || (t.contains("<") && t.contains("</") && !t.contains("<html")) { bump("xml", 10) }
-
-        // 23) YAML
-        if t.contains("---") || t.range(of: #"(?m)^\w+:\s+.+$"#, options: .regularExpression) != nil { bump("yaml", 8) }
-
-        // 24) TOML
-        if t.range(of: #"(?m)^\[[^\]]+\]$"#, options: .regularExpression) != nil { bump("toml", 8) }
-
-        // 25) INI
-        if t.range(of: #"(?m)^\[[^\]]+\]$"#, options: .regularExpression) != nil && t.range(of: #"(?m)^\w+\s*=\s*.+$"#, options: .regularExpression) != nil { bump("ini", 8) }
-
-        // 26) Vimscript
-        if t.contains("autocmd") || t.contains("nnoremap") || t.contains("inoremap") || t.contains("set ") { bump("vim", 10) }
-
-        // 27) Log
-        if t.range(of: #"(?m)^\[(info|warn|error|debug)\]"#, options: .regularExpression) != nil { bump("log", 8) }
-
-        // 28) PowerShell
-        if t.contains("param(") || t.contains("write-host") || t.contains("$psversiontable") { bump("powershell", 12) }
-
-        // 29) COBOL
-        if t.contains("identification division") || t.contains("procedure division") { bump("cobol", 14) }
 
         // Conflict resolution tweaks
         let swiftScore = scores["swift"] ?? 0
