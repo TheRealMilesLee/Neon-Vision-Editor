@@ -10,6 +10,16 @@
 		9825C2092ED77CF3007D8698 /* SwiftData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9825C2082ED77CF3007D8698 /* SwiftData.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		98D001C62F3A432F00AA505C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98EAE62B2E5F15E80050E579 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 98EAE6322E5F15E80050E579;
+			remoteInfo = "Neon Vision Editor";
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		7BED8C80E7234BC98B621ADA /* Neon Vision EditorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Neon Vision EditorTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9825C2082ED77CF3007D8698 /* SwiftData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftData.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.1.sdk/System/Library/Frameworks/SwiftData.framework; sourceTree = DEVELOPER_DIR; };
@@ -84,6 +94,9 @@
 			);
 			buildRules = (
 			);
+			dependencies = (
+				98D001C72F3A432F00AA505C /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				FCA13954DC9E4188A1DC88BE /* Neon Vision EditorTests */,
 			);
@@ -122,6 +135,7 @@
 				TargetAttributes = {
 					50864E55167D4016920786DF = {
 						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 98EAE6322E5F15E80050E579;
 					};
 					98EAE6322E5F15E80050E579 = {
 						CreatedOnToolsVersion = 26.0;
@@ -176,11 +190,19 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		98D001C72F3A432F00AA505C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 98EAE6322E5F15E80050E579 /* Neon Vision Editor */;
+			targetProxy = 98D001C62F3A432F00AA505C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		6907754433E24B5991080A1E /* Debug configuration for PBXNativeTarget "Neon Vision EditorTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "";
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				"BUNDLE_LOADER[sdk=iphoneos*]" = "";
 				"BUNDLE_LOADER[sdk=iphonesimulator*]" = "";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -193,7 +215,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = USE_FOUNDATION_MODELS;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Neon Vision Editor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Neon Vision Editor";
 				"TEST_HOST[sdk=iphoneos*]" = "";
 				"TEST_HOST[sdk=iphonesimulator*]" = "";
 			};
@@ -357,6 +379,36 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Neon Vision Editor";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_CFBundleDocumentTypes = (
+					{
+						CFBundleTypeName = "Property List";
+						CFBundleTypeRole = Editor;
+						LSHandlerRank = Owner;
+						LSItemContentTypes = (
+							"com.apple.property-list",
+							"public.xml",
+						);
+					},
+					{
+						CFBundleTypeName = "Shell Script";
+						CFBundleTypeRole = Editor;
+						LSHandlerRank = Owner;
+						LSItemContentTypes = (
+							"public.shell-script",
+							"public.plain-text",
+						);
+					},
+					{
+						CFBundleTypeName = "Text File";
+						CFBundleTypeRole = Editor;
+						LSHandlerRank = Owner;
+						LSItemContentTypes = (
+							"public.text",
+						);
+					}
+				);
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -432,6 +484,36 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Neon Vision Editor";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_CFBundleDocumentTypes = (
+					{
+						CFBundleTypeName = "Property List";
+						CFBundleTypeRole = Editor;
+						LSHandlerRank = Owner;
+						LSItemContentTypes = (
+							"com.apple.property-list",
+							"public.xml",
+						);
+					},
+					{
+						CFBundleTypeName = "Shell Script";
+						CFBundleTypeRole = Editor;
+						LSHandlerRank = Owner;
+						LSItemContentTypes = (
+							"public.shell-script",
+							"public.plain-text",
+						);
+					},
+					{
+						CFBundleTypeName = "Text File";
+						CFBundleTypeRole = Editor;
+						LSHandlerRank = Owner;
+						LSItemContentTypes = (
+							"public.text",
+						);
+					}
+				);
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -475,7 +557,7 @@
 		AE6A5A3DD7BA4432BF5BC554 /* Release configuration for PBXNativeTarget "Neon Vision EditorTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "";
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				"BUNDLE_LOADER[sdk=iphoneos*]" = "";
 				"BUNDLE_LOADER[sdk=iphonesimulator*]" = "";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -488,7 +570,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = USE_FOUNDATION_MODELS;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Neon Vision Editor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Neon Vision Editor";
 				"TEST_HOST[sdk=iphoneos*]" = "";
 				"TEST_HOST[sdk=iphonesimulator*]" = "";
 			};

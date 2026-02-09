@@ -422,9 +422,9 @@ struct WelcomeTourView: View {
             let columns = isCompact
                 ? [GridItem(.flexible(), spacing: 12)]
                 : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-            let dynamicMax = max(180, min(360, proxy.size.height * 0.45))
-            let maxGridHeight: CGFloat = isCompact ? min(dynamicMax, 260) : dynamicMax
-            let containerHeight = maxGridHeight + 72
+            let dynamicMax = max(220, min(420, proxy.size.height * 0.55))
+            let maxGridHeight: CGFloat = isCompact ? min(dynamicMax, 320) : dynamicMax
+            let innerHeight = maxGridHeight + 140
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("Toolbar buttons")
@@ -467,7 +467,16 @@ struct WelcomeTourView: View {
                 .frame(maxHeight: maxGridHeight)
                 .clipped()
             }
-            .frame(height: containerHeight)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.02 : 0.25))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 32, style: .continuous)
+                            .stroke(Color.white.opacity(colorScheme == .dark ? 0.12 : 0.15), lineWidth: 1)
+                    )
+            )
+            .frame(height: innerHeight)
         }
     }
 
