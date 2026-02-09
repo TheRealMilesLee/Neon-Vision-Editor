@@ -808,7 +808,7 @@ struct ContentView: View {
                 guard matchesCurrentWindow(notif) else { return }
                 toggleAutoCompletion()
             }
-            .onChange(of: isAutoCompletionEnabled) { enabled in
+            .onChange(of: isAutoCompletionEnabled) { _, enabled in
                 if enabled && viewModel.isBrainDumpMode {
                     viewModel.isBrainDumpMode = false
                     UserDefaults.standard.set(false, forKey: "BrainDumpModeEnabled")
@@ -1070,10 +1070,10 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: settingsLineWrapEnabled) { newValue in
+        .onChange(of: settingsLineWrapEnabled) { _, newValue in
             viewModel.isLineWrapEnabled = newValue
         }
-        .onChange(of: viewModel.isLineWrapEnabled) { newValue in
+        .onChange(of: viewModel.isLineWrapEnabled) { _, newValue in
             settingsLineWrapEnabled = newValue
         }
 #if os(macOS)

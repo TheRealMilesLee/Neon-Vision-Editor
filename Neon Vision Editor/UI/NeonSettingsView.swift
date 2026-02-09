@@ -73,9 +73,6 @@ struct NeonSettingsView: View {
             themeTab
                 .tabItem { Label("Themes", systemImage: "paintpalette") }
         }
-#if os(macOS)
-        .tabViewStyle(.sidebar)
-#endif
         .frame(minWidth: 860, minHeight: 620)
     }
 
@@ -178,7 +175,7 @@ struct NeonSettingsView: View {
 
     private var themeTab: some View {
         let isCustom = selectedTheme == "Custom"
-        HStack(spacing: 16) {
+        return HStack(spacing: 16) {
             List(themes, id: \.self, selection: $selectedTheme) { theme in
                 Text(theme)
             }

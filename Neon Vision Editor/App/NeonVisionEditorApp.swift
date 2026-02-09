@@ -123,11 +123,11 @@ struct NeonVisionEditorApp: App {
     private func applyTabbingPreference(_ value: String) {
         switch value {
         case "always":
-            NSWindow.userTabbingPreference = .always
+            NSWindow.allowsAutomaticWindowTabbing = true
         case "never":
-            NSWindow.userTabbingPreference = .manual
+            NSWindow.allowsAutomaticWindowTabbing = false
         default:
-            NSWindow.userTabbingPreference = .automatic
+            break
         }
     }
 #endif
@@ -170,7 +170,7 @@ struct NeonVisionEditorApp: App {
                     #endif
                 }
                 .onAppear { applyTabbingPreference(settingsOpenInTabs) }
-                .onChange(of: settingsOpenInTabs) { newValue in
+                .onChange(of: settingsOpenInTabs) { _, newValue in
                     applyTabbingPreference(newValue)
                 }
         }
