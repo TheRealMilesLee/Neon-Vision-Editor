@@ -76,6 +76,8 @@ struct ContentView: View {
     @State var showCompactSidebarSheet: Bool = false
     @State var projectRootFolderURL: URL? = nil
     @State var projectTreeNodes: [ProjectTreeNode] = []
+    @State var showProjectFolderPicker: Bool = false
+    @State var projectFolderSecurityURL: URL? = nil
     @State var pendingCloseTabID: UUID? = nil
     @State var showUnsavedCloseDialog: Bool = false
     @State var showIOSFileImporter: Bool = false
@@ -979,6 +981,17 @@ struct ContentView: View {
             .presentationDetents([.medium, .large])
         }
 #endif
+        #if canImport(UIKit)
+        .sheet(isPresented: $showProjectFolderPicker) {
+            ProjectFolderPicker(
+                onPick: { url in
+                    setProjectFolder(url)
+                    showProjectFolderPicker = false
+                },
+                onCancel: { showProjectFolderPicker = false }
+            )
+        }
+        #endif
         .sheet(isPresented: $showQuickSwitcher) {
             QuickFileSwitcherPanel(
                 query: $quickSwitcherQuery,

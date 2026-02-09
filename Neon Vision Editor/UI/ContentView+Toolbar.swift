@@ -117,6 +117,22 @@ extension ContentView {
     }
 
     @ViewBuilder
+    private var aiSelectorMenuControl: some View {
+        Menu {
+            Button("Apple Intelligence") { selectedModel = .appleIntelligence }
+            Button("Grok") { selectedModel = .grok }
+            Button("OpenAI") { selectedModel = .openAI }
+            Button("Gemini") { selectedModel = .gemini }
+            Button("Anthropic") { selectedModel = .anthropic }
+            Divider()
+            Button("API Settings…") { showAPISettings = true }
+        } label: {
+            Image(systemName: "brain.head.profile")
+        }
+        .help("AI Model & Settings")
+    }
+
+    @ViewBuilder
     private var activeProviderBadgeControl: some View {
         Text(activeProviderName)
             .font(.caption)
@@ -281,13 +297,12 @@ extension ContentView {
 
     @ViewBuilder
     private var iPadDistributedToolbarControls: some View {
+        aiSelectorMenuControl
+        activeProviderBadgeControl
         languagePickerControl
         newTabControl
         Spacer(minLength: 18)
         iPadPromotedActions
-        Spacer(minLength: 18)
-        aiSelectorControl
-        activeProviderBadgeControl
         Spacer(minLength: 18)
         clearEditorControl
         moreActionsControl

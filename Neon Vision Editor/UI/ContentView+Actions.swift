@@ -330,11 +330,10 @@ extension ContentView {
         panel.canCreateDirectories = false
         panel.showsHiddenFiles = false
         if panel.runModal() == .OK, let folderURL = panel.url {
-            projectRootFolderURL = folderURL
-            projectTreeNodes = buildProjectTree(at: folderURL)
+            setProjectFolder(folderURL)
         }
 #else
-        findStatusMessage = "Open Folder is currently available on macOS."
+        showProjectFolderPicker = true
 #endif
     }
 
@@ -355,6 +354,19 @@ extension ContentView {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else { return [] }
         return readChildren(of: root)
+    }
+
+    private func setProjectFolder(_ folderURL: URL) {
+#if canImport(UIKit)
+        if let previous = projectFolderSecurityURL {
+            previous.stopAccessingSecurityScopedResource()
+        }
+        if folderURL.startAccessingSecurityScopedResource() {
+            projectFolderSecurityURL = folderURL
+        }
+#endif
+        projectRootFolderURL = folderURL
+        projectTreeNodes = buildProjectTree(at: folderURL)
     }
 
     private func readChildren(of directory: URL) -> [ProjectTreeNode] {
