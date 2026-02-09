@@ -1,0 +1,132 @@
+name: Release macOS app (notarized)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.4.4-beta)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout (no external actions)
+        env:
+          TAG_NAME: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
+          git checkout -b "release-${TAG_NAME}" FETCH_HEAD
+
+      - name: Show Xcode Version
+        run: xcodebuild -version
+
+      - name: Import signing certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          if [[ -z "${MACOS_CERT_P12}" ]]; then
+            echo "Missing MACOS_CERT_P12 secret" >&2
+            exit 1
+          fi
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          echo "${MACOS_CERT_P12}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "${MACOS_CERT_PASSWORD}" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -p codesigning -v
+
+      - name: Build macOS archive (signed)
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+        run: |
+          xcodebuild \
+            -project "Neon Vision Editor.xcodeproj" \
+            -scheme "Neon Vision Editor" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            archive
+
+      - name: Export app
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+          EXPORT_PATH: ${{ runner.temp }}/export
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          mkdir -p "$EXPORT_PATH"
+          cat > "$RUNNER_TEMP/exportOptions.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>developer-id</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>teamID</key>
+  <string>${TEAM_ID}</string>
+  <key>signingCertificate</key>
+  <string>Developer ID Application</string>
+</dict>
+</plist>
+PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist "$RUNNER_TEMP/exportOptions.plist"
+
+      - name: Notarize app
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          APP_PATH="$EXPORT_PATH/Neon Vision Editor.app"
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "App not found at $APP_PATH" >&2
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$RUNNER_TEMP/submit.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/submit.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+
+      - name: Zip app (stapled)
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+        run: |
+          APP_PATH="$EXPORT_PATH/Neon Vision Editor.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "Neon.Vision.Editor.app.zip"
+
+      - name: Extract changelog section
+        env:
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          ./scripts/extract_changelog_section.sh CHANGELOG.md "$TAG_NAME" > release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "Neon Vision Editor $TAG_NAME" \
+            --notes-file release-notes.md \
+            "Neon.Vision.Editor.app.zip"

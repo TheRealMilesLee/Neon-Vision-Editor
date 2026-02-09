@@ -1,4 +1,4 @@
-name: Release macOS app
+name: Release macOS app (unsigned)
 
 on:
   push:
