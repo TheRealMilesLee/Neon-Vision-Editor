@@ -422,45 +422,53 @@ struct WelcomeTourView: View {
             let columns = isCompact
                 ? [GridItem(.flexible(), spacing: 12)]
                 : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+            let dynamicMax = max(180, min(360, proxy.size.height * 0.45))
+            let maxGridHeight: CGFloat = isCompact ? min(dynamicMax, 260) : dynamicMax
+            let containerHeight = maxGridHeight + 72
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("Toolbar buttons")
                     .font(.system(size: 16, weight: .semibold))
 
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                    ForEach(items) { item in
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: item.iconName)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 22)
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                        ForEach(items) { item in
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: item.iconName)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                                    .frame(width: 22)
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 8) {
-                                    Text(item.title)
-                                        .font(.system(size: 14, weight: .semibold))
-                                    shortcutCapsule(isPadShortcut ? item.shortcutPad : item.shortcutMac)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 8) {
+                                        Text(item.title)
+                                            .font(.system(size: 14, weight: .semibold))
+                                        shortcutCapsule(isPadShortcut ? item.shortcutPad : item.shortcutMac)
+                                    }
+                                    Text(item.description)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
                                 }
-                                Text(item.description)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
                             }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .stroke(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
+                                    )
+                            )
                         }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
-                                )
-                        )
                     }
+                    .padding(.bottom, 4)
                 }
+                .frame(maxHeight: maxGridHeight)
+                .clipped()
             }
+            .frame(height: containerHeight)
         }
-        .frame(minHeight: 320)
     }
 
     private var isPadShortcut: Bool {
@@ -472,17 +480,24 @@ struct WelcomeTourView: View {
     }
 
     private func shortcutCapsule(_ shortcut: String) -> some View {
-        let parts = shortcut.split(separator: "+").map { String($0) }
-        return HStack(spacing: 4) {
-            ForEach(parts, id: \.self) { part in
-                Text(part)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
-                    )
+        let trimmed = shortcut.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isNone = trimmed.isEmpty || trimmed.caseInsensitiveCompare("none") == .orderedSame
+        let parts = trimmed.split(separator: "+").map { String($0) }
+
+        return Group {
+            if !isNone {
+                HStack(spacing: 4) {
+                    ForEach(parts, id: \.self) { part in
+                        Text(part)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
+                            )
+                    }
+                }
             }
         }
     }
