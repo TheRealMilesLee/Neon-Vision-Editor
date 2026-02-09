@@ -21,6 +21,11 @@ final class AcceptingTextView: NSTextView {
     private var inlineSuggestionView: NSTextField?
     fileprivate var isApplyingInlineSuggestion: Bool = false
     fileprivate var recentlyAcceptedInlineSuggestion: Bool = false
+    var autoIndentEnabled: Bool = true
+    var autoCloseBracketsEnabled: Bool = true
+    var indentStyle: String = "spaces"
+    var indentWidth: Int = 4
+    var highlightCurrentLine: Bool = true
 
     // We want the caret at the *start* of the paste.
     private var pendingPasteCaretLocation: Int?
@@ -400,8 +405,7 @@ final class AcceptingTextView: NSTextView {
         }
 
         // Auto-indent by copying leading whitespace
-        if s == "\n" {
-            // Auto-indent: copy leading whitespace from current line
+        if s == "\n" && autoIndentEnabled {
             let ns = (string as NSString)
             let sel = selectedRange()
             let lineRange = ns.lineRange(for: NSRange(location: sel.location, length: 0))
@@ -410,13 +414,14 @@ final class AcceptingTextView: NSTextView {
                 length: max(0, sel.location - lineRange.location)
             ))
             let indent = currentLine.prefix { $0 == " " || $0 == "\t" }
-            super.insertText("\n" + indent, replacementRange: replacementRange)
+            let normalizedIndent = normalizedIndentation(String(indent))
+            super.insertText("\n" + normalizedIndent, replacementRange: replacementRange)
             return
         }
 
         // Auto-close common bracket/quote pairs
         let pairs: [String: String] = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
-        if let closing = pairs[s] {
+        if autoCloseBracketsEnabled, let closing = pairs[s] {
             let sel = selectedRange()
             super.insertText(s + closing, replacementRange: replacementRange)
             setSelectedRange(NSRange(location: sel.location + 1, length: 0))
@@ -424,6 +429,24 @@ final class AcceptingTextView: NSTextView {
         }
 
         super.insertText(insertString, replacementRange: replacementRange)
+    }
+
+    private func normalizedIndentation(_ indent: String) -> String {
+        guard indentWidth > 0 else { return indent }
+        switch indentStyle {
+        case "tabs":
+            let spacesCount = indent.filter { $0 == " " }.count
+            let tabsCount = indent.filter { $0 == "\t" }.count
+            let totalSpaces = spacesCount + (tabsCount * indentWidth)
+            let tabs = String(repeating: "\t", count: totalSpaces / indentWidth)
+            let leftover = String(repeating: " ", count: totalSpaces % indentWidth)
+            return tabs + leftover
+        default:
+            let tabsCount = indent.filter { $0 == "\t" }.count
+            let spacesCount = indent.filter { $0 == " " }.count
+            let totalSpaces = spacesCount + (tabsCount * indentWidth)
+            return String(repeating: " ", count: totalSpaces)
+        }
     }
 
     override func keyDown(with event: NSEvent) {
@@ -677,15 +700,48 @@ final class AcceptingTextView: NSTextView {
     }
 }
 
+final class PageGuideView: NSView {
+    weak var textView: NSTextView?
+    var column: Int = 80
+    var isEnabled: Bool = false
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard isEnabled, let textView else { return }
+        let font = textView.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let charWidth = ("M" as NSString).size(withAttributes: [.font: font]).width
+        let inset = textView.textContainerInset.width + (textView.textContainer?.lineFragmentPadding ?? 0)
+        let x = inset + CGFloat(column) * charWidth
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: x, y: dirtyRect.minY))
+        path.line(to: NSPoint(x: x, y: dirtyRect.maxY))
+        NSColor.separatorColor.withAlphaComponent(0.35).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+}
+
 // NSViewRepresentable wrapper around NSTextView to integrate with SwiftUI.
 struct CustomTextEditor: NSViewRepresentable {
     @Binding var text: String
     let language: String
     let colorScheme: ColorScheme
+    let fontName: String
     let fontSize: CGFloat
+    let lineHeightMultiple: CGFloat
     @Binding var isLineWrapEnabled: Bool
     let isLargeFileMode: Bool
     let translucentBackgroundEnabled: Bool
+    let showLineNumbers: Bool
+    let showInvisibles: Bool
+    let highlightCurrentLine: Bool
+    let showPageGuide: Bool
+    let pageGuideColumn: Int
+    let indentStyle: String
+    let indentWidth: Int
+    let autoIndentEnabled: Bool
+    let autoCloseBracketsEnabled: Bool
 
     // Toggle soft-wrapping by adjusting text container sizing and scroller visibility.
     private func applyWrapMode(isWrapped: Bool, textView: NSTextView, scrollView: NSScrollView) {
@@ -716,6 +772,19 @@ struct CustomTextEditor: NSViewRepresentable {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
+    private func resolvedFont() -> NSFont {
+        if let named = NSFont(name: fontName, size: fontSize) {
+            return named
+        }
+        return NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+    }
+
+    private func paragraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineHeightMultiple = max(0.9, lineHeightMultiple)
+        return style
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
         // Build scroll view and text view
         let scrollView = NSScrollView()
@@ -731,13 +800,17 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.usesFindBar = true
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.font = resolvedFont()
+        let style = paragraphStyle()
+        textView.defaultParagraphStyle = style
+        textView.typingAttributes[.paragraphStyle] = style
 
+        let theme = currentEditorTheme(colorScheme: colorScheme)
         if translucentBackgroundEnabled {
             textView.backgroundColor = .clear
             textView.drawsBackground = false
         } else {
-            textView.backgroundColor = .textBackgroundColor
+            textView.backgroundColor = NSColor(theme.background)
             textView.drawsBackground = true
         }
 
@@ -746,9 +819,18 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isSelectable = true
         textView.allowsUndo = true
-        textView.textColor = .labelColor
-        textView.insertionPointColor = .controlAccentColor
+        textView.textColor = NSColor(theme.text)
+        textView.insertionPointColor = NSColor(theme.cursor)
+        textView.selectedTextAttributes = [
+            .backgroundColor: NSColor(theme.selection)
+        ]
         textView.layoutManager?.allowsNonContiguousLayout = true
+        textView.showsInvisibleCharacters = showInvisibles
+        textView.autoIndentEnabled = autoIndentEnabled
+        textView.autoCloseBracketsEnabled = autoCloseBracketsEnabled
+        textView.indentStyle = indentStyle
+        textView.indentWidth = indentWidth
+        textView.highlightCurrentLine = highlightCurrentLine
 
         // Disable smart substitutions/detections that can interfere with selection when recoloring
         textView.isAutomaticTextCompletionEnabled = false
@@ -769,9 +851,20 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
 
         // Install line number ruler
-        scrollView.hasVerticalRuler = !isLargeFileMode
-        scrollView.rulersVisible = !isLargeFileMode
+        scrollView.hasVerticalRuler = showLineNumbers && !isLargeFileMode
+        scrollView.rulersVisible = showLineNumbers && !isLargeFileMode
         scrollView.verticalRulerView = LineNumberRulerView(textView: textView)
+
+        let pageGuideView = PageGuideView(frame: scrollView.bounds)
+        pageGuideView.autoresizingMask = [.width, .height]
+        pageGuideView.textView = textView
+        pageGuideView.column = pageGuideColumn
+        pageGuideView.isEnabled = showPageGuide
+        pageGuideView.isHidden = !showPageGuide
+        pageGuideView.wantsLayer = true
+        pageGuideView.layer?.backgroundColor = NSColor.clear.cgColor
+        scrollView.addSubview(pageGuideView)
+        context.coordinator.pageGuideView = pageGuideView
 
         // Apply wrapping and seed initial content
         applyWrapMode(isWrapped: isLineWrapEnabled && !isLargeFileMode, textView: textView, scrollView: scrollView)
@@ -810,9 +903,22 @@ struct CustomTextEditor: NSViewRepresentable {
                !isDropApplyInFlight && textView.string != text {
                 textView.string = text
             }
-            if textView.font?.pointSize != fontSize {
-                textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let targetFont = resolvedFont()
+            if textView.font != targetFont {
+                textView.font = targetFont
             }
+            let style = paragraphStyle()
+            if textView.defaultParagraphStyle != style {
+                textView.defaultParagraphStyle = style
+                textView.typingAttributes[.paragraphStyle] = style
+                let nsLen = (textView.string as NSString).length
+                if nsLen <= 200_000, let storage = textView.textStorage {
+                    storage.beginEditing()
+                    storage.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: nsLen))
+                    storage.endEditing()
+                }
+            }
+            let theme = currentEditorTheme(colorScheme: colorScheme)
             // Background color adjustments for translucency
             if translucentBackgroundEnabled {
                 nsView.drawsBackground = false
@@ -820,13 +926,32 @@ struct CustomTextEditor: NSViewRepresentable {
                 textView.drawsBackground = false
             } else {
                 nsView.drawsBackground = false
-                textView.backgroundColor = .textBackgroundColor
+                textView.backgroundColor = NSColor(theme.background)
                 textView.drawsBackground = true
             }
+            textView.textColor = NSColor(theme.text)
+            textView.insertionPointColor = NSColor(theme.cursor)
+            textView.selectedTextAttributes = [
+                .backgroundColor: NSColor(theme.selection)
+            ]
             // Keep the text container width in sync & relayout
-            nsView.hasVerticalRuler = !isLargeFileMode
-            nsView.rulersVisible = !isLargeFileMode
+            nsView.hasVerticalRuler = showLineNumbers && !isLargeFileMode
+            nsView.rulersVisible = showLineNumbers && !isLargeFileMode
+            textView.showsInvisibleCharacters = showInvisibles
+            acceptingView?.autoIndentEnabled = autoIndentEnabled
+            acceptingView?.autoCloseBracketsEnabled = autoCloseBracketsEnabled
+            acceptingView?.indentStyle = indentStyle
+            acceptingView?.indentWidth = indentWidth
+            acceptingView?.highlightCurrentLine = highlightCurrentLine
             applyWrapMode(isWrapped: isLineWrapEnabled && !isLargeFileMode, textView: textView, scrollView: nsView)
+
+            if let pageGuideView = context.coordinator.pageGuideView {
+                pageGuideView.textView = textView
+                pageGuideView.column = pageGuideColumn
+                pageGuideView.isEnabled = showPageGuide
+                pageGuideView.isHidden = !showPageGuide
+                pageGuideView.needsDisplay = true
+            }
 
             // Force immediate reflow after toggling wrap
             if let container = textView.textContainer, let lm = textView.layoutManager {
@@ -860,6 +985,7 @@ struct CustomTextEditor: NSViewRepresentable {
     class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CustomTextEditor
         weak var textView: NSTextView?
+        weak var pageGuideView: PageGuideView?
 
         // Background queue + debouncer for regex-based highlighting
         private let highlightQueue = DispatchQueue(label: "NeonVision.SyntaxHighlight", qos: .userInitiated)
@@ -868,6 +994,7 @@ struct CustomTextEditor: NSViewRepresentable {
         private var lastHighlightedText: String = ""
         private var lastLanguage: String?
         private var lastColorScheme: ColorScheme?
+        var lastLineHeight: CGFloat?
 
         init(_ parent: CustomTextEditor) {
             self.parent = parent
@@ -907,6 +1034,7 @@ struct CustomTextEditor: NSViewRepresentable {
 
             let lang = parent.language
             let scheme = parent.colorScheme
+            let lineHeight = parent.lineHeightMultiple
             let text: String = {
                 if let currentText = currentText {
                     return currentText
@@ -927,6 +1055,7 @@ struct CustomTextEditor: NSViewRepresentable {
                 self.lastHighlightedText = text
                 self.lastLanguage = lang
                 self.lastColorScheme = scheme
+                self.lastLineHeight = lineHeight
                 return
             }
 
@@ -939,7 +1068,7 @@ struct CustomTextEditor: NSViewRepresentable {
                 return
             }
 
-            if text == lastHighlightedText && lastLanguage == lang && lastColorScheme == scheme {
+            if text == lastHighlightedText && lastLanguage == lang && lastColorScheme == scheme && lastLineHeight == lineHeight {
                 return
             }
             rehighlight()
@@ -952,8 +1081,9 @@ struct CustomTextEditor: NSViewRepresentable {
             let textSnapshot = textView.string
             let language = parent.language
             let scheme = parent.colorScheme
+            let lineHeight = parent.lineHeightMultiple
             let selected = textView.selectedRange()
-            let colors = SyntaxColors.fromVibrantLightTheme(colorScheme: scheme)
+            let colors = currentEditorTheme(colorScheme: scheme).syntax
             let patterns = getSyntaxPatterns(for: language, colors: colors)
 
             // Cancel any in-flight work
@@ -981,6 +1111,10 @@ struct CustomTextEditor: NSViewRepresentable {
                     // Clear previous coloring and apply base color
                     tv.textStorage?.removeAttribute(.foregroundColor, range: fullRange)
                     tv.textStorage?.addAttribute(.foregroundColor, value: tv.textColor ?? NSColor.labelColor, range: fullRange)
+                    // Apply paragraph style for line height
+                    let style = NSMutableParagraphStyle()
+                    style.lineHeightMultiple = max(0.9, lineHeight)
+                    tv.textStorage?.addAttribute(.paragraphStyle, value: style, range: fullRange)
                     // Apply colored ranges
                     for (range, color) in coloredRanges {
                         tv.textStorage?.addAttribute(.foregroundColor, value: NSColor(color), range: range)
@@ -996,6 +1130,7 @@ struct CustomTextEditor: NSViewRepresentable {
                     self.lastHighlightedText = textSnapshot
                     self.lastLanguage = language
                     self.lastColorScheme = scheme
+                    self.lastLineHeight = lineHeight
                 }
             }
 
@@ -1049,12 +1184,13 @@ struct CustomTextEditor: NSViewRepresentable {
             }()
             NotificationCenter.default.post(name: .caretPositionDidChange, object: nil, userInfo: ["line": line, "column": col])
 
-            // Highlight current line
-            let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
             let fullRange = NSRange(location: 0, length: ns.length)
             tv.textStorage?.beginEditing()
             tv.textStorage?.removeAttribute(.backgroundColor, range: fullRange)
-            tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.12), range: lineRange)
+            if parent.highlightCurrentLine {
+                let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
+                tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.12), range: lineRange)
+            }
             tv.textStorage?.endEditing()
         }
 
@@ -1102,12 +1238,13 @@ struct CustomTextEditor: NSViewRepresentable {
                 tv.setSelectedRange(NSRange(location: location, length: 0))
                 tv.scrollRangeToVisible(NSRange(location: location, length: 0))
 
-                // Stronger highlight for the entire target line
-                let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
                 let fullRange = NSRange(location: 0, length: totalLength)
                 tv.textStorage?.beginEditing()
                 tv.textStorage?.removeAttribute(.backgroundColor, range: fullRange)
-                tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.18), range: lineRange)
+                if self.highlightCurrentLine {
+                    let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
+                    tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.18), range: lineRange)
+                }
                 tv.textStorage?.endEditing()
             }
         }
@@ -1180,28 +1317,50 @@ struct CustomTextEditor: UIViewRepresentable {
     @Binding var text: String
     let language: String
     let colorScheme: ColorScheme
+    let fontName: String
     let fontSize: CGFloat
+    let lineHeightMultiple: CGFloat
     @Binding var isLineWrapEnabled: Bool
     let isLargeFileMode: Bool
     let translucentBackgroundEnabled: Bool
+    let showLineNumbers: Bool
+    let showInvisibles: Bool
+    let highlightCurrentLine: Bool
+    let showPageGuide: Bool
+    let pageGuideColumn: Int
+    let indentStyle: String
+    let indentWidth: Int
+    let autoIndentEnabled: Bool
+    let autoCloseBracketsEnabled: Bool
 
     func makeUIView(context: Context) -> LineNumberedTextViewContainer {
         let container = LineNumberedTextViewContainer()
         let textView = container.textView
 
         textView.delegate = context.coordinator
-        textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        if let named = UIFont(name: fontName, size: fontSize) {
+            textView.font = named
+        } else {
+            textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = max(0.9, lineHeightMultiple)
+        textView.defaultTextAttributes[.paragraphStyle] = paragraphStyle
+        textView.typingAttributes[.paragraphStyle] = paragraphStyle
         textView.text = text
         textView.autocorrectionType = .no
         textView.autocapitalizationType = .none
         textView.smartDashesType = .no
         textView.smartQuotesType = .no
         textView.smartInsertDeleteType = .no
-        textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
+        let theme = currentEditorTheme(colorScheme: colorScheme)
+        textView.textColor = UIColor(theme.text)
+        textView.tintColor = UIColor(theme.cursor)
+        textView.backgroundColor = translucentBackgroundEnabled ? .clear : UIColor(theme.background)
         textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
         textView.textContainer.widthTracksTextView = isLineWrapEnabled && !isLargeFileMode
 
-        if isLargeFileMode {
+        if isLargeFileMode || !showLineNumbers {
             container.lineNumberView.isHidden = true
         } else {
             container.lineNumberView.isHidden = false
@@ -1209,6 +1368,8 @@ struct CustomTextEditor: UIViewRepresentable {
         }
         context.coordinator.container = container
         context.coordinator.textView = textView
+        context.coordinator.parent = self
+        context.coordinator.lastLineHeight = lineHeightMultiple
         context.coordinator.scheduleHighlightIfNeeded(currentText: text)
         return container
     }
@@ -1220,12 +1381,32 @@ struct CustomTextEditor: UIViewRepresentable {
             textView.text = text
         }
         if textView.font?.pointSize != fontSize {
-            textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            if let named = UIFont(name: fontName, size: fontSize) {
+                textView.font = named
+            } else {
+                textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            }
         }
-        textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = max(0.9, lineHeightMultiple)
+        textView.defaultTextAttributes[.paragraphStyle] = paragraphStyle
+        textView.typingAttributes[.paragraphStyle] = paragraphStyle
+        if context.coordinator.lastLineHeight != lineHeightMultiple {
+            let len = textView.textStorage?.length ?? 0
+            if len > 0 && len <= 200_000 {
+                textView.textStorage?.beginEditing()
+                textView.textStorage?.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: len))
+                textView.textStorage?.endEditing()
+            }
+            context.coordinator.lastLineHeight = lineHeightMultiple
+        }
+        let theme = currentEditorTheme(colorScheme: colorScheme)
+        textView.textColor = UIColor(theme.text)
+        textView.tintColor = UIColor(theme.cursor)
+        textView.backgroundColor = translucentBackgroundEnabled ? .clear : UIColor(theme.background)
         textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
         textView.textContainer.widthTracksTextView = isLineWrapEnabled && !isLargeFileMode
-        if isLargeFileMode {
+        if isLargeFileMode || !showLineNumbers {
             uiView.lineNumberView.isHidden = true
         } else {
             uiView.lineNumberView.isHidden = false
@@ -1248,6 +1429,7 @@ struct CustomTextEditor: UIViewRepresentable {
         private var lastHighlightedText: String = ""
         private var lastLanguage: String?
         private var lastColorScheme: ColorScheme?
+        private var lastLineHeight: CGFloat?
         private var isApplyingHighlight = false
 
         init(_ parent: CustomTextEditor) {
@@ -1259,15 +1441,17 @@ struct CustomTextEditor: UIViewRepresentable {
             let text = currentText ?? textView.text ?? ""
             let lang = parent.language
             let scheme = parent.colorScheme
+            let lineHeight = parent.lineHeightMultiple
 
             if parent.isLargeFileMode {
                 lastHighlightedText = text
                 lastLanguage = lang
                 lastColorScheme = scheme
+                lastLineHeight = lineHeight
                 return
             }
 
-            if text == lastHighlightedText && lang == lastLanguage && scheme == lastColorScheme {
+            if text == lastHighlightedText && lang == lastLanguage && scheme == lastColorScheme && lineHeight == lastLineHeight {
                 return
             }
 
@@ -1283,17 +1467,23 @@ struct CustomTextEditor: UIViewRepresentable {
             let nsText = text as NSString
             let fullRange = NSRange(location: 0, length: nsText.length)
             let baseColor: UIColor = colorScheme == .dark ? .white : .label
-            let baseFont = UIFont.monospacedSystemFont(ofSize: parent.fontSize, weight: .regular)
+            let baseFont: UIFont = {
+                if let named = UIFont(name: parent.fontName, size: parent.fontSize) { return named }
+                return UIFont.monospacedSystemFont(ofSize: parent.fontSize, weight: .regular)
+            }()
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineHeightMultiple = max(0.9, parent.lineHeightMultiple)
 
             let attributed = NSMutableAttributedString(
                 string: text,
                 attributes: [
                     .foregroundColor: baseColor,
-                    .font: baseFont
+                    .font: baseFont,
+                    .paragraphStyle: paragraphStyle
                 ]
             )
 
-            let colors = SyntaxColors.fromVibrantLightTheme(colorScheme: colorScheme)
+            let colors = currentEditorTheme(colorScheme: colorScheme).syntax
             let patterns = getSyntaxPatterns(for: language, colors: colors)
 
             for (pattern, color) in patterns {
@@ -1311,15 +1501,22 @@ struct CustomTextEditor: UIViewRepresentable {
                 let selectedRange = textView.selectedRange
                 self.isApplyingHighlight = true
                 textView.attributedText = attributed
+                if self.parent.highlightCurrentLine {
+                    let ns = text as NSString
+                    let lineRange = ns.lineRange(for: selectedRange)
+                    textView.textStorage?.addAttribute(.backgroundColor, value: UIColor.secondarySystemFill, range: lineRange)
+                }
                 textView.selectedRange = selectedRange
                 textView.typingAttributes = [
                     .foregroundColor: baseColor,
-                    .font: baseFont
+                    .font: baseFont,
+                    .paragraphStyle: paragraphStyle
                 ]
                 self.isApplyingHighlight = false
                 self.lastHighlightedText = text
                 self.lastLanguage = language
                 self.lastColorScheme = colorScheme
+                self.lastLineHeight = self.parent.lineHeightMultiple
                 self.container?.updateLineNumbers(for: text, fontSize: self.parent.fontSize)
                 self.syncLineNumberScroll()
             }
@@ -1330,6 +1527,51 @@ struct CustomTextEditor: UIViewRepresentable {
             parent.text = textView.text
             container?.updateLineNumbers(for: textView.text, fontSize: parent.fontSize)
             scheduleHighlightIfNeeded(currentText: textView.text)
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            if text == "\n", parent.autoIndentEnabled {
+                let ns = textView.text as NSString
+                let lineRange = ns.lineRange(for: NSRange(location: range.location, length: 0))
+                let currentLine = ns.substring(with: NSRange(
+                    location: lineRange.location,
+                    length: max(0, range.location - lineRange.location)
+                ))
+                let indent = currentLine.prefix { $0 == " " || $0 == "\t" }
+                let normalized = normalizedIndentation(String(indent))
+                textView.insertText("\n" + normalized, replacementRange: range)
+                return false
+            }
+
+            if parent.autoCloseBracketsEnabled, text.count == 1 {
+                let pairs: [String: String] = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
+                if let closing = pairs[text] {
+                    let insertion = text + closing
+                    textView.insertText(insertion, replacementRange: range)
+                    textView.selectedRange = NSRange(location: range.location + 1, length: 0)
+                    return false
+                }
+            }
+
+            return true
+        }
+
+        private func normalizedIndentation(_ indent: String) -> String {
+            let width = max(1, parent.indentWidth)
+            switch parent.indentStyle {
+            case "tabs":
+                let spacesCount = indent.filter { $0 == " " }.count
+                let tabsCount = indent.filter { $0 == "\t" }.count
+                let totalSpaces = spacesCount + (tabsCount * width)
+                let tabs = String(repeating: "\t", count: totalSpaces / width)
+                let leftover = String(repeating: " ", count: totalSpaces % width)
+                return tabs + leftover
+            default:
+                let tabsCount = indent.filter { $0 == "\t" }.count
+                let spacesCount = indent.filter { $0 == " " }.count
+                let totalSpaces = spacesCount + (tabsCount * width)
+                return String(repeating: " ", count: totalSpaces)
+            }
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {

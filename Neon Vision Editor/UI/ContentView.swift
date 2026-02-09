@@ -47,7 +47,23 @@ struct ContentView: View {
     @State var singleContent: String = ""
     @State var singleLanguage: String = "plain"
     @State var caretStatus: String = "Ln 1, Col 1"
-    @State var editorFontSize: CGFloat = 14
+    @AppStorage("SettingsEditorFontSize") var editorFontSize: Double = 13
+    @AppStorage("SettingsEditorFontName") var editorFontName: String = "Menlo"
+    @AppStorage("SettingsLineHeight") var editorLineHeight: Double = 1.3
+    @AppStorage("SettingsShowLineNumbers") var showLineNumbers: Bool = true
+    @AppStorage("SettingsShowInvisibles") var showInvisibles: Bool = false
+    @AppStorage("SettingsHighlightCurrentLine") var highlightCurrentLine: Bool = true
+    @AppStorage("SettingsShowPageGuide") var showPageGuide: Bool = false
+    @AppStorage("SettingsPageGuideColumn") var pageGuideColumn: Int = 80
+    @AppStorage("SettingsLineWrapEnabled") var settingsLineWrapEnabled: Bool = true
+    @AppStorage("SettingsIndentStyle") var indentStyle: String = "spaces"
+    @AppStorage("SettingsIndentWidth") var indentWidth: Int = 4
+    @AppStorage("SettingsAutoIndent") var autoIndentEnabled: Bool = true
+    @AppStorage("SettingsAutoCloseBrackets") var autoCloseBracketsEnabled: Bool = true
+    @AppStorage("SettingsTrimTrailingWhitespace") var trimTrailingWhitespaceEnabled: Bool = false
+    @AppStorage("SettingsCompletionEnabled") var isAutoCompletionEnabled: Bool = false
+    @AppStorage("SettingsCompletionFromDocument") var completionFromDocument: Bool = true
+    @AppStorage("SettingsCompletionFromSyntax") var completionFromSyntax: Bool = false
     @State var lastProviderUsed: String = "Apple"
 
     // Persisted API tokens for external providers
@@ -58,9 +74,8 @@ struct ContentView: View {
 
     // Debounce handle for inline completion
     @State var lastCompletionWorkItem: DispatchWorkItem?
-    @State var isAutoCompletionEnabled: Bool = false
     @State private var isApplyingCompletion: Bool = false
-    @State var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
+    @AppStorage("EnableTranslucentWindow") var enableTranslucentWindow: Bool = false
 
     // Added missing popover UI state
     @State var showAISelectorPopover: Bool = false
@@ -82,6 +97,7 @@ struct ContentView: View {
     @State var showUnsavedCloseDialog: Bool = false
     @State var showIOSFileImporter: Bool = false
     @State var showIOSFileExporter: Bool = false
+    @State var showSettingsSheet: Bool = false
     @State var iosExportDocument: PlainTextDocument = PlainTextDocument(text: "")
     @State var iosExportFilename: String = "Untitled.txt"
     @State var iosExportTabID: UUID? = nil
@@ -238,19 +254,21 @@ struct ContentView: View {
         }
 
         // Auto-close braces/brackets/parens if not already closed
-        let pairs: [String: String] = ["{": "}", "(": ")", "[": "]"]
-        if let closing = pairs[prevChar] {
-            if nextChar != closing {
-                // Insert closing and move caret back between pair
-                let insertion = closing
-                textView.insertText(insertion, replacementRange: sel)
-                textView.setSelectedRange(NSRange(location: loc, length: 0))
-                return
+        if autoCloseBracketsEnabled {
+            let pairs: [String: String] = ["{": "}", "(": ")", "[": "]"]
+            if let closing = pairs[prevChar] {
+                if nextChar != closing {
+                    // Insert closing and move caret back between pair
+                    let insertion = closing
+                    textView.insertText(insertion, replacementRange: sel)
+                    textView.setSelectedRange(NSRange(location: loc, length: 0))
+                    return
+                }
             }
         }
 
         // If previous char is '{' and language is swift, javascript, c, or cpp, insert code block scaffold
-        if prevChar == "{" && ["swift", "javascript", "c", "cpp"].contains(currentLanguage) {
+        if autoIndentEnabled, prevChar == "{" && ["swift", "javascript", "c", "cpp"].contains(currentLanguage) {
             // Get current line indentation
             let fullText = textView.string as NSString
             let lineRange = fullText.lineRange(for: NSRange(location: loc - 1, length: 0))
@@ -259,7 +277,7 @@ struct ContentView: View {
 
             let indentString = String(indentPrefix)
             let indentLevel = indentString.count
-            let indentSpaces = "    " // 4 spaces
+            let indentSpaces = indentStyle == "tabs" ? "\t" : String(repeating: " ", count: max(1, indentWidth))
 
             // Build scaffold string
             let scaffold = "\n\(indentString)\(indentSpaces)\n\(indentString)}"
@@ -300,22 +318,35 @@ struct ContentView: View {
 #endif
     }
 
+    private func completionPrompt(prefix: String, language: String) -> String {
+        var hints: [String] = []
+        if completionFromDocument {
+            hints.append("Prefer identifiers and symbols that already appear in this document.")
+        }
+        if completionFromSyntax {
+            hints.append("Prefer idiomatic \(language) keywords and syntax patterns.")
+        }
+        let hintBlock: String
+        if hints.isEmpty {
+            hintBlock = ""
+        } else {
+            hintBlock = "\nHints:\n" + hints.map { "- \($0)" }.joined(separator: "\n")
+        }
+        return """
+        Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.\(hintBlock)
+
+        \(prefix)
+
+        Completion:
+        """
+    }
+
     private func externalModelCompletion(prefix: String, language: String) async -> String {
         // Try Grok
         if !grokAPIToken.isEmpty {
             do {
                 let url = URL(string: "https://api.x.ai/v1/chat/completions")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let body: [String: Any] = [
                     "model": "grok-2-latest",
                     "messages": [["role": "user", "content": prompt]],
@@ -324,6 +355,10 @@ struct ContentView: View {
                     "n": 1,
                     "stop": [""]
                 ]
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -340,17 +375,7 @@ struct ContentView: View {
         if !openAIAPIToken.isEmpty {
             do {
                 let url = URL(string: "https://api.openai.com/v1/chat/completions")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let body: [String: Any] = [
                     "model": "gpt-4o-mini",
                     "messages": [["role": "user", "content": prompt]],
@@ -359,6 +384,10 @@ struct ContentView: View {
                     "n": 1,
                     "stop": [""]
                 ]
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -377,21 +406,15 @@ struct ContentView: View {
                 let model = "gemini-1.5-flash-latest"
                 let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"
                 guard let url = URL(string: endpoint) else { return "" }
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue(geminiAPIToken, forHTTPHeaderField: "x-goog-api-key")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let body: [String: Any] = [
                     "contents": [["parts": [["text": prompt]]]],
                     "generationConfig": ["temperature": 0.5, "maxOutputTokens": 64]
                 ]
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(geminiAPIToken, forHTTPHeaderField: "x-goog-api-key")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -409,19 +432,13 @@ struct ContentView: View {
         // Try Anthropic
         if !anthropicAPIToken.isEmpty {
             do {
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let url = URL(string: "https://api.anthropic.com/v1/messages")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")
                 request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
                 let body: [String: Any] = [
                     "model": "claude-3-5-haiku-latest",
                     "max_tokens": 64,
@@ -454,7 +471,7 @@ struct ContentView: View {
         let client = AppleIntelligenceAIClient()
         var aggregated = ""
         var firstChunk: String?
-        for await chunk in client.streamSuggestions(prompt: "Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.\n\n\(prefix)\n\nCompletion:") {
+        for await chunk in client.streamSuggestions(prompt: completionPrompt(prefix: prefix, language: language)) {
             if firstChunk == nil, !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 firstChunk = chunk
                 break
@@ -479,17 +496,7 @@ struct ContentView: View {
             }
             do {
                 let url = URL(string: "https://api.x.ai/v1/chat/completions")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let body: [String: Any] = [
                     "model": "grok-2-latest",
                     "messages": [["role": "user", "content": prompt]],
@@ -498,6 +505,10 @@ struct ContentView: View {
                     "n": 1,
                     "stop": [""]
                 ]
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -525,17 +536,7 @@ struct ContentView: View {
             }
             do {
                 let url = URL(string: "https://api.openai.com/v1/chat/completions")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let body: [String: Any] = [
                     "model": "gpt-4o-mini",
                     "messages": [["role": "user", "content": prompt]],
@@ -544,6 +545,10 @@ struct ContentView: View {
                     "n": 1,
                     "stop": [""]
                 ]
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -576,21 +581,15 @@ struct ContentView: View {
                     await MainActor.run { lastProviderUsed = "Gemini (fallback to Apple)" }
                     return res
                 }
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue(geminiAPIToken, forHTTPHeaderField: "x-goog-api-key")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let body: [String: Any] = [
                     "contents": [["parts": [["text": prompt]]]],
                     "generationConfig": ["temperature": 0.5, "maxOutputTokens": 64]
                 ]
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(geminiAPIToken, forHTTPHeaderField: "x-goog-api-key")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
                 let (data, _) = try await URLSession.shared.data(for: request)
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -618,19 +617,13 @@ struct ContentView: View {
                 return res
             }
             do {
+                let prompt = completionPrompt(prefix: prefix, language: language)
                 let url = URL(string: "https://api.anthropic.com/v1/messages")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")
                 request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let prompt = """
-                Continue the following \(language) code snippet with a few lines or tokens of code only. Do not add prose or explanations.
-
-                \(prefix)
-
-                Completion:
-                """
                 let body: [String: Any] = [
                     "model": "claude-3-5-haiku-latest",
                     "max_tokens": 64,
@@ -815,6 +808,15 @@ struct ContentView: View {
                 guard matchesCurrentWindow(notif) else { return }
                 toggleAutoCompletion()
             }
+            .onChange(of: isAutoCompletionEnabled) { enabled in
+                if enabled && viewModel.isBrainDumpMode {
+                    viewModel.isBrainDumpMode = false
+                    UserDefaults.standard.set(false, forKey: "BrainDumpModeEnabled")
+                }
+                if enabled && currentLanguage == "plain" && !showLanguageSetupPrompt {
+                    showLanguageSetupPrompt = true
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
                 showFindReplace = true
@@ -965,6 +967,16 @@ struct ContentView: View {
                 .frame(width: 420)
 #endif
         }
+#if canImport(UIKit)
+        .sheet(isPresented: $showSettingsSheet) {
+            NeonSettingsView(
+                supportsOpenInTabs: false,
+                supportsTranslucency: false,
+                supportsInvisibles: false,
+                supportsPageGuide: false
+            )
+        }
+#endif
 #if os(iOS)
         .sheet(isPresented: $showCompactSidebarSheet) {
             NavigationStack {
@@ -1044,6 +1056,7 @@ struct ContentView: View {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
             showProjectStructureSidebar = false
+            viewModel.isLineWrapEnabled = settingsLineWrapEnabled
 
             // Restore Brain Dump mode from defaults
             if UserDefaults.standard.object(forKey: "BrainDumpModeEnabled") != nil {
@@ -1056,6 +1069,12 @@ struct ContentView: View {
                     showWelcomeTour = true
                 }
             }
+        }
+        .onChange(of: settingsLineWrapEnabled) { newValue in
+            viewModel.isLineWrapEnabled = newValue
+        }
+        .onChange(of: viewModel.isLineWrapEnabled) { newValue in
+            settingsLineWrapEnabled = newValue
         }
 #if os(macOS)
         .background(
@@ -1515,10 +1534,21 @@ struct ContentView: View {
                     text: currentContentBinding,
                     language: currentLanguage,
                     colorScheme: colorScheme,
-                    fontSize: editorFontSize,
+                    fontName: editorFontName,
+                    fontSize: CGFloat(editorFontSize),
+                    lineHeightMultiple: CGFloat(editorLineHeight),
                     isLineWrapEnabled: $viewModel.isLineWrapEnabled,
                     isLargeFileMode: largeFileModeEnabled,
-                    translucentBackgroundEnabled: enableTranslucentWindow
+                    translucentBackgroundEnabled: enableTranslucentWindow,
+                    showLineNumbers: showLineNumbers,
+                    showInvisibles: showInvisibles,
+                    highlightCurrentLine: highlightCurrentLine,
+                    showPageGuide: showPageGuide,
+                    pageGuideColumn: pageGuideColumn,
+                    indentStyle: indentStyle,
+                    indentWidth: indentWidth,
+                    autoIndentEnabled: autoIndentEnabled,
+                    autoCloseBracketsEnabled: autoCloseBracketsEnabled
                 )
                 .id(currentLanguage)
                 .frame(maxWidth: viewModel.isBrainDumpMode ? 800 : .infinity)

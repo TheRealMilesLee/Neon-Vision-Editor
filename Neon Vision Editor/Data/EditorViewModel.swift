@@ -249,7 +249,11 @@ class EditorViewModel: ObservableObject {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if let url = tabs[index].fileURL {
             do {
-                try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
+                let trimmed = trimTrailingWhitespaceIfNeeded(tabs[index].content)
+                if trimmed != tabs[index].content {
+                    tabs[index].content = trimmed
+                }
+                try trimmed.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].isDirty = false
             } catch {
                 debugLog("Failed to save file.")
@@ -279,7 +283,11 @@ class EditorViewModel: ObservableObject {
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
+                let trimmed = trimTrailingWhitespaceIfNeeded(tabs[index].content)
+                if trimmed != tabs[index].content {
+                    tabs[index].content = trimmed
+                }
+                try trimmed.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].fileURL = url
                 tabs[index].name = url.lastPathComponent
                 if let mapped = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()] {
@@ -296,6 +304,14 @@ class EditorViewModel: ObservableObject {
         // Keep document dirty so user can export/share via future document APIs.
         debugLog("Save As is currently only available on macOS.")
 #endif
+    }
+
+    private func trimTrailingWhitespaceIfNeeded(_ text: String) -> String {
+        let shouldTrim = UserDefaults.standard.bool(forKey: "SettingsTrimTrailingWhitespace")
+        guard shouldTrim else { return text }
+        let lines = text.components(separatedBy: .newlines)
+        let trimmed = lines.map { $0.replacingOccurrences(of: #"[\t ]+$"#, with: "", options: .regularExpression) }
+        return trimmed.joined(separator: "\n")
     }
     
     func openFile() {

@@ -27,7 +27,8 @@ extension ContentView {
             }
         }
         iosExportTabID = tab.id
-        iosExportDocument = PlainTextDocument(text: tab.content)
+        let exportText = trimTrailingWhitespaceIfNeeded(tab.content)
+        iosExportDocument = PlainTextDocument(text: exportText)
         iosExportFilename = suggestedExportFilename(for: tab)
         showIOSFileExporter = true
 #endif
@@ -72,6 +73,14 @@ extension ContentView {
             return tab.name
         }
         return "\(tab.name).txt"
+    }
+
+    private func trimTrailingWhitespaceIfNeeded(_ text: String) -> String {
+        let shouldTrim = UserDefaults.standard.bool(forKey: "SettingsTrimTrailingWhitespace")
+        guard shouldTrim else { return text }
+        let lines = text.components(separatedBy: .newlines)
+        let trimmed = lines.map { $0.replacingOccurrences(of: #"[\t ]+$"#, with: "", options: .regularExpression) }
+        return trimmed.joined(separator: "\n")
     }
 #endif
 

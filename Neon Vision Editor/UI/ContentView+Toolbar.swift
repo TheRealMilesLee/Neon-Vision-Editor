@@ -279,6 +279,12 @@ extension ContentView {
             Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
                 Label(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap", systemImage: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
             }
+
+            Divider()
+
+            Button(action: { showSettingsSheet = true }) {
+                Label("Settings", systemImage: "gearshape")
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }

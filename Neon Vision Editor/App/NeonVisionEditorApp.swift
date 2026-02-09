@@ -76,7 +76,9 @@ struct NeonVisionEditorApp: App {
     @State private var appleAIStatus: String = "Apple Intelligence: Checking…"
     @State private var appleAIRoundTripMS: Double? = nil
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("SettingsOpenInTabs") private var settingsOpenInTabs: String = "system"
 #endif
+    @AppStorage("SettingsAppearance") private var settingsAppearance: String = "system"
     @State private var showGrokError: Bool = false
     @State private var grokErrorMessage: String = ""
 
@@ -116,7 +118,30 @@ struct NeonVisionEditorApp: App {
             userInfo: userInfo.isEmpty ? nil : userInfo
         )
     }
+
+    @MainActor
+    private func applyTabbingPreference(_ value: String) {
+        switch value {
+        case "always":
+            NSWindow.userTabbingPreference = .always
+        case "never":
+            NSWindow.userTabbingPreference = .manual
+        default:
+            NSWindow.userTabbingPreference = .automatic
+        }
+    }
 #endif
+
+    private var preferredScheme: ColorScheme? {
+        switch settingsAppearance {
+        case "light":
+            return .light
+        case "dark":
+            return .dark
+        default:
+            return nil
+        }
+    }
 
     var body: some Scene {
 #if os(macOS)
@@ -126,6 +151,7 @@ struct NeonVisionEditorApp: App {
                 .onAppear { appDelegate.viewModel = viewModel }
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
+                .preferredColorScheme(preferredScheme)
                 .frame(minWidth: 600, minHeight: 400)
                 .task {
                     #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
@@ -143,6 +169,10 @@ struct NeonVisionEditorApp: App {
                     appleAIStatus = "Apple Intelligence: Unavailable (build without USE_FOUNDATION_MODELS)"
                     #endif
                 }
+                .onAppear { applyTabbingPreference(settingsOpenInTabs) }
+                .onChange(of: settingsOpenInTabs) { newValue in
+                    applyTabbingPreference(newValue)
+                }
         }
         .defaultSize(width: 1000, height: 600)
         .handlesExternalEvents(matching: ["*"])
@@ -152,9 +182,15 @@ struct NeonVisionEditorApp: App {
                 showGrokError: $showGrokError,
                 grokErrorMessage: $grokErrorMessage
             )
+            .preferredColorScheme(preferredScheme)
         }
         .defaultSize(width: 1000, height: 600)
         .handlesExternalEvents(matching: [])
+        
+        Settings {
+            NeonSettingsView()
+                .preferredColorScheme(preferredScheme)
+        }
 
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -328,6 +364,7 @@ struct NeonVisionEditorApp: App {
                 Button("Find & Replace") {
                     postWindowCommand(.showFindReplaceRequested)
                 }
+                .keyboardShortcut("f", modifiers: .command)
 
                 Divider()
 
@@ -415,6 +452,7 @@ struct NeonVisionEditorApp: App {
                 .environmentObject(viewModel)
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
+                .preferredColorScheme(preferredScheme)
         }
 #endif
     }
