@@ -51,9 +51,13 @@ trap cleanup EXIT
 echo "Fetching latest release metadata for ${REPO}..."
 RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"
 
-ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | grep -Eo 'https://[^"]+\.(zip|dmg)' | head -n 1 || true)"
+# Prefer the actual app assets, not the source zipball.
+ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | grep -Eo '"browser_download_url":[^"]+"[^"]+"' | grep -Eo 'https://[^"]+' | grep -E 'Neon\\.Vision\\.Editor\\.app\\.(zip|dmg)$' | head -n 1 || true)"
 if [ -z "${ASSET_URL}" ]; then
-  echo "Could not find a .zip or .dmg asset in the latest release." >&2
+  ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | grep -Eo '"browser_download_url":[^"]+"[^"]+"' | grep -Eo 'https://[^"]+' | grep -E '\\.(zip|dmg)$' | head -n 1 || true)"
+fi
+if [ -z "${ASSET_URL}" ]; then
+  echo "Could not find an app .zip or .dmg asset in the latest release." >&2
   exit 1
 fi
 
