@@ -425,6 +425,8 @@ struct WelcomeTourView: View {
             let dynamicMax = max(220, min(420, proxy.size.height * 0.55))
             let maxGridHeight: CGFloat = isCompact ? min(dynamicMax, 320) : dynamicMax
             let innerHeight = maxGridHeight + 140
+            let innerFill = Color.white.opacity(colorScheme == .dark ? 0.02 : 0.25)
+            let innerStroke = Color.white.opacity(colorScheme == .dark ? 0.12 : 0.15)
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("Toolbar buttons")
@@ -433,33 +435,7 @@ struct WelcomeTourView: View {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                         ForEach(items) { item in
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: item.iconName)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(Color.accentColor)
-                                    .frame(width: 22)
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack(spacing: 8) {
-                                        Text(item.title)
-                                            .font(.system(size: 14, weight: .semibold))
-                                        shortcutCapsule(isPadShortcut ? item.shortcutPad : item.shortcutMac)
-                                    }
-                                    Text(item.description)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.8))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                            .stroke(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
-                                    )
-                            )
+                            toolbarItemRow(item)
                         }
                     }
                     .padding(.bottom, 4)
@@ -470,14 +446,48 @@ struct WelcomeTourView: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(Color.white.opacity(colorScheme == .dark ? 0.02 : 0.25))
+                    .fill(innerFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 32, style: .continuous)
-                            .stroke(Color.white.opacity(colorScheme == .dark ? 0.12 : 0.15), lineWidth: 1)
+                            .stroke(innerStroke, lineWidth: 1)
                     )
             )
             .frame(height: innerHeight)
         }
+    }
+
+    private func toolbarItemRow(_ item: ToolbarItemInfo) -> some View {
+        let cardFill = colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.8)
+        let cardStroke = colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+        let shortcut = isPadShortcut ? item.shortcutPad : item.shortcutMac
+
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: item.iconName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(item.title)
+                        .font(.system(size: 14, weight: .semibold))
+                    shortcutCapsule(shortcut)
+                }
+                Text(item.description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(cardFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(cardStroke, lineWidth: 1)
+                )
+        )
     }
 
     private var isPadShortcut: Bool {
