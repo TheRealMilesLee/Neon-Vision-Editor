@@ -381,7 +381,12 @@ struct WelcomeTourView: View {
 
             if page.title == "Toolbar Map" && page.bullets.count >= 2 {
                 HStack(alignment: .firstTextBaseline, spacing: 18) {
-                    bulletRow(page.bullets[0])
+                    VStack(alignment: .leading, spacing: 4) {
+                        bulletRow(page.bullets[0])
+                        Text("scroll for viewing all toolbar options.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
                     bulletRow(page.bullets[1])
                 }
                 .padding(.bottom, 0)
