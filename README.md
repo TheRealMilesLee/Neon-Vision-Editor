@@ -87,6 +87,8 @@ If macOS blocks first launch:
 - Automatic syntax highlighting for many languages and formats.
 - Inline code completion with Tab-to-accept ghost suggestions. **(NEW in v0.4.4-beta)**
 - Starter templates for all languages with one-click insert. **(NEW in v0.4.4-beta)**
+- Document-type handling for `.plist`, `.sh`, and general text so Finder/iOS can route those files straight into the editor.
+- Toolbar Map card in the welcome tour now scales to fill a taller inner frame, keeping the button cards inside the border.
 - Regex Find/Replace with Replace All.
 - Project tree sidebar plus Quick Open (`Cmd+P`).
 - Optional Vim mode (basic normal/insert workflow).

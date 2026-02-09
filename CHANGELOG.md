@@ -11,9 +11,12 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 - Starter templates for all languages and a toolbar insert button.
 - Welcome tour release highlights and a full toolbar/shortcut guide.
 - Language detection tests and a standalone test target.
+- Document-type registration so `.plist`, `.sh`, and general text files open directly in the editor on macOS and iOS/iPadOS.
+- Release Assistant helper app plus scripted workflow for uploading `v0.4.4-beta`.
 
 ### Improved
 - Language detection coverage and heuristics, including C and C# recognition.
+- Toolbar Map card in the welcome tour now wraps the button grid inside a taller inner frame to keep the cards inside the border.
 
 ### Fixed
 - Language picker behavior to lock the selected language and prevent unwanted resets.
