@@ -349,7 +349,7 @@ struct WelcomeTourView: View {
             )
         )
 #if os(macOS)
-        .frame(minWidth: 840, minHeight: 580)
+        .frame(minWidth: 920, minHeight: 680)
 #else
         .presentationDetents([.large])
 #endif
@@ -357,7 +357,7 @@ struct WelcomeTourView: View {
 
     @ViewBuilder
     private func tourCard(for page: TourPage) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
             Spacer(minLength: 0)
 
             HStack(spacing: 14) {
@@ -379,24 +379,26 @@ struct WelcomeTourView: View {
                 }
             }
 
-            ForEach(page.bullets, id: \.self) { bullet in
-                HStack(alignment: .top, spacing: 10) {
-                    Circle()
-                        .fill(Color.accentColor.opacity(0.85))
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 7)
-                    Text(bullet)
-                        .font(.system(size: 15))
+            if page.title == "Toolbar Map" && page.bullets.count >= 2 {
+                HStack(alignment: .firstTextBaseline, spacing: 18) {
+                    bulletRow(page.bullets[0])
+                    bulletRow(page.bullets[1])
+                }
+                .padding(.bottom, 0)
+            } else {
+                ForEach(page.bullets, id: \.self) { bullet in
+                    bulletRow(bullet)
                 }
             }
 
             if !page.toolbarItems.isEmpty {
                 toolbarGrid(items: page.toolbarItems)
+                    .padding(.top, page.title == "Toolbar Map" ? -8 : 0)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(22)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(colorScheme == .dark ? .regularMaterial : .ultraThinMaterial)
@@ -422,9 +424,9 @@ struct WelcomeTourView: View {
             let columns = isCompact
                 ? [GridItem(.flexible(), spacing: 12)]
                 : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-            let dynamicMax = max(220, min(420, proxy.size.height * 0.55))
-            let maxGridHeight: CGFloat = isCompact ? min(dynamicMax, 320) : dynamicMax
-            let innerHeight = maxGridHeight + 140
+            let dynamicMax = max(240, min(520, proxy.size.height * 0.6))
+            let maxGridHeight: CGFloat = isCompact ? min(dynamicMax, 360) : dynamicMax
+            let innerHeight = maxGridHeight + 180
             let innerFill = Color.white.opacity(colorScheme == .dark ? 0.02 : 0.25)
             let innerStroke = Color.white.opacity(colorScheme == .dark ? 0.12 : 0.15)
 
@@ -443,7 +445,8 @@ struct WelcomeTourView: View {
                 .frame(maxHeight: maxGridHeight)
                 .clipped()
             }
-            .padding(16)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
                     .fill(innerFill)
@@ -453,6 +456,18 @@ struct WelcomeTourView: View {
                     )
             )
             .frame(height: innerHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func bulletRow(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(Color.accentColor.opacity(0.85))
+                .frame(width: 7, height: 7)
+                .padding(.top, 7)
+            Text(text)
+                .font(.system(size: 15))
         }
     }
 
