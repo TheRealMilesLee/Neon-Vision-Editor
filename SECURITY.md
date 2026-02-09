@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-This project is currently in alpha. Security fixes may be released in new tags, but there is no long-term support policy yet.
+This project is currently in beta. Security fixes may be released in new tags, but there is no long-term support policy yet.
 
 ## Reporting a vulnerability
 
