@@ -16,6 +16,11 @@ final class AcceptingTextView: NSTextView {
     private var didConfigureVimMode: Bool = false
     private let dropReadChunkSize = 64 * 1024
     fileprivate var isApplyingDroppedContent: Bool = false
+    private var inlineSuggestion: String?
+    private var inlineSuggestionLocation: Int?
+    private var inlineSuggestionView: NSTextField?
+    fileprivate var isApplyingInlineSuggestion: Bool = false
+    fileprivate var recentlyAcceptedInlineSuggestion: Bool = false
 
     // We want the caret at the *start* of the paste.
     private var pendingPasteCaretLocation: Int?
@@ -40,6 +45,7 @@ final class AcceptingTextView: NSTextView {
 
     override func mouseDown(with event: NSEvent) {
         cancelPendingPasteCaretEnforcement()
+        clearInlineSuggestion()
         super.mouseDown(with: event)
         window?.makeFirstResponder(self)
     }
@@ -47,6 +53,7 @@ final class AcceptingTextView: NSTextView {
     override func scrollWheel(with event: NSEvent) {
         cancelPendingPasteCaretEnforcement()
         super.scrollWheel(with: event)
+        updateInlineSuggestionPosition()
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -57,6 +64,11 @@ final class AcceptingTextView: NSTextView {
             postVimModeState()
         }
         return didBecome
+    }
+
+    override func layout() {
+        super.layout()
+        updateInlineSuggestionPosition()
     }
 
     // MARK: - Drag & Drop: insert file contents instead of file path
@@ -379,6 +391,9 @@ final class AcceptingTextView: NSTextView {
 
     // MARK: - Typing helpers (existing behavior)
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
+        if !isApplyingInlineSuggestion {
+            clearInlineSuggestion()
+        }
         guard let s = insertString as? String else {
             super.insertText(insertString, replacementRange: replacementRange)
             return
@@ -412,6 +427,11 @@ final class AcceptingTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if event.keyCode == 48 { // Tab
+            if acceptInlineSuggestion() {
+                return
+            }
+        }
         // Safety default: bypass Vim interception unless explicitly enabled.
         if !UserDefaults.standard.bool(forKey: vimInterceptionDefaultsKey) {
             super.keyDown(with: event)
@@ -478,6 +498,13 @@ final class AcceptingTextView: NSTextView {
         super.keyDown(with: event)
     }
 
+    override func insertTab(_ sender: Any?) {
+        if acceptInlineSuggestion() {
+            return
+        }
+        super.insertTab(sender)
+    }
+
     // Paste: capture insertion point and enforce caret position after paste across async updates.
     override func paste(_ sender: Any?) {
         // Capture where paste begins (start of insertion/replacement)
@@ -498,8 +525,82 @@ final class AcceptingTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
+        if !isApplyingInlineSuggestion {
+            clearInlineSuggestion()
+        }
         // Pasting triggers didChangeText; schedule enforcement again.
         schedulePasteCaretEnforcement()
+    }
+
+    func showInlineSuggestion(_ suggestion: String, at location: Int) {
+        guard !suggestion.isEmpty else {
+            clearInlineSuggestion()
+            return
+        }
+        inlineSuggestion = suggestion
+        inlineSuggestionLocation = location
+        if inlineSuggestionView == nil {
+            let label = NSTextField(labelWithString: suggestion)
+            label.isBezeled = false
+            label.isEditable = false
+            label.isSelectable = false
+            label.drawsBackground = false
+            label.textColor = NSColor.secondaryLabelColor.withAlphaComponent(0.6)
+            label.font = font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            label.lineBreakMode = .byClipping
+            label.maximumNumberOfLines = 1
+            inlineSuggestionView = label
+            addSubview(label)
+        } else {
+            inlineSuggestionView?.stringValue = suggestion
+            inlineSuggestionView?.font = font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        }
+        updateInlineSuggestionPosition()
+    }
+
+    func clearInlineSuggestion() {
+        inlineSuggestion = nil
+        inlineSuggestionLocation = nil
+        inlineSuggestionView?.removeFromSuperview()
+        inlineSuggestionView = nil
+    }
+
+    private func acceptInlineSuggestion() -> Bool {
+        guard let suggestion = inlineSuggestion,
+              let loc = inlineSuggestionLocation else { return false }
+        let sel = selectedRange()
+        guard sel.length == 0, sel.location == loc else {
+            clearInlineSuggestion()
+            return false
+        }
+        isApplyingInlineSuggestion = true
+        textStorage?.replaceCharacters(in: NSRange(location: loc, length: 0), with: suggestion)
+        setSelectedRange(NSRange(location: loc + (suggestion as NSString).length, length: 0))
+        isApplyingInlineSuggestion = false
+        recentlyAcceptedInlineSuggestion = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.recentlyAcceptedInlineSuggestion = false
+        }
+        clearInlineSuggestion()
+        return true
+    }
+
+    private func updateInlineSuggestionPosition() {
+        guard let suggestion = inlineSuggestion,
+              let loc = inlineSuggestionLocation,
+              let label = inlineSuggestionView,
+              let window else { return }
+        let sel = selectedRange()
+        if sel.location != loc || sel.length != 0 {
+            clearInlineSuggestion()
+            return
+        }
+        let rectInScreen = firstRect(forCharacterRange: NSRange(location: loc, length: 0), actualRange: nil)
+        let rectInWindow = window.convertFromScreen(rectInScreen)
+        let rectInView = convert(rectInWindow, from: nil)
+        label.stringValue = suggestion
+        label.sizeToFit()
+        label.frame.origin = NSPoint(x: rectInView.origin.x, y: rectInView.origin.y)
     }
 
     // Re-apply the desired caret position over multiple runloop ticks to beat late layout/async work.
@@ -703,9 +804,10 @@ struct CustomTextEditor: NSViewRepresentable {
         if let textView = nsView.documentView as? NSTextView {
             textView.isEditable = true
             textView.isSelectable = true
-
-            let isDropApplyInFlight = (textView as? AcceptingTextView)?.isApplyingDroppedContent ?? false
-            if !isDropApplyInFlight && textView.string != text {
+            let acceptingView = textView as? AcceptingTextView
+            let isDropApplyInFlight = acceptingView?.isApplyingDroppedContent ?? false
+            if !(acceptingView?.recentlyAcceptedInlineSuggestion ?? false),
+               !isDropApplyInFlight && textView.string != text {
                 textView.string = text
             }
             if textView.font?.pointSize != fontSize {
@@ -916,6 +1018,9 @@ struct CustomTextEditor: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
+            if let tv = notification.object as? AcceptingTextView {
+                tv.clearInlineSuggestion()
+            }
             updateCaretStatusAndHighlight()
         }
 

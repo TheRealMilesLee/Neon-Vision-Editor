@@ -4,6 +4,20 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.4-beta] - 2026-02-09
+
+### Added
+- Inline code completion ghost text with Tab-to-accept behavior.
+- Starter templates for all languages and a toolbar insert button.
+- Welcome tour release highlights and a full toolbar/shortcut guide.
+- Language detection tests and a standalone test target.
+
+### Improved
+- Language detection coverage and heuristics, including C and C# recognition.
+
+### Fixed
+- Language picker behavior to lock the selected language and prevent unwanted resets.
+
 ## [v0.4.3-beta] - 2026-02-08
 
 ### Added

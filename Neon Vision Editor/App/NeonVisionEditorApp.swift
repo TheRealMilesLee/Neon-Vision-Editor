@@ -214,7 +214,7 @@ struct NeonVisionEditorApp: App {
             }
 
             CommandMenu("Language") {
-                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                     let label: String = {
                         switch lang {
                         case "php": return "PHP"
@@ -226,6 +226,7 @@ struct NeonVisionEditorApp: App {
                         case "nginx": return "Nginx"
                         case "objective-c": return "Objective-C"
                         case "csharp": return "C#"
+                        case "c": return "C"
                         case "cpp": return "C++"
                         case "json": return "JSON"
                         case "xml": return "XML"

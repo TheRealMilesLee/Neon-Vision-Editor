@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>12</integer>
+	<key>logs</key>
+	<dict>
+		<key>7747A5B6-DA32-4BE3-9479-D900D290FAD2</key>
+		<dict>
+			<key>auxiliaryLogUniqueIdentifier</key>
+			<string>66F3F370-F40B-440D-AA4B-2E60D24CC79F</string>
+			<key>auxiliaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>2</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>className</key>
+			<string>IDESchemeActionsInvocationRecord</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>com.apple.dt.unit.cocoaUnitTest</string>
+			<key>fileName</key>
+			<string>Test-Neon Vision EditorTests-2026.02.09_11-14-41-+0100.xcresult</string>
+			<key>hasAuxiliaryLog</key>
+			<true/>
+			<key>hasCoverageData</key>
+			<true/>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>3</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>Neon Vision Editor project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>Neon Vision EditorTests</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Test Neon Vision EditorTests</string>
+			<key>timeStartedRecording</key>
+			<real>792324881.41393995</real>
+			<key>timeStoppedRecording</key>
+			<real>792324884.31702495</real>
+			<key>title</key>
+			<string>Test Neon Vision EditorTests</string>
+			<key>uniqueIdentifier</key>
+			<string>7747A5B6-DA32-4BE3-9479-D900D290FAD2</string>
+		</dict>
+		<key>9E8D7DB2-B6D7-423F-BE82-D70FB9E18337</key>
+		<dict>
+			<key>auxiliaryLogUniqueIdentifier</key>
+			<string>7E9571B8-E0C0-414D-A122-E1745259D34D</string>
+			<key>auxiliaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>S</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>className</key>
+			<string>IDESchemeActionsInvocationRecord</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>com.apple.dt.unit.cocoaUnitTest</string>
+			<key>fileName</key>
+			<string>Test-Neon Vision EditorTests-2026.02.09_11-17-30-+0100.xcresult</string>
+			<key>hasAuxiliaryLog</key>
+			<true/>
+			<key>hasCoverageData</key>
+			<true/>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>1</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>1</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>Neon Vision Editor project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>Neon Vision EditorTests</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Test Neon Vision EditorTests</string>
+			<key>timeStartedRecording</key>
+			<real>792325050.27807605</real>
+			<key>timeStoppedRecording</key>
+			<real>792325053.28294504</real>
+			<key>title</key>
+			<string>Test Neon Vision EditorTests</string>
+			<key>uniqueIdentifier</key>
+			<string>9E8D7DB2-B6D7-423F-BE82-D70FB9E18337</string>
+		</dict>
+		<key>D9CDD0F9-2FE7-485D-B36C-503CD6C2D4D6</key>
+		<dict>
+			<key>auxiliaryLogUniqueIdentifier</key>
+			<string>66912838-65DD-4A40-B7F4-18DD8D1CA10D</string>
+			<key>auxiliaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>1</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>1</integer>
+			</dict>
+			<key>className</key>
+			<string>IDESchemeActionsInvocationRecord</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>com.apple.dt.unit.cocoaUnitTest</string>
+			<key>fileName</key>
+			<string>Test-Neon Vision EditorTests-2026.02.09_11-15-36-+0100.xcresult</string>
+			<key>hasAuxiliaryLog</key>
+			<true/>
+			<key>hasCoverageData</key>
+			<true/>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>2</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>1</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>Neon Vision Editor project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>Neon Vision EditorTests</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Test Neon Vision EditorTests</string>
+			<key>timeStartedRecording</key>
+			<real>792324936.21700394</real>
+			<key>timeStoppedRecording</key>
+			<real>792324940.069695</real>
+			<key>title</key>
+			<string>Test Neon Vision EditorTests</string>
+			<key>uniqueIdentifier</key>
+			<string>D9CDD0F9-2FE7-485D-B36C-503CD6C2D4D6</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

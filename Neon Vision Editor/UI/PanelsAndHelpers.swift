@@ -183,6 +183,21 @@ struct QuickFileSwitcherPanel: View {
 struct WelcomeTourView: View {
     @Environment(\.colorScheme) private var colorScheme
 
+    static var releaseID: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        return "\(short) (\(build))"
+    }
+
+    struct ToolbarItemInfo: Identifiable {
+        let id = UUID()
+        let title: String
+        let description: String
+        let shortcutMac: String
+        let shortcutPad: String
+        let iconName: String
+    }
+
     struct TourPage: Identifiable {
         let id = UUID()
         let title: String
@@ -190,12 +205,26 @@ struct WelcomeTourView: View {
         let bullets: [String]
         let iconName: String
         let colors: [Color]
+        let toolbarItems: [ToolbarItemInfo]
     }
 
     let onFinish: () -> Void
     @State private var selectedIndex: Int = 0
 
     private let pages: [TourPage] = [
+        TourPage(
+            title: "What’s New in This Release",
+            subtitle: "Major upgrades for faster flow and cleaner completions.",
+            bullets: [
+                "Inline code completion now appears as ghost text and accepts with Tab",
+                "Starter templates for every language, plus a toolbar insert button",
+                "Language picker locks correctly to prevent unwanted resets",
+                "Brain Dump auto-disables when enabling code completion"
+            ],
+            iconName: "sparkles.rectangle.stack",
+            colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],
+            toolbarItems: []
+        ),
         TourPage(
             title: "A Fast, Focused Editor",
             subtitle: "Built for quick edits and flow.",
@@ -205,7 +234,8 @@ struct WelcomeTourView: View {
                 "Word count, caret status, and complete toolbar options"
             ],
             iconName: "doc.text.magnifyingglass",
-            colors: [Color(red: 0.96, green: 0.48, blue: 0.28), Color(red: 0.99, green: 0.78, blue: 0.35)]
+            colors: [Color(red: 0.96, green: 0.48, blue: 0.28), Color(red: 0.99, green: 0.78, blue: 0.35)],
+            toolbarItems: []
         ),
         TourPage(
             title: "Smart Assistance",
@@ -217,7 +247,33 @@ struct WelcomeTourView: View {
                 "API keys stored securely in Keychain"
             ],
             iconName: "sparkles",
-            colors: [Color(red: 0.20, green: 0.55, blue: 0.95), Color(red: 0.21, green: 0.86, blue: 0.78)]
+            colors: [Color(red: 0.20, green: 0.55, blue: 0.95), Color(red: 0.21, green: 0.86, blue: 0.78)],
+            toolbarItems: []
+        ),
+        TourPage(
+            title: "Toolbar Map",
+            subtitle: "Every button, plus the quickest way to reach it.",
+            bullets: [
+                "Shortcuts are shown where available",
+                "No shortcut? The toolbar is the fastest path"
+            ],
+            iconName: "slider.horizontal.3",
+            colors: [Color(red: 0.36, green: 0.32, blue: 0.92), Color(red: 0.92, green: 0.49, blue: 0.64)],
+            toolbarItems: [
+                ToolbarItemInfo(title: "New Window", description: "New Window", shortcutMac: "Cmd+N", shortcutPad: "None", iconName: "macwindow.badge.plus"),
+                ToolbarItemInfo(title: "New Tab", description: "New Tab", shortcutMac: "Cmd+T", shortcutPad: "None", iconName: "plus.square.on.square"),
+                ToolbarItemInfo(title: "Open File…", description: "Open File…", shortcutMac: "Cmd+O", shortcutPad: "None", iconName: "folder"),
+                ToolbarItemInfo(title: "Save File", description: "Save File", shortcutMac: "Cmd+S", shortcutPad: "None", iconName: "square.and.arrow.down"),
+                ToolbarItemInfo(title: "Insert Template", description: "Insert Template for Current Language", shortcutMac: "None", shortcutPad: "None", iconName: "doc.badge.plus"),
+                ToolbarItemInfo(title: "Language", description: "Language", shortcutMac: "None", shortcutPad: "None", iconName: "textformat"),
+                ToolbarItemInfo(title: "AI Model & Settings", description: "AI Model & Settings", shortcutMac: "None", shortcutPad: "None", iconName: "brain.head.profile"),
+                ToolbarItemInfo(title: "Code Completion", description: "Enable Code Completion / Disable Code Completion", shortcutMac: "None", shortcutPad: "None", iconName: "bolt.horizontal.circle"),
+                ToolbarItemInfo(title: "Find & Replace", description: "Find & Replace", shortcutMac: "None", shortcutPad: "None", iconName: "magnifyingglass"),
+                ToolbarItemInfo(title: "Toggle Sidebar", description: "Toggle Sidebar", shortcutMac: "Cmd+Opt+S", shortcutPad: "None", iconName: "sidebar.left"),
+                ToolbarItemInfo(title: "Project Sidebar", description: "Toggle Project Structure Sidebar", shortcutMac: "None", shortcutPad: "None", iconName: "sidebar.right"),
+                ToolbarItemInfo(title: "Line Wrap", description: "Enable Wrap / Disable Wrap", shortcutMac: "Cmd+Opt+L", shortcutPad: "None", iconName: "text.justify"),
+                ToolbarItemInfo(title: "Clear Editor", description: "Clear Editor", shortcutMac: "None", shortcutPad: "None", iconName: "trash")
+            ]
         ),
         TourPage(
             title: "Power User Features",
@@ -229,7 +285,8 @@ struct WelcomeTourView: View {
                 "Lightweight Vim-style workflow support on macOS"
             ],
             iconName: "bolt.circle",
-            colors: [Color(red: 0.22, green: 0.72, blue: 0.43), Color(red: 0.08, green: 0.42, blue: 0.73)]
+            colors: [Color(red: 0.22, green: 0.72, blue: 0.43), Color(red: 0.08, green: 0.42, blue: 0.73)],
+            toolbarItems: []
         )
     ]
 
@@ -333,6 +390,10 @@ struct WelcomeTourView: View {
                 }
             }
 
+            if !page.toolbarItems.isEmpty {
+                toolbarGrid(items: page.toolbarItems)
+            }
+
             Spacer(minLength: 0)
         }
         .padding(24)
@@ -353,6 +414,77 @@ struct WelcomeTourView: View {
                     y: 8
                 )
         )
+    }
+
+    private func toolbarGrid(items: [ToolbarItemInfo]) -> some View {
+        return GeometryReader { proxy in
+            let isCompact = proxy.size.width < 640
+            let columns = isCompact
+                ? [GridItem(.flexible(), spacing: 12)]
+                : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Toolbar buttons")
+                    .font(.system(size: 16, weight: .semibold))
+
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                    ForEach(items) { item in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: item.iconName)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .frame(width: 22)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Text(item.title)
+                                        .font(.system(size: 14, weight: .semibold))
+                                    shortcutCapsule(isPadShortcut ? item.shortcutPad : item.shortcutMac)
+                                }
+                                Text(item.description)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+        .frame(minHeight: 320)
+    }
+
+    private var isPadShortcut: Bool {
+#if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .pad
+#else
+        return false
+#endif
+    }
+
+    private func shortcutCapsule(_ shortcut: String) -> some View {
+        let parts = shortcut.split(separator: "+").map { String($0) }
+        return HStack(spacing: 4) {
+            ForEach(parts, id: \.self) { part in
+                Text(part)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
+                    )
+            }
+        }
     }
 }
 
