@@ -1,0 +1,58 @@
+name: Release macOS app
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode Version
+        run: xcodebuild -version
+
+      - name: Build macOS archive
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+        run: |
+          xcodebuild \
+            -project "Neon Vision Editor.xcodeproj" \
+            -scheme "Neon Vision Editor" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            archive
+
+      - name: Zip app
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+        run: |
+          APP_PATH="$ARCHIVE_PATH/Products/Applications/Neon Vision Editor.app"
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "App not found at $APP_PATH" >&2
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "Neon.Vision.Editor.app.zip"
+
+      - name: Extract changelog section
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          ./scripts/extract_changelog_section.sh CHANGELOG.md "$TAG_NAME" > release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "Neon Vision Editor $TAG_NAME" \
+            --notes-file release-notes.md \
+            "Neon.Vision.Editor.app.zip"
