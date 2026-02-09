@@ -1,6 +1,6 @@
 import Foundation
 
-#if USE_FOUNDATION_MODELS
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
 import FoundationModels
 #endif
 
@@ -23,7 +23,7 @@ public struct AppleIntelligenceAIClient: AIClient {
     public init() {}
 
     public func streamSuggestions(prompt: String) -> AsyncStream<String> {
-#if USE_FOUNDATION_MODELS
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
         // Delegate to the centralized Apple Foundation Models streaming helper.
         return AppleFM.appleFMStream(prompt: prompt)
 #else

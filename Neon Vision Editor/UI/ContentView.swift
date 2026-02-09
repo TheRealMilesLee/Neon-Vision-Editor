@@ -11,7 +11,7 @@ import AppKit
 #elseif canImport(UIKit)
 import UIKit
 #endif
-#if USE_FOUNDATION_MODELS
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
 import FoundationModels
 #endif
 
@@ -102,7 +102,7 @@ struct ContentView: View {
     @State private var languagePromptSelection: String = "plain"
     @State private var languagePromptInsertTemplate: Bool = false
 
-#if USE_FOUNDATION_MODELS
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
     var appleModelAvailable: Bool { true }
 #else
     var appleModelAvailable: Bool { false }
@@ -1132,7 +1132,7 @@ struct ContentView: View {
         }
         isAutoCompletionEnabled.toggle()
         if willEnable {
-#if USE_FOUNDATION_MODELS
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
             AppleFM.isEnabled = true
 #endif
             maybePromptForLanguageSetup()
@@ -1346,7 +1346,7 @@ struct ContentView: View {
         // Supported languages in our picker
         let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
 
-        #if USE_FOUNDATION_MODELS
+        #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
         // Attempt a lightweight model-based detection via AppleIntelligenceAIClient if available
         do {
             let client = AppleIntelligenceAIClient()

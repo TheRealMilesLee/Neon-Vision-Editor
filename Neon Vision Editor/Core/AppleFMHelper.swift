@@ -1,4 +1,4 @@
-#if USE_FOUNDATION_MODELS
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
 import Foundation
 import FoundationModels
 

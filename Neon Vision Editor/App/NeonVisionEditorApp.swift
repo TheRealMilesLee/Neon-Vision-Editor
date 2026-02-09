@@ -128,7 +128,7 @@ struct NeonVisionEditorApp: App {
                 .environment(\.grokErrorMessage, $grokErrorMessage)
                 .frame(minWidth: 600, minHeight: 400)
                 .task {
-                    #if USE_FOUNDATION_MODELS
+                    #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
                     do {
                         let start = Date()
                         _ = try await AppleFM.appleFMHealthCheck()
@@ -350,7 +350,7 @@ struct NeonVisionEditorApp: App {
                             let geminiToken = SecureTokenStore.token(for: .gemini)
 
                             let client: AIClient? = {
-                                #if USE_FOUNDATION_MODELS
+                                #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
                                 if useAppleIntelligence {
                                     return AIClientFactory.makeClient(for: AIModel.appleIntelligence)
                                 }
@@ -358,7 +358,7 @@ struct NeonVisionEditorApp: App {
                                 if !grokToken.isEmpty { return AIClientFactory.makeClient(for: .grok, grokAPITokenProvider: { grokToken }) }
                                 if !openAIToken.isEmpty { return AIClientFactory.makeClient(for: .openAI, openAIKeyProvider: { openAIToken }) }
                                 if !geminiToken.isEmpty { return AIClientFactory.makeClient(for: .gemini, geminiKeyProvider: { geminiToken }) }
-                                #if USE_FOUNDATION_MODELS
+                                #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
                                 return AIClientFactory.makeClient(for: .appleIntelligence)
                                 #else
                                 return nil
@@ -385,7 +385,7 @@ struct NeonVisionEditorApp: App {
                 Divider()
                 Button("Run AI Check") {
                     Task {
-                        #if USE_FOUNDATION_MODELS
+                        #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
                         do {
                             let start = Date()
                             _ = try await AppleFM.appleFMHealthCheck()
