@@ -18,7 +18,7 @@
 
 > Status: **beta**  
 > Latest release: **v0.4.4-beta**  
-> Platform target: **macOS 26 (Tahoe)**  
+> Platform target: **macOS 26 (Tahoe)**  compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
 ## Download
@@ -27,7 +27,7 @@ Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesig
 
 - Latest release: **v0.4.4-beta**
 - Architecture: Apple Silicon (Intel not tested)
-- Notarization: *not yet*
+- Notarization: *is finally there*
 
 ## Getting Started (30 Seconds)
 
