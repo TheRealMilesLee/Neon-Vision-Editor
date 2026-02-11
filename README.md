@@ -16,16 +16,16 @@
   Release Download: <a href="https://github.com/h3pdesign/Neon-Vision-Editor/releases">GitHub Releases</a>
 </p>
 
-> Status: **beta**  
-> Latest release: **v0.4.5-beta**  
-> Platform target: **macOS 26 (Tahoe)**  compatible with **macOS Sequoia**
+> Status: **active release**  
+> Latest release: **v0.4.5**  
+> Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
 ## Download
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.4-beta**
+- Latest release: **v0.4.5**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
 
@@ -85,8 +85,10 @@ If macOS blocks first launch:
 - Fast loading for regular and large text files.
 - Tabbed editing with per-file language support.
 - Automatic syntax highlighting for many languages and formats.
-- Inline code completion with Tab-to-accept ghost suggestions. **(NEW in v0.4.4-beta)**
-- Starter templates for all languages with one-click insert. **(NEW in v0.4.4-beta)**
+- Optional support purchase flow (StoreKit 2) in Settings. **(NEW in v0.4.5)**
+- Cross-platform theme settings panel with improved settings organization. **(NEW in v0.4.5)**
+- Inline code completion with Tab-to-accept ghost suggestions.
+- Starter templates for all languages with one-click insert.
 - Document-type handling for `.plist`, `.sh`, and general text so Finder/iOS can route those files straight into the editor.
 - Toolbar Map card in the welcome tour now scales to fill a taller inner frame, keeping the button cards inside the border.
 - Regex Find/Replace with Replace All.
@@ -118,6 +120,14 @@ If macOS blocks first launch:
 | `Tab` | Accept code completion (when shown) |
 
 ## Changelog
+
+### v0.4.5 (summary)
+
+- Added optional support purchase flow (StoreKit 2) with a dedicated Settings > Support tab.
+- Added a new cross-platform theme settings panel and iOS app icon asset catalog set.
+- Improved settings architecture and language detection/syntax highlighting stability.
+- Fixed iOS settings sheet state binding, Find panel focus/next behavior, and editor sanitization artifacts.
+- Fixed macOS line-number gutter redraw/background mismatches.
 
 ### v0.4.4-beta (summary)
 
@@ -169,12 +179,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.4-beta`
+- Tag: `v0.4.5`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.4-beta
+git rev-parse --verify v0.4.5
 ```
 
 - Verify downloaded artifact checksum locally:

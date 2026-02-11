@@ -22,7 +22,7 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 - Find panel behavior (`Cmd+F`, initial focus, Enter-to-find-next) and highlight-current-line setting application.
 - Line number ruler rendering overlap/flicker issues from previous fragment enumeration logic.
 - Editor text sanitization paths around paste/tab/open flows to reduce injected visible whitespace glyph artifacts.
-- Reintroduced whitespace/control glyph artifacts (`U+2581`, `U+2400`–`U+243F`) during typing/paste by hardening sanitizer checks in editor update paths.
+- Prevented reintroduced whitespace/control glyph artifacts (`U+2581`, `U+2400`–`U+243F`) during typing/paste by hardening sanitizer checks in editor update paths.
 - macOS line-number gutter redraw/background mismatch so the ruler keeps the same window/editor tone without white striping.
 
 ## [v0.4.4-beta] - 2026-02-09
