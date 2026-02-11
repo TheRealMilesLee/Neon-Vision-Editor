@@ -52,10 +52,28 @@ echo "Fetching latest release metadata for ${REPO}..."
 RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"
 
 # Prefer the actual app assets, not the source zipball.
-ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | grep -Eo '"browser_download_url":[^"]+"[^"]+"' | grep -Eo 'https://[^"]+' | grep -E 'Neon\\.Vision\\.Editor\\.app\\.(zip|dmg)$' | head -n 1 || true)"
-if [ -z "${ASSET_URL}" ]; then
-  ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | grep -Eo '"browser_download_url":[^"]+"[^"]+"' | grep -Eo 'https://[^"]+' | grep -E '\\.(zip|dmg)$' | head -n 1 || true)"
-fi
+ASSET_URL="$(printf '%s' "${RELEASE_JSON}" | python3 -c '
+import json
+import re
+import sys
+
+try:
+    release = json.load(sys.stdin)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+assets = release.get("assets") or []
+urls = [a.get("browser_download_url", "") for a in assets if isinstance(a, dict)]
+
+preferred = next((u for u in urls if re.search(r"Neon\.Vision\.Editor\.app\.(zip|dmg)$", u)), "")
+if preferred:
+    print(preferred)
+    raise SystemExit(0)
+
+fallback = next((u for u in urls if re.search(r"\.(zip|dmg)$", u)), "")
+print(fallback)
+')"
 if [ -z "${ASSET_URL}" ]; then
   echo "Could not find an app .zip or .dmg asset in the latest release." >&2
   exit 1
