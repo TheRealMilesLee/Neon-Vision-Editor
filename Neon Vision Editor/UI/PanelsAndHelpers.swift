@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major upgrades for faster flow and cleaner completions.",
+            subtitle: "Major changes since v0.4.4: stability, settings, and platform support.",
             bullets: [
-                "Inline code completion now appears as ghost text and accepts with Tab",
-                "Starter templates for every language, plus a toolbar insert button",
-                "Language picker locks correctly to prevent unwanted resets",
-                "Brain Dump auto-disables when enabling code completion"
+                "Editor settings are now consolidated in Settings and aligned with toolbar actions",
+                "Line numbers and ruler rendering are stabilized for scrolling and tab switching",
+                "Whitespace/control glyph injection paths were cleaned up for paste/open/typing flows",
+                "Sequoia + Tahoe compatibility updates and refreshed iOS/macOS icon pipeline"
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

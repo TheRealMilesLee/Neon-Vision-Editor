@@ -17,8 +17,10 @@ final class AcceptingTextView: NSTextView {
     private let vimInterceptionDefaultsKey = "EditorVimInterceptionEnabled"
     private var isVimInsertMode: Bool = true
     private var vimObservers: [NSObjectProtocol] = []
+    private var activityObservers: [NSObjectProtocol] = []
     private var didConfigureVimMode: Bool = false
     private var didApplyDeepInvisibleDisable: Bool = false
+    private var defaultsObserver: NSObjectProtocol?
     private let dropReadChunkSize = 64 * 1024
     fileprivate var isApplyingDroppedContent: Bool = false
     private var inlineSuggestion: String?
@@ -38,6 +40,12 @@ final class AcceptingTextView: NSTextView {
     private var pendingPasteCaretLocation: Int?
 
     deinit {
+        if let defaultsObserver {
+            NotificationCenter.default.removeObserver(defaultsObserver)
+        }
+        for observer in activityObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
         for observer in vimObservers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -49,12 +57,28 @@ final class AcceptingTextView: NSTextView {
             configureVimMode()
             didConfigureVimMode = true
         }
+        configureActivityObservers()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.window?.makeFirstResponder(self)
         }
         textContainerInset = NSSize(width: editorInsetX, height: 12)
+        if defaultsObserver == nil {
+            defaultsObserver = NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.forceDisableInvisibleGlyphRendering(deep: true)
+            }
+        }
         forceDisableInvisibleGlyphRendering(deep: true)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // Keep invisibles/control markers hard-disabled even during inactive-window redraw passes.
+        forceDisableInvisibleGlyphRendering()
+        super.draw(dirtyRect)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -596,6 +620,11 @@ final class AcceptingTextView: NSTextView {
     }
 
     private func forceDisableInvisibleGlyphRendering(deep: Bool = false) {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "NSShowAllInvisibles") || defaults.bool(forKey: "NSShowControlCharacters") {
+            defaults.set(false, forKey: "NSShowAllInvisibles")
+            defaults.set(false, forKey: "NSShowControlCharacters")
+        }
         layoutManager?.showsInvisibleCharacters = false
         layoutManager?.showsControlCharacters = false
 
@@ -627,6 +656,27 @@ final class AcceptingTextView: NSTextView {
                     }
                 }
             }
+        }
+    }
+
+    private func configureActivityObservers() {
+        guard activityObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        let names: [Notification.Name] = [
+            NSApplication.didBecomeActiveNotification,
+            NSApplication.didResignActiveNotification,
+            NSWindow.didBecomeKeyNotification,
+            NSWindow.didResignKeyNotification
+        ]
+        for name in names {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notif in
+                guard let self else { return }
+                if let targetWindow = notif.object as? NSWindow, targetWindow != self.window {
+                    return
+                }
+                self.forceDisableInvisibleGlyphRendering(deep: true)
+            }
+            activityObservers.append(token)
         }
     }
 
@@ -939,8 +989,20 @@ struct CustomTextEditor: NSViewRepresentable {
         return style
     }
 
+    private func effectiveBaseTextColor() -> NSColor {
+        if colorScheme == .light && !translucentBackgroundEnabled {
+            return NSColor.textColor
+        }
+        let theme = currentEditorTheme(colorScheme: colorScheme)
+        return NSColor(theme.text)
+    }
+
     private func applyInvisibleCharacterPreference(_ textView: NSTextView) {
         // Hard-disable invisible/control glyph rendering in editor text.
+        let defaults = UserDefaults.standard
+        defaults.set(false, forKey: "NSShowAllInvisibles")
+        defaults.set(false, forKey: "NSShowControlCharacters")
+        defaults.set(false, forKey: "SettingsShowInvisibleCharacters")
         textView.layoutManager?.showsInvisibleCharacters = false
         textView.layoutManager?.showsControlCharacters = false
         let value = NSNumber(value: false)
@@ -1020,7 +1082,7 @@ struct CustomTextEditor: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isSelectable = true
         textView.allowsUndo = true
-        let baseTextColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.textColor : NSColor(theme.text)
+        let baseTextColor = effectiveBaseTextColor()
         textView.textColor = baseTextColor
         textView.insertionPointColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.labelColor : NSColor(theme.cursor)
         textView.selectedTextAttributes = [
@@ -1172,15 +1234,12 @@ struct CustomTextEditor: NSViewRepresentable {
                 textView.backgroundColor = bg
                 textView.drawsBackground = true
             }
-            let baseTextColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.textColor : NSColor(theme.text)
-            if textView.textColor != baseTextColor {
-                textView.textColor = baseTextColor
-                context.coordinator.invalidateHighlightCache()
-            }
+            let baseTextColor = effectiveBaseTextColor()
             let caretColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.labelColor : NSColor(theme.cursor)
             if textView.insertionPointColor != caretColor {
                 textView.insertionPointColor = caretColor
             }
+            textView.typingAttributes[.foregroundColor] = baseTextColor
             textView.selectedTextAttributes = [
                 .backgroundColor: NSColor(theme.selection)
             ]
@@ -1383,16 +1442,18 @@ struct CustomTextEditor: NSViewRepresentable {
                     guard let self = self, let tv = self.textView else { return }
                     // Discard if text changed since we started
                     guard tv.string == textSnapshot else { return }
+                    let baseColor = self.parent.effectiveBaseTextColor()
 
                     tv.textStorage?.beginEditing()
                     // Clear previous coloring and apply base color
                     tv.textStorage?.removeAttribute(.foregroundColor, range: fullRange)
-                    tv.textStorage?.addAttribute(.foregroundColor, value: tv.textColor ?? NSColor.labelColor, range: fullRange)
+                    tv.textStorage?.addAttribute(.foregroundColor, value: baseColor, range: fullRange)
                     // Apply colored ranges
                     for (range, color) in coloredRanges {
                         tv.textStorage?.addAttribute(.foregroundColor, value: NSColor(color), range: range)
                     }
                     tv.textStorage?.endEditing()
+                    tv.typingAttributes[.foregroundColor] = baseColor
 
                     self.parent.applyInvisibleCharacterPreference(tv)
 
