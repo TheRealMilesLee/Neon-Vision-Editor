@@ -1125,7 +1125,8 @@ struct CustomTextEditor: NSViewRepresentable {
                 context.coordinator.invalidateHighlightCache()
             }
             let style = paragraphStyle()
-            if textView.defaultParagraphStyle != style {
+            let currentLineHeight = textView.defaultParagraphStyle?.lineHeightMultiple ?? 1.0
+            if abs(currentLineHeight - style.lineHeightMultiple) > 0.0001 {
                 textView.defaultParagraphStyle = style
                 textView.typingAttributes[.paragraphStyle] = style
                 let nsLen = (textView.string as NSString).length
@@ -1172,8 +1173,14 @@ struct CustomTextEditor: NSViewRepresentable {
                 textView.drawsBackground = true
             }
             let baseTextColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.textColor : NSColor(theme.text)
-            textView.textColor = baseTextColor
-            textView.insertionPointColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.labelColor : NSColor(theme.cursor)
+            if textView.textColor != baseTextColor {
+                textView.textColor = baseTextColor
+                context.coordinator.invalidateHighlightCache()
+            }
+            let caretColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.labelColor : NSColor(theme.cursor)
+            if textView.insertionPointColor != caretColor {
+                textView.insertionPointColor = caretColor
+            }
             textView.selectedTextAttributes = [
                 .backgroundColor: NSColor(theme.selection)
             ]
