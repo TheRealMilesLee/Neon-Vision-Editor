@@ -8,16 +8,18 @@ import UIKit
 
 enum EditorTextSanitizer {
     static func sanitize(_ input: String) -> String {
+        // Normalize line endings first so CRLF does not become double newlines.
+        let normalized = input
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
         var result = String.UnicodeScalarView()
-        result.reserveCapacity(input.unicodeScalars.count)
-        for scalar in input.unicodeScalars {
+        result.reserveCapacity(normalized.unicodeScalars.count)
+        for scalar in normalized.unicodeScalars {
             switch scalar {
             case "\n":
                 result.append(scalar)
             case "\t", "\u{000B}", "\u{000C}":
                 result.append(" ")
-            case "\r":
-                result.append("\n")
             case "\u{00A0}":
                 result.append(" ")
             case "\u{00B7}", "\u{2022}", "\u{2219}", "\u{237D}", "\u{2420}", "\u{2422}", "\u{2423}", "\u{2581}":

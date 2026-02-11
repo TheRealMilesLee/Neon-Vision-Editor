@@ -1090,6 +1090,7 @@ struct CustomTextEditor: NSViewRepresentable {
             let target = AcceptingTextView.sanitizePlainText(text)
             if textView.string != target {
                 textView.string = target
+                context.coordinator.invalidateHighlightCache()
                 DispatchQueue.main.async {
                     if self.text != target {
                         self.text = target
@@ -1100,6 +1101,7 @@ struct CustomTextEditor: NSViewRepresentable {
             let targetFont = resolvedFont()
             if textView.font != targetFont {
                 textView.font = targetFont
+                context.coordinator.invalidateHighlightCache()
             }
             let style = paragraphStyle()
             if textView.defaultParagraphStyle != style {
@@ -1117,6 +1119,7 @@ struct CustomTextEditor: NSViewRepresentable {
             let sanitized = AcceptingTextView.sanitizePlainText(textView.string)
             if sanitized != textView.string {
                 textView.string = sanitized
+                context.coordinator.invalidateHighlightCache()
                 DispatchQueue.main.async {
                     if self.text != sanitized {
                         self.text = sanitized
@@ -1240,6 +1243,14 @@ struct CustomTextEditor: NSViewRepresentable {
 
         deinit {
             NotificationCenter.default.removeObserver(self)
+        }
+
+        func invalidateHighlightCache() {
+            lastHighlightedText = ""
+            lastLanguage = nil
+            lastColorScheme = nil
+            lastLineHeight = nil
+            lastHighlightToken = 0
         }
 
         /// Schedules highlighting if text/language/theme changed. Skips very large documents
@@ -1389,6 +1400,18 @@ struct CustomTextEditor: NSViewRepresentable {
             let sanitized = AcceptingTextView.sanitizePlainText(textView.string)
             if sanitized != textView.string {
                 textView.string = sanitized
+            }
+            let normalizedStyle = NSMutableParagraphStyle()
+            normalizedStyle.lineHeightMultiple = max(0.9, parent.lineHeightMultiple)
+            textView.defaultParagraphStyle = normalizedStyle
+            textView.typingAttributes[.paragraphStyle] = normalizedStyle
+            if let storage = textView.textStorage {
+                let len = storage.length
+                if len <= 200_000 {
+                    storage.beginEditing()
+                    storage.addAttribute(.paragraphStyle, value: normalizedStyle, range: NSRange(location: 0, length: len))
+                    storage.endEditing()
+                }
             }
             if sanitized != parent.text {
                 parent.text = sanitized
