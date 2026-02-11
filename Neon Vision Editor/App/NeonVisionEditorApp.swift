@@ -101,6 +101,7 @@ struct NeonVisionEditorApp: App {
         // Force-disable invisible/control character rendering.
         defaults.set(false, forKey: "NSShowAllInvisibles")
         defaults.set(false, forKey: "NSShowControlCharacters")
+        defaults.set(false, forKey: "SettingsShowInvisibleCharacters")
         // Default editor behavior:
         // - keep line numbers on
         // - keep style/space visualization toggles off unless user enables them in Settings

@@ -363,6 +363,16 @@ final class AcceptingTextView: NSTextView {
         EditorTextSanitizer.sanitize(input)
     }
 
+    private static func containsGlyphArtifacts(_ input: String) -> Bool {
+        for scalar in input.unicodeScalars {
+            let value = scalar.value
+            if value == 0x2581 || (0x2400...0x243F).contains(value) {
+                return true
+            }
+        }
+        return false
+    }
+
     private func sanitizedPlainText(_ input: String) -> String {
         Self.sanitizePlainText(input)
     }
@@ -566,7 +576,18 @@ final class AcceptingTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
-        forceDisableInvisibleGlyphRendering()
+        forceDisableInvisibleGlyphRendering(deep: true)
+        if let storage = textStorage {
+            let raw = storage.string
+            if Self.containsGlyphArtifacts(raw) {
+                let sanitized = Self.sanitizePlainText(raw)
+                let sel = selectedRange()
+                storage.beginEditing()
+                storage.replaceCharacters(in: NSRange(location: 0, length: (raw as NSString).length), with: sanitized)
+                storage.endEditing()
+                setSelectedRange(NSRange(location: min(sel.location, (sanitized as NSString).length), length: 0))
+            }
+        }
         if !isApplyingInlineSuggestion {
             clearInlineSuggestion()
         }

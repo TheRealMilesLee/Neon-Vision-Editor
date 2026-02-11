@@ -5,26 +5,44 @@ final class LineNumberRulerView: NSRulerView {
     weak var textView: NSTextView?
 
     private let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-    private let textColor = NSColor.secondaryLabelColor
+    private let textColor = NSColor.tertiaryLabelColor.withAlphaComponent(0.92)
     private let inset: CGFloat = 6
+    private var observers: [NSObjectProtocol] = []
 
     init(textView: NSTextView) {
         self.textView = textView
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
         self.clientView = textView
         self.ruleThickness = 48
+        installObservers(textView: textView)
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    deinit {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     override var isOpaque: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let bg: NSColor = textView?.backgroundColor ?? .clear
+        let bg: NSColor = {
+            guard let tv = textView else { return .windowBackgroundColor }
+            let color = tv.backgroundColor
+            if color.alphaComponent >= 0.99 {
+                return color
+            }
+            if let windowColor = tv.window?.backgroundColor {
+                return windowColor
+            }
+            return .windowBackgroundColor
+        }()
         bg.setFill()
         bounds.fill()
 
-        NSColor.separatorColor.withAlphaComponent(0.35).setFill()
+        NSColor.separatorColor.withAlphaComponent(0.09).setFill()
         NSRect(x: bounds.maxX - 1, y: bounds.minY, width: 1, height: bounds.height).fill()
 
         drawHashMarksAndLabels(in: dirtyRect)
@@ -90,6 +108,24 @@ final class LineNumberRulerView: NSRulerView {
             let drawPoint = NSPoint(x: self.bounds.maxX - size.width - self.inset, y: drawY)
             numberString.draw(at: drawPoint, withAttributes: attributes)
         }
+    }
+
+    private func installObservers(textView: NSTextView) {
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(
+            forName: NSText.didChangeNotification,
+            object: textView,
+            queue: .main
+        ) { [weak self] _ in
+            self?.needsDisplay = true
+        })
+        observers.append(center.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: textView.enclosingScrollView?.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            self?.needsDisplay = true
+        })
     }
 }
 #endif

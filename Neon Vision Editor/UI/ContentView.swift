@@ -757,7 +757,7 @@ struct ContentView: View {
 #endif
 
     private func withBaseEditorEvents<Content: View>(_ view: Content) -> some View {
-        view
+        let viewWithClipboardEvents = view
             .onReceive(NotificationCenter.default.publisher(for: .caretPositionDidChange)) { notif in
                 if let line = notif.userInfo?["line"] as? Int, let col = notif.userInfo?["column"] as? Int {
                     if line <= 0 {
@@ -767,99 +767,135 @@ struct ContentView: View {
                     }
                 }
             }
-        .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
-            if let pasted = notif.object as? String {
-                let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
-                currentLanguageBinding.wrappedValue = result.lang
+            .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
+                handlePastedTextNotification(notif)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .pastedFileURL)) { notif in
+                handlePastedFileNotification(notif)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .zoomEditorFontRequested)) { notif in
+                let delta: Double = {
+                    if let d = notif.object as? Double { return d }
+                    if let n = notif.object as? NSNumber { return n.doubleValue }
+                    return 1
+                }()
+                adjustEditorFontSize(delta)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .droppedFileURL)) { notif in
+                handleDroppedFileNotification(notif)
+            }
+
+        return viewWithClipboardEvents
+            .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadStarted)) { notif in
+                droppedFileLoadInProgress = true
+                droppedFileProgressDeterminate = (notif.userInfo?["isDeterminate"] as? Bool) ?? true
+                droppedFileLoadProgress = 0
+                droppedFileLoadLabel = "Reading file"
+                largeFileModeEnabled = (notif.userInfo?["largeFileMode"] as? Bool) ?? false
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadProgress)) { notif in
+                // Recover even if "started" was missed.
+                droppedFileLoadInProgress = true
+                if let determinate = notif.userInfo?["isDeterminate"] as? Bool {
+                    droppedFileProgressDeterminate = determinate
+                }
+                let fraction: Double = {
+                    if let v = notif.userInfo?["fraction"] as? Double { return v }
+                    if let v = notif.userInfo?["fraction"] as? NSNumber { return v.doubleValue }
+                    if let v = notif.userInfo?["fraction"] as? Float { return Double(v) }
+                    if let v = notif.userInfo?["fraction"] as? CGFloat { return Double(v) }
+                    return droppedFileLoadProgress
+                }()
+                droppedFileLoadProgress = min(max(fraction, 0), 1)
+                if (notif.userInfo?["largeFileMode"] as? Bool) == true {
+                    largeFileModeEnabled = true
+                }
+                if let name = notif.userInfo?["fileName"] as? String, !name.isEmpty {
+                    droppedFileLoadLabel = name
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadFinished)) { notif in
+                let success = (notif.userInfo?["success"] as? Bool) ?? true
+                droppedFileLoadProgress = success ? 1 : 0
+                droppedFileProgressDeterminate = true
+                if (notif.userInfo?["largeFileMode"] as? Bool) == true {
+                    largeFileModeEnabled = true
+                }
+                if !success, let message = notif.userInfo?["message"] as? String, !message.isEmpty {
+                    findStatusMessage = "Drop failed: \(message)"
+                    droppedFileLoadLabel = "Import failed"
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + (success ? 0.35 : 2.5)) {
+                    droppedFileLoadInProgress = false
+                }
+            }
+            .onChange(of: viewModel.selectedTab?.id) { _, _ in
+                updateLargeFileMode(for: currentContentBinding.wrappedValue)
+                highlightRefreshToken &+= 1
+            }
+            .onChange(of: currentLanguage) { _, newValue in
+                settingsTemplateLanguage = newValue
+            }
+    }
+
+    private func handlePastedTextNotification(_ notif: Notification) {
+        guard let pasted = notif.object as? String else {
             DispatchQueue.main.async {
                 updateLargeFileMode(for: currentContentBinding.wrappedValue)
                 highlightRefreshToken &+= 1
             }
+            return
         }
-        .onReceive(NotificationCenter.default.publisher(for: .pastedFileURL)) { notif in
-            var urls: [URL] = []
-            if let url = notif.object as? URL {
-                urls = [url]
-            } else if let list = notif.object as? [URL] {
-                urls = list
+        let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
+        if let tab = viewModel.selectedTab {
+            if let idx = viewModel.tabs.firstIndex(where: { $0.id == tab.id }),
+               !viewModel.tabs[idx].languageLocked,
+               viewModel.tabs[idx].language == "plain",
+               result.lang != "plain" {
+                viewModel.tabs[idx].language = result.lang
             }
-            guard !urls.isEmpty else { return }
-            for url in urls {
-                viewModel.openFile(url: url)
-            }
-            DispatchQueue.main.async {
-                updateLargeFileMode(for: currentContentBinding.wrappedValue)
-                highlightRefreshToken &+= 1
-            }
+        } else if singleLanguage == "plain", result.lang != "plain" {
+            singleLanguage = result.lang
         }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomEditorFontRequested)) { notif in
-            let delta: Double = {
-                if let d = notif.object as? Double { return d }
-                if let n = notif.object as? NSNumber { return n.doubleValue }
-                return 1
-            }()
-            adjustEditorFontSize(delta)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .droppedFileURL)) { notif in
-            guard let fileURL = notif.object as? URL else { return }
-            if let preferred = LanguageDetector.shared.preferredLanguage(for: fileURL) {
-                currentLanguageBinding.wrappedValue = preferred
-            }
-            DispatchQueue.main.async {
-                updateLargeFileMode(for: currentContentBinding.wrappedValue)
-                highlightRefreshToken &+= 1
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadStarted)) { notif in
-            droppedFileLoadInProgress = true
-            droppedFileProgressDeterminate = (notif.userInfo?["isDeterminate"] as? Bool) ?? true
-            droppedFileLoadProgress = 0
-            droppedFileLoadLabel = "Reading file"
-            largeFileModeEnabled = (notif.userInfo?["largeFileMode"] as? Bool) ?? false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadProgress)) { notif in
-            // Recover even if "started" was missed.
-            droppedFileLoadInProgress = true
-            if let determinate = notif.userInfo?["isDeterminate"] as? Bool {
-                droppedFileProgressDeterminate = determinate
-            }
-            let fraction: Double = {
-                if let v = notif.userInfo?["fraction"] as? Double { return v }
-                if let v = notif.userInfo?["fraction"] as? NSNumber { return v.doubleValue }
-                if let v = notif.userInfo?["fraction"] as? Float { return Double(v) }
-                if let v = notif.userInfo?["fraction"] as? CGFloat { return Double(v) }
-                return droppedFileLoadProgress
-            }()
-            droppedFileLoadProgress = min(max(fraction, 0), 1)
-            if (notif.userInfo?["largeFileMode"] as? Bool) == true {
-                largeFileModeEnabled = true
-            }
-            if let name = notif.userInfo?["fileName"] as? String, !name.isEmpty {
-                droppedFileLoadLabel = name
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadFinished)) { notif in
-            let success = (notif.userInfo?["success"] as? Bool) ?? true
-            droppedFileLoadProgress = success ? 1 : 0
-            droppedFileProgressDeterminate = true
-            if (notif.userInfo?["largeFileMode"] as? Bool) == true {
-                largeFileModeEnabled = true
-            }
-            if !success, let message = notif.userInfo?["message"] as? String, !message.isEmpty {
-                findStatusMessage = "Drop failed: \(message)"
-                droppedFileLoadLabel = "Import failed"
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + (success ? 0.35 : 2.5)) {
-                droppedFileLoadInProgress = false
-            }
-        }
-        .onChange(of: viewModel.selectedTab?.id) { _, _ in
+        DispatchQueue.main.async {
             updateLargeFileMode(for: currentContentBinding.wrappedValue)
             highlightRefreshToken &+= 1
         }
-        .onChange(of: currentLanguage) { _, newValue in
-            settingsTemplateLanguage = newValue
+    }
+
+    private func handlePastedFileNotification(_ notif: Notification) {
+        var urls: [URL] = []
+        if let url = notif.object as? URL {
+            urls = [url]
+        } else if let list = notif.object as? [URL] {
+            urls = list
+        }
+        guard !urls.isEmpty else { return }
+        for url in urls {
+            viewModel.openFile(url: url)
+        }
+        DispatchQueue.main.async {
+            updateLargeFileMode(for: currentContentBinding.wrappedValue)
+            highlightRefreshToken &+= 1
+        }
+    }
+
+    private func handleDroppedFileNotification(_ notif: Notification) {
+        guard let fileURL = notif.object as? URL else { return }
+        if let preferred = LanguageDetector.shared.preferredLanguage(for: fileURL) {
+            if let tab = viewModel.selectedTab {
+                if let idx = viewModel.tabs.firstIndex(where: { $0.id == tab.id }),
+                   !viewModel.tabs[idx].languageLocked,
+                   viewModel.tabs[idx].language == "plain" {
+                    viewModel.tabs[idx].language = preferred
+                }
+            } else if singleLanguage == "plain" {
+                singleLanguage = preferred
+            }
+        }
+        DispatchQueue.main.async {
+            updateLargeFileMode(for: currentContentBinding.wrappedValue)
+            highlightRefreshToken &+= 1
         }
     }
 
