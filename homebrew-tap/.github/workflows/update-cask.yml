@@ -24,11 +24,7 @@ jobs:
           CASK_PATH: Casks/neon-vision-editor.rb
         run: |
           set -euo pipefail
-          auth_header=()
-          if [ -n "${GITHUB_TOKEN:-}" ]; then
-            auth_header=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-          fi
-          release_json="$(curl -fsSL "${auth_header[@]}" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${APP_REPO}/releases/latest")"
+          release_json="$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${APP_REPO}/releases/latest")"
           tag="$(echo "$release_json" | jq -r '.tag_name')"
           version="${tag#v}"
           asset_url="$(echo "$release_json" | jq -r --arg name "$ASSET_NAME" '.assets[] | select(.name==$name) | .browser_download_url')"
@@ -39,8 +35,21 @@ jobs:
           curl -fsSL "$asset_url" -o "$ASSET_NAME"
           sha256="$(shasum -a 256 "$ASSET_NAME" | awk '{print $1}')"
 
-          ruby -e "path=ENV['CASK_PATH']; data=File.read(path); data.sub!(/version \"[^\"]+\"/, \"version \\\"#{ENV['VERSION']}\\\"\"); data.sub!(/sha256 \"[^\"]+\"/, \"sha256 \\\"#{ENV['SHA256']}\\\"\"); data.sub!(/url \"[^\"]+\"/, \"url \\\"#{ENV['URL']}\\\"\"); File.write(path, data)" \
-            VERSION="$version" SHA256="$sha256" URL="$asset_url"
+          VERSION="$version" SHA256="$sha256" URL="$asset_url" ruby -e '
+            path = ENV.fetch("CASK_PATH")
+            version = ENV.fetch("VERSION")
+            sha256 = ENV.fetch("SHA256")
+            url = ENV.fetch("URL")
+            abort("empty version") if version.empty?
+            abort("empty sha256") if sha256.empty?
+            abort("empty url") if url.empty?
+
+            data = File.read(path)
+            abort("version pattern not found") unless data.sub!(/version "[^"]*"/, "version \"#{version}\"")
+            abort("sha256 pattern not found") unless data.sub!(/sha256 "[^"]*"/, "sha256 \"#{sha256}\"")
+            abort("url pattern not found") unless data.sub!(/url "[^"]*"/, "url \"#{url}\"")
+            File.write(path, data)
+          '
 
           rm -f "$ASSET_NAME"
           echo "$version" > .cask-version

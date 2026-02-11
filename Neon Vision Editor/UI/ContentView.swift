@@ -32,6 +32,7 @@ extension String {
 struct ContentView: View {
     // Environment-provided view model and theme/error bindings
     @EnvironmentObject var viewModel: EditorViewModel
+    @EnvironmentObject private var supportPurchaseManager: SupportPurchaseManager
     @Environment(\.colorScheme) var colorScheme
 #if os(iOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -47,8 +48,26 @@ struct ContentView: View {
     @State var singleContent: String = ""
     @State var singleLanguage: String = "plain"
     @State var caretStatus: String = "Ln 1, Col 1"
-    @State var editorFontSize: CGFloat = 14
+    @AppStorage("SettingsEditorFontSize") var editorFontSize: Double = 14
+    @AppStorage("SettingsEditorFontName") var editorFontName: String = ""
+    @AppStorage("SettingsLineHeight") var editorLineHeight: Double = 1.0
+    @AppStorage("SettingsShowLineNumbers") var showLineNumbers: Bool = true
+    @AppStorage("SettingsHighlightCurrentLine") var highlightCurrentLine: Bool = false
+    @AppStorage("SettingsLineWrapEnabled") var settingsLineWrapEnabled: Bool = false
+    // Removed showHorizontalRuler and showVerticalRuler AppStorage properties
+    @AppStorage("SettingsIndentStyle") var indentStyle: String = "spaces"
+    @AppStorage("SettingsIndentWidth") var indentWidth: Int = 4
+    @AppStorage("SettingsAutoIndent") var autoIndentEnabled: Bool = true
+    @AppStorage("SettingsAutoCloseBrackets") var autoCloseBracketsEnabled: Bool = false
+    @AppStorage("SettingsTrimTrailingWhitespace") var trimTrailingWhitespaceEnabled: Bool = false
+    @AppStorage("SettingsCompletionEnabled") var isAutoCompletionEnabled: Bool = false
+    @AppStorage("SettingsCompletionFromDocument") var completionFromDocument: Bool = false
+    @AppStorage("SettingsCompletionFromSyntax") var completionFromSyntax: Bool = false
+    @AppStorage("SettingsActiveTab") var settingsActiveTab: String = "general"
+    @AppStorage("SettingsTemplateLanguage") private var settingsTemplateLanguage: String = "swift"
+    @AppStorage("SettingsThemeName") private var settingsThemeName: String = "Neon Glow"
     @State var lastProviderUsed: String = "Apple"
+    @State private var highlightRefreshToken: Int = 0
 
     // Persisted API tokens for external providers
     @State var grokAPIToken: String = SecureTokenStore.token(for: .grok)
@@ -58,15 +77,14 @@ struct ContentView: View {
 
     // Debounce handle for inline completion
     @State var lastCompletionWorkItem: DispatchWorkItem?
-    @State var isAutoCompletionEnabled: Bool = false
     @State private var isApplyingCompletion: Bool = false
     @State var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
 
     // Added missing popover UI state
     @State var showAISelectorPopover: Bool = false
-    @State var showAPISettings: Bool = false
 
     @State var showFindReplace: Bool = false
+    @State var showSettingsSheet: Bool = false
     @State var findQuery: String = ""
     @State var replaceQuery: String = ""
     @State var findUsesRegex: Bool = false
@@ -103,6 +121,7 @@ struct ContentView: View {
     @State private var showLanguageSetupPrompt: Bool = false
     @State private var languagePromptSelection: String = "plain"
     @State private var languagePromptInsertTemplate: Bool = false
+    @State private var whitespaceInspectorMessage: String? = nil
 
 #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
     var appleModelAvailable: Bool { true }
@@ -167,7 +186,7 @@ struct ContentView: View {
     /// Prompts the user for a Gemini token if none is saved. Persists to Keychain.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGeminiTokenIfNeeded() -> Bool {
-        if !geminiAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        if !geminiAPIToken.isEmpty { return true }
 #if os(macOS)
         let alert = NSAlert()
         alert.messageText = "Gemini API Key Required"
@@ -751,13 +770,45 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .pastedText)) { notif in
             if let pasted = notif.object as? String {
                 let result = LanguageDetector.shared.detect(text: pasted, name: nil, fileURL: nil)
-                currentLanguageBinding.wrappedValue = result.lang == "plain" ? "swift" : result.lang
+                currentLanguageBinding.wrappedValue = result.lang
             }
+            DispatchQueue.main.async {
+                updateLargeFileMode(for: currentContentBinding.wrappedValue)
+                highlightRefreshToken &+= 1
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pastedFileURL)) { notif in
+            var urls: [URL] = []
+            if let url = notif.object as? URL {
+                urls = [url]
+            } else if let list = notif.object as? [URL] {
+                urls = list
+            }
+            guard !urls.isEmpty else { return }
+            for url in urls {
+                viewModel.openFile(url: url)
+            }
+            DispatchQueue.main.async {
+                updateLargeFileMode(for: currentContentBinding.wrappedValue)
+                highlightRefreshToken &+= 1
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomEditorFontRequested)) { notif in
+            let delta: Double = {
+                if let d = notif.object as? Double { return d }
+                if let n = notif.object as? NSNumber { return n.doubleValue }
+                return 1
+            }()
+            adjustEditorFontSize(delta)
         }
         .onReceive(NotificationCenter.default.publisher(for: .droppedFileURL)) { notif in
             guard let fileURL = notif.object as? URL else { return }
             if let preferred = LanguageDetector.shared.preferredLanguage(for: fileURL) {
                 currentLanguageBinding.wrappedValue = preferred
+            }
+            DispatchQueue.main.async {
+                updateLargeFileMode(for: currentContentBinding.wrappedValue)
+                highlightRefreshToken &+= 1
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .droppedFileLoadStarted)) { notif in
@@ -803,34 +854,56 @@ struct ContentView: View {
                 droppedFileLoadInProgress = false
             }
         }
+        .onChange(of: viewModel.selectedTab?.id) { _, _ in
+            updateLargeFileMode(for: currentContentBinding.wrappedValue)
+            highlightRefreshToken &+= 1
+        }
+        .onChange(of: currentLanguage) { _, newValue in
+            settingsTemplateLanguage = newValue
+        }
+    }
+
+    private func updateLargeFileMode(for text: String) {
+        let isLarge = text.utf8.count >= 2_000_000
+        if largeFileModeEnabled != isLarge {
+            largeFileModeEnabled = isLarge
+            highlightRefreshToken &+= 1
+        }
+    }
+
+    func adjustEditorFontSize(_ delta: Double) {
+        let clamped = min(28, max(10, editorFontSize + delta))
+        if clamped != editorFontSize {
+            editorFontSize = clamped
+            highlightRefreshToken &+= 1
+        }
+    }
+
+    private func pastedFileURL(from text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("file://"), let url = URL(string: trimmed), FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        if trimmed.hasPrefix("/") && FileManager.default.fileExists(atPath: trimmed) {
+            return URL(fileURLWithPath: trimmed)
+        }
+        return nil
     }
 
     private func withCommandEvents<Content: View>(_ view: Content) -> some View {
-        view
+        let viewWithEditorActions = view
             .onReceive(NotificationCenter.default.publisher(for: .clearEditorRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
                 clearEditorContent()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .toggleCodeCompletionRequested)) { notif in
-                guard matchesCurrentWindow(notif) else { return }
-                toggleAutoCompletion()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { notif in
-                guard matchesCurrentWindow(notif) else { return }
-                showFindReplace = true
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .showQuickSwitcherRequested)) { notif in
-                guard matchesCurrentWindow(notif) else { return }
-                quickSwitcherQuery = ""
-                showQuickSwitcher = true
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .showWelcomeTourRequested)) { notif in
-                guard matchesCurrentWindow(notif) else { return }
-                showWelcomeTour = true
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .toggleProjectStructureSidebarRequested)) { notif in
-                guard matchesCurrentWindow(notif) else { return }
-                showProjectStructureSidebar.toggle()
+            .onChange(of: isAutoCompletionEnabled) { _, enabled in
+                if enabled && viewModel.isBrainDumpMode {
+                    viewModel.isBrainDumpMode = false
+                    UserDefaults.standard.set(false, forKey: "BrainDumpModeEnabled")
+                }
+                if enabled && currentLanguage == "plain" && !showLanguageSetupPrompt {
+                    showLanguageSetupPrompt = true
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleVimModeRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
@@ -848,10 +921,6 @@ struct ContentView: View {
                 viewModel.isBrainDumpMode.toggle()
                 UserDefaults.standard.set(viewModel.isBrainDumpMode, forKey: "BrainDumpModeEnabled")
             }
-            .onReceive(NotificationCenter.default.publisher(for: .toggleLineWrapRequested)) { notif in
-                guard matchesCurrentWindow(notif) else { return }
-                viewModel.isLineWrapEnabled.toggle()
-            }
             .onReceive(NotificationCenter.default.publisher(for: .toggleTranslucencyRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
                 if let enabled = notif.object as? Bool {
@@ -864,10 +933,29 @@ struct ContentView: View {
                     vimInsertMode = isInsert
                 }
             }
+
+        let viewWithPanels = viewWithEditorActions
+            .onReceive(NotificationCenter.default.publisher(for: .showFindReplaceRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showFindReplace = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showQuickSwitcherRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                quickSwitcherQuery = ""
+                showQuickSwitcher = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showWelcomeTourRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showWelcomeTour = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleProjectStructureSidebarRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                showProjectStructureSidebar.toggle()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .showAPISettingsRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
                 showAISelectorPopover = false
-                showAPISettings = true
+                openAPISettings()
             }
             .onReceive(NotificationCenter.default.publisher(for: .selectAIModelRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
@@ -875,6 +963,8 @@ struct ContentView: View {
                       let model = AIModel(rawValue: modelRawValue) else { return }
                 selectedModel = model
             }
+
+        return viewWithPanels
     }
 
     private func withTypingEvents<Content: View>(_ view: Content) -> some View {
@@ -939,14 +1029,46 @@ struct ContentView: View {
         } message: {
             Text(grokErrorMessage.wrappedValue)
         }
-        .navigationTitle("Neon Vision Editor")
-        .sheet(isPresented: $showAPISettings) {
-            APISupportSettingsView(
-                grokAPIToken: $grokAPIToken,
-                openAIAPIToken: $openAIAPIToken,
-                geminiAPIToken: $geminiAPIToken,
-                anthropicAPIToken: $anthropicAPIToken
+        .alert(
+            "Whitespace Scalars",
+            isPresented: Binding(
+                get: { whitespaceInspectorMessage != nil },
+                set: { if !$0 { whitespaceInspectorMessage = nil } }
             )
+        ) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(whitespaceInspectorMessage ?? "")
+        }
+        .navigationTitle("Neon Vision Editor")
+        .onAppear {
+            if UserDefaults.standard.object(forKey: "SettingsAutoIndent") == nil {
+                autoIndentEnabled = true
+            }
+            // Keep whitespace marker rendering disabled by default and after migrations.
+            UserDefaults.standard.set(false, forKey: "SettingsShowInvisibleCharacters")
+            UserDefaults.standard.set(false, forKey: "NSShowAllInvisibles")
+            UserDefaults.standard.set(false, forKey: "NSShowControlCharacters")
+            viewModel.isLineWrapEnabled = settingsLineWrapEnabled
+        }
+        .onChange(of: settingsLineWrapEnabled) { _, enabled in
+            if viewModel.isLineWrapEnabled != enabled {
+                viewModel.isLineWrapEnabled = enabled
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .whitespaceScalarInspectionResult)) { notif in
+            guard matchesCurrentWindow(notif) else { return }
+            if let msg = notif.userInfo?[EditorCommandUserInfo.inspectionMessage] as? String {
+                whitespaceInspectorMessage = msg
+            }
+        }
+        .onChange(of: viewModel.isLineWrapEnabled) { _, enabled in
+            if settingsLineWrapEnabled != enabled {
+                settingsLineWrapEnabled = enabled
+            }
+        }
+        .onChange(of: settingsThemeName) { _, _ in
+            highlightRefreshToken += 1
         }
         .sheet(isPresented: $showFindReplace) {
             FindReplacePanel(
@@ -965,6 +1087,15 @@ struct ContentView: View {
                 .frame(width: 420)
 #endif
         }
+#if canImport(UIKit)
+        .sheet(isPresented: $showSettingsSheet) {
+            NeonSettingsView(
+                supportsOpenInTabs: false,
+                supportsTranslucency: false
+            )
+            .environmentObject(supportPurchaseManager)
+        }
+#endif
 #if os(iOS)
         .sheet(isPresented: $showCompactSidebarSheet) {
             NavigationStack {
@@ -1137,6 +1268,7 @@ struct ContentView: View {
     var currentContent: String { currentContentBinding.wrappedValue }
     var currentLanguage: String { currentLanguageBinding.wrappedValue }
 
+
     func toggleAutoCompletion() {
         let willEnable = !isAutoCompletionEnabled
         if willEnable && viewModel.isBrainDumpMode {
@@ -1249,6 +1381,10 @@ struct ContentView: View {
     }
 
     private func starterTemplate(for language: String) -> String? {
+        if let override = UserDefaults.standard.string(forKey: templateOverrideKey(for: language)),
+           !override.isEmpty {
+            return override
+        }
         switch language {
         case "swift":
             return "import Foundation\n\n// TODO: Add code here\n"
@@ -1329,6 +1465,10 @@ struct ContentView: View {
         default:
             return "TODO\n"
         }
+    }
+
+    private func templateOverrideKey(for language: String) -> String {
+        "TemplateOverride_\(language)"
     }
 
     func insertTemplateForCurrentLanguage() {
@@ -1518,7 +1658,15 @@ struct ContentView: View {
                     fontSize: editorFontSize,
                     isLineWrapEnabled: $viewModel.isLineWrapEnabled,
                     isLargeFileMode: largeFileModeEnabled,
-                    translucentBackgroundEnabled: enableTranslucentWindow
+                    translucentBackgroundEnabled: enableTranslucentWindow,
+                    showLineNumbers: showLineNumbers,
+                    showInvisibleCharacters: false,
+                    highlightCurrentLine: highlightCurrentLine,
+                    indentStyle: indentStyle,
+                    indentWidth: indentWidth,
+                    autoIndentEnabled: autoIndentEnabled,
+                    autoCloseBracketsEnabled: autoCloseBracketsEnabled,
+                    highlightRefreshToken: highlightRefreshToken
                 )
                 .id(currentLanguage)
                 .frame(maxWidth: viewModel.isBrainDumpMode ? 800 : .infinity)
@@ -1570,7 +1718,7 @@ struct ContentView: View {
         .toolbar {
             editorToolbarContent
         }
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: Alignment.topTrailing) {
             if droppedFileLoadInProgress {
                 HStack(spacing: 8) {
                     if droppedFileProgressDeterminate {

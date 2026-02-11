@@ -4,6 +4,24 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.5] - 2026-02-11
+
+### Added
+- Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.
+- Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).
+- New cross-platform theme settings panel and iOS app icon asset catalog set.
+
+### Improved
+- Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions.
+- Language detection and syntax highlighting stability for newly opened tabs and ongoing edits.
+- Sequoia/Tahoe compatibility guards and cross-platform settings presentation behavior.
+
+### Fixed
+- iOS build break caused by missing settings sheet state binding in `ContentView`.
+- Find panel behavior (`Cmd+F`, initial focus, Enter-to-find-next) and highlight-current-line setting application.
+- Line number ruler rendering overlap/flicker issues from previous fragment enumeration logic.
+- Editor text sanitization paths around paste/tab/open flows to reduce injected visible whitespace glyph artifacts.
+
 ## [v0.4.4-beta] - 2026-02-09
 
 ### Added

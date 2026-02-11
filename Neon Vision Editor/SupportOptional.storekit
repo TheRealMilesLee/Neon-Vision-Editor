@@ -1,0 +1,46 @@
+{
+  "identifier" : "6F8194BA-6C85-4FA0-8D84-5D2806121307",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.90",
+      "familyShareable" : false,
+      "internalID" : "0D5E32E6-73E8-4DA0-9AE8-4C5A79EA9A20",
+      "localizations" : [
+        {
+          "description" : "Optional one-time support purchase for Neon Vision Editor. No features are locked.",
+          "displayName" : "Support Neon Vision Editor",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Optionale einmalige Unterstuetzung fuer Neon Vision Editor. Keine Funktionen sind gesperrt.",
+          "displayName" : "Neon Vision Editor unterstuetzen",
+          "locale" : "de_DE"
+        }
+      ],
+      "productID" : "h3p.neon-vision-editor.support.optional",
+      "referenceName" : "Optional Support Purchase",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "D3344B10-7800-4E96-A95B-6AD650D56436",
+    "_developerTeamID" : "",
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "de_DE",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "DEU",
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

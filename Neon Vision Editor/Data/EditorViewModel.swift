@@ -6,6 +6,47 @@ import Foundation
 import UIKit
 #endif
 
+enum EditorTextSanitizer {
+    static func sanitize(_ input: String) -> String {
+        var result = String.UnicodeScalarView()
+        result.reserveCapacity(input.unicodeScalars.count)
+        for scalar in input.unicodeScalars {
+            switch scalar {
+            case "\n":
+                result.append(scalar)
+            case "\t", "\u{000B}", "\u{000C}":
+                result.append(" ")
+            case "\r":
+                result.append("\n")
+            case "\u{00A0}":
+                result.append(" ")
+            case "\u{00B7}", "\u{2022}", "\u{2219}", "\u{237D}", "\u{2420}", "\u{2422}", "\u{2423}", "\u{2581}":
+                result.append(" ")
+            case "\u{00BB}", "\u{2192}", "\u{21E5}":
+                result.append(" ")
+            case "\u{00B6}", "\u{21A9}", "\u{21B2}", "\u{21B5}", "\u{23CE}", "\u{2424}", "\u{2425}":
+                result.append("\n")
+            case "\u{240A}", "\u{240D}":
+                result.append("\n")
+            default:
+                let cat = scalar.properties.generalCategory
+                if cat == .format || cat == .control || cat == .lineSeparator || cat == .paragraphSeparator {
+                    continue
+                }
+                if (0x2400...0x243F).contains(scalar.value) {
+                    continue
+                }
+                if cat == .spaceSeparator && scalar != " " && scalar != "\t" {
+                    result.append(" ")
+                    continue
+                }
+                result.append(scalar)
+            }
+        }
+        return String(result)
+    }
+}
+
 struct TabData: Identifiable {
     let id = UUID()
     var name: String
@@ -98,7 +139,8 @@ class EditorViewModel: ObservableObject {
     }
     
     func addNewTab() {
-        let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: "plain", fileURL: nil, languageLocked: true)
+        // Keep language discovery active for new untitled tabs.
+        let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: "plain", fileURL: nil, languageLocked: false)
         tabs.append(newTab)
         selectedTabID = newTab.id
     }
@@ -217,6 +259,11 @@ class EditorViewModel: ObservableObject {
                             tabs[index].languageLocked = false
                         }
                     } else {
+                        // Never downgrade an already-detected language to plain while editing.
+                        // This avoids syntax-highlight flicker when detector confidence drops temporarily.
+                        if detected == "plain" && current != "plain" {
+                            return
+                        }
                         // For all other cases, accept the detection
                         tabs[index].language = detected
                         // If Swift is confidently detected or Swift-only tokens are present, lock to prevent flip-flops
@@ -249,7 +296,9 @@ class EditorViewModel: ObservableObject {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if let url = tabs[index].fileURL {
             do {
-                try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
+                let clean = sanitizeTextForEditor(tabs[index].content)
+                tabs[index].content = clean
+                try clean.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].isDirty = false
             } catch {
                 debugLog("Failed to save file.")
@@ -279,7 +328,9 @@ class EditorViewModel: ObservableObject {
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                try tabs[index].content.write(to: url, atomically: true, encoding: .utf8)
+                let clean = sanitizeTextForEditor(tabs[index].content)
+                tabs[index].content = clean
+                try clean.write(to: url, atomically: true, encoding: .utf8)
                 tabs[index].fileURL = url
                 tabs[index].name = url.lastPathComponent
                 if let mapped = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()] {
@@ -320,7 +371,8 @@ class EditorViewModel: ObservableObject {
     func openFile(url: URL) {
         if focusTabIfOpen(for: url) { return }
         do {
-            let content = try String(contentsOf: url, encoding: .utf8)
+            let raw = try String(contentsOf: url, encoding: .utf8)
+            let content = sanitizeTextForEditor(raw)
             let extLang = LanguageDetector.shared.preferredLanguage(for: url) ?? languageMap[url.pathExtension.lowercased()]
             let detectedLang = extLang ?? LanguageDetector.shared.detect(text: content, name: url.lastPathComponent, fileURL: url).lang
             let newTab = TabData(name: url.lastPathComponent,
@@ -335,6 +387,11 @@ class EditorViewModel: ObservableObject {
             debugLog("Failed to open file.")
         }
     }
+
+    private func sanitizeTextForEditor(_ input: String) -> String {
+        EditorTextSanitizer.sanitize(input)
+    }
+
 
     func hasOpenFile(url: URL) -> Bool {
         indexOfOpenTab(for: url) != nil

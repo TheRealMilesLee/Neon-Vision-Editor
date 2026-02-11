@@ -1,4 +1,4 @@
-#if USE_FOUNDATION_MODELS && canImport(FoundationModels)
+#if USE_FOUNDATION_MODELS && canImport(FoundationModels) && canImport(FoundationModelsMacros)
 import Foundation
 import FoundationModels
 
@@ -120,6 +120,10 @@ public enum AppleFM {
 import Foundation
 
 public enum AppleFM {
+    /// Global toggle to enable Apple Foundation Models features at runtime.
+    /// Defaults to `false` so code completion/AI features are disabled by default.
+    public static var isEnabled: Bool = false
+
     /// Stub health check implementation when Foundation Models is not available.
     /// - Throws: Always throws an error indicating the feature is unavailable.
     public static func appleFMHealthCheck() async throws -> String {

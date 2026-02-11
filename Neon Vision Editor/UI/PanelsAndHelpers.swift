@@ -98,6 +98,7 @@ struct FindReplacePanel: View {
     var onReplace: () -> Void
     var onReplaceAll: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var findFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -105,6 +106,8 @@ struct FindReplacePanel: View {
             LabeledContent("Find") {
                 TextField("Search text", text: $findQuery)
                     .textFieldStyle(.roundedBorder)
+                    .focused($findFieldFocused)
+                    .onSubmit { onFindNext() }
             }
             LabeledContent("Replace") {
                 TextField("Replacement", text: $replaceQuery)
@@ -127,6 +130,9 @@ struct FindReplacePanel: View {
         }
         .padding(16)
         .frame(minWidth: 380)
+        .onAppear {
+            findFieldFocused = true
+        }
     }
 }
 
@@ -268,7 +274,7 @@ struct WelcomeTourView: View {
                 ToolbarItemInfo(title: "Language", description: "Language", shortcutMac: "None", shortcutPad: "None", iconName: "textformat"),
                 ToolbarItemInfo(title: "AI Model & Settings", description: "AI Model & Settings", shortcutMac: "None", shortcutPad: "None", iconName: "brain.head.profile"),
                 ToolbarItemInfo(title: "Code Completion", description: "Enable Code Completion / Disable Code Completion", shortcutMac: "None", shortcutPad: "None", iconName: "bolt.horizontal.circle"),
-                ToolbarItemInfo(title: "Find & Replace", description: "Find & Replace", shortcutMac: "None", shortcutPad: "None", iconName: "magnifyingglass"),
+                ToolbarItemInfo(title: "Find & Replace", description: "Find & Replace", shortcutMac: "Cmd+F", shortcutPad: "Cmd+F", iconName: "magnifyingglass"),
                 ToolbarItemInfo(title: "Toggle Sidebar", description: "Toggle Sidebar", shortcutMac: "Cmd+Opt+S", shortcutPad: "None", iconName: "sidebar.left"),
                 ToolbarItemInfo(title: "Project Sidebar", description: "Toggle Project Structure Sidebar", shortcutMac: "None", shortcutPad: "None", iconName: "sidebar.right"),
                 ToolbarItemInfo(title: "Line Wrap", description: "Enable Wrap / Disable Wrap", shortcutMac: "Cmd+Opt+L", shortcutPad: "None", iconName: "text.justify"),
@@ -548,7 +554,6 @@ extension Notification.Name {
     static let pastedText = Notification.Name("pastedText")
     static let toggleTranslucencyRequested = Notification.Name("toggleTranslucencyRequested")
     static let clearEditorRequested = Notification.Name("clearEditorRequested")
-    static let toggleCodeCompletionRequested = Notification.Name("toggleCodeCompletionRequested")
     static let showFindReplaceRequested = Notification.Name("showFindReplaceRequested")
     static let toggleProjectStructureSidebarRequested = Notification.Name("toggleProjectStructureSidebarRequested")
     static let showAPISettingsRequested = Notification.Name("showAPISettingsRequested")
@@ -563,7 +568,9 @@ extension Notification.Name {
     static let droppedFileLoadFinished = Notification.Name("droppedFileLoadFinished")
     static let toggleSidebarRequested = Notification.Name("toggleSidebarRequested")
     static let toggleBrainDumpModeRequested = Notification.Name("toggleBrainDumpModeRequested")
-    static let toggleLineWrapRequested = Notification.Name("toggleLineWrapRequested")
+    static let zoomEditorFontRequested = Notification.Name("zoomEditorFontRequested")
+    static let inspectWhitespaceScalarsRequested = Notification.Name("inspectWhitespaceScalarsRequested")
+    static let whitespaceScalarInspectionResult = Notification.Name("whitespaceScalarInspectionResult")
 }
 
 extension NSRange {
@@ -572,6 +579,7 @@ extension NSRange {
 
 enum EditorCommandUserInfo {
     static let windowNumber = "targetWindowNumber"
+    static let inspectionMessage = "inspectionMessage"
 }
 
 #if os(macOS)

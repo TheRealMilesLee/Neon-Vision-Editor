@@ -7,6 +7,19 @@ import UIKit
 #endif
 
 extension ContentView {
+    func openSettings(tab: String? = nil) {
+        settingsActiveTab = tab ?? "general"
+#if os(macOS)
+        openWindow(id: "settings")
+#else
+        showSettingsSheet = true
+#endif
+    }
+
+    func openAPISettings() {
+        openSettings(tab: "ai")
+    }
+
     func openFileFromToolbar() {
 #if os(macOS)
         viewModel.openFile()
@@ -138,6 +151,11 @@ extension ContentView {
     func findNext() {
 #if os(macOS)
         guard !findQuery.isEmpty, let tv = activeEditorTextView() else { return }
+        if let win = tv.window {
+            win.makeKeyAndOrderFront(nil)
+            win.makeFirstResponder(tv)
+            NSApp.activate(ignoringOtherApps: true)
+        }
         findStatusMessage = ""
         let ns = tv.string as NSString
         let start = tv.selectedRange().upperBound
@@ -279,28 +297,38 @@ extension ContentView {
 
 #if os(macOS)
     private func activeEditorTextView() -> NSTextView? {
-        let windows = ([NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 }) + NSApp.windows
-        for window in windows {
+        var candidates: [NSWindow] = []
+        if let main = NSApp.mainWindow { candidates.append(main) }
+        if let key = NSApp.keyWindow, key !== NSApp.mainWindow { candidates.append(key) }
+        candidates.append(contentsOf: NSApp.windows.filter { $0.isVisible })
+
+        for window in candidates {
+            if window.isKind(of: NSPanel.self) { continue }
+            if window.styleMask.contains(.docModalWindow) { continue }
+            if let found = findEditorTextView(in: window.contentView) {
+                return found
+            }
             if let tv = window.firstResponder as? NSTextView, tv.isEditable {
                 return tv
-            }
-            if let found = findTextView(in: window.contentView) {
-                return found
             }
         }
         return nil
     }
 
-    private func findTextView(in view: NSView?) -> NSTextView? {
+    private func findEditorTextView(in view: NSView?) -> NSTextView? {
         guard let view else { return nil }
         if let scroll = view as? NSScrollView, let tv = scroll.documentView as? NSTextView, tv.isEditable {
-            return tv
+            if tv.identifier?.rawValue == "NeonEditorTextView" {
+                return tv
+            }
         }
         if let tv = view as? NSTextView, tv.isEditable {
-            return tv
+            if tv.identifier?.rawValue == "NeonEditorTextView" {
+                return tv
+            }
         }
         for subview in view.subviews {
-            if let found = findTextView(in: subview) {
+            if let found = findEditorTextView(in: subview) {
                 return found
             }
         }

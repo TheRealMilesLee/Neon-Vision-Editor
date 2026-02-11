@@ -54,12 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 private struct DetachedWindowContentView: View {
     @StateObject private var viewModel = EditorViewModel()
+    @ObservedObject var supportPurchaseManager: SupportPurchaseManager
     @Binding var showGrokError: Bool
     @Binding var grokErrorMessage: String
 
     var body: some View {
         ContentView()
             .environmentObject(viewModel)
+            .environmentObject(supportPurchaseManager)
             .environment(\.showGrokError, $showGrokError)
             .environment(\.grokErrorMessage, $grokErrorMessage)
             .frame(minWidth: 600, minHeight: 400)
@@ -70,6 +72,7 @@ private struct DetachedWindowContentView: View {
 @main
 struct NeonVisionEditorApp: App {
     @StateObject private var viewModel = EditorViewModel()
+    @StateObject private var supportPurchaseManager = SupportPurchaseManager()
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var useAppleIntelligence: Bool = true
@@ -91,9 +94,38 @@ struct NeonVisionEditorApp: App {
     #endif
 
     init() {
+        let defaults = UserDefaults.standard
         SecureTokenStore.migrateLegacyUserDefaultsTokens()
         // Safety reset: avoid stale NORMAL-mode state making editor appear non-editable.
-        UserDefaults.standard.set(false, forKey: "EditorVimModeEnabled")
+        defaults.set(false, forKey: "EditorVimModeEnabled")
+        // Force-disable invisible/control character rendering.
+        defaults.set(false, forKey: "NSShowAllInvisibles")
+        defaults.set(false, forKey: "NSShowControlCharacters")
+        // Default editor behavior:
+        // - keep line numbers on
+        // - keep style/space visualization toggles off unless user enables them in Settings
+        defaults.register(defaults: [
+            "SettingsShowLineNumbers": true,
+            "SettingsHighlightCurrentLine": false,
+            "SettingsLineWrapEnabled": false,
+            "SettingsShowInvisibleCharacters": false,
+            "SettingsIndentStyle": "spaces",
+            "SettingsIndentWidth": 4,
+            "SettingsAutoIndent": true,
+            "SettingsAutoCloseBrackets": false,
+            "SettingsTrimTrailingWhitespace": false,
+            "SettingsTrimWhitespaceForSyntaxDetection": false,
+            "SettingsCompletionEnabled": false,
+            "SettingsCompletionFromDocument": false,
+            "SettingsCompletionFromSyntax": false
+        ])
+        let whitespaceMigrationKey = "SettingsMigrationWhitespaceGlyphResetV1"
+        if !defaults.bool(forKey: whitespaceMigrationKey) {
+            defaults.set(false, forKey: "SettingsShowInvisibleCharacters")
+            defaults.set(false, forKey: "NSShowAllInvisibles")
+            defaults.set(false, forKey: "NSShowControlCharacters")
+            defaults.set(true, forKey: whitespaceMigrationKey)
+        }
     }
 
 #if os(macOS)
@@ -123,6 +155,7 @@ struct NeonVisionEditorApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
+                .environmentObject(supportPurchaseManager)
                 .onAppear { appDelegate.viewModel = viewModel }
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
@@ -149,6 +182,7 @@ struct NeonVisionEditorApp: App {
 
         WindowGroup("New Window", id: "blank-window") {
             DetachedWindowContentView(
+                supportPurchaseManager: supportPurchaseManager,
                 showGrokError: $showGrokError,
                 grokErrorMessage: $grokErrorMessage
             )
@@ -156,7 +190,22 @@ struct NeonVisionEditorApp: App {
         .defaultSize(width: 1000, height: 600)
         .handlesExternalEvents(matching: [])
 
+        
+        WindowGroup("Settings", id: "settings") {
+            NeonSettingsView()
+                .environmentObject(supportPurchaseManager)
+                .background(NonRestorableWindow())
+        }
+        .defaultSize(width: 860, height: 620)
+
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    openWindow(id: "settings")
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+
             CommandGroup(replacing: .newItem) {
                 Button("New Window") {
                     openWindow(id: "blank-window")
@@ -293,11 +342,6 @@ struct NeonVisionEditorApp: App {
                 }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
 
-                Button("Line Wrap") {
-                    postWindowCommand(.toggleLineWrapRequested)
-                }
-                    .keyboardShortcut("l", modifiers: [.command, .option])
-
                 Button("Toggle Translucent Window Background") {
                     let next = !UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
                     UserDefaults.standard.set(next, forKey: "EnableTranslucentWindow")
@@ -321,13 +365,10 @@ struct NeonVisionEditorApp: App {
                     postWindowCommand(.clearEditorRequested)
                 }
 
-                Button("Toggle Code Completion") {
-                    postWindowCommand(.toggleCodeCompletionRequested)
-                }
-
                 Button("Find & Replace") {
                     postWindowCommand(.showFindReplaceRequested)
                 }
+                .keyboardShortcut("f", modifiers: .command)
 
                 Divider()
 
@@ -383,6 +424,12 @@ struct NeonVisionEditorApp: App {
             CommandMenu("Diag") {
                 Text(appleAIStatusMenuLabel)
                 Divider()
+                Button("Inspect Whitespace Scalars at Caret") {
+                    postWindowCommand(.inspectWhitespaceScalarsRequested)
+                }
+                .keyboardShortcut("u", modifiers: [.command, .shift])
+
+                Divider()
                 Button("Run AI Check") {
                     Task {
                         #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
@@ -413,12 +460,43 @@ struct NeonVisionEditorApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
+                .environmentObject(supportPurchaseManager)
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
         }
 #endif
     }
+
+    private func showSettingsWindow() {
+        #if os(macOS)
+        openWindow(id: "settings")
+        #endif
+    }
 }
+
+#if os(macOS)
+private struct NonRestorableWindow: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                window.isRestorable = false
+                window.identifier = nil
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let window = nsView.window {
+                window.isRestorable = false
+                window.identifier = nil
+            }
+        }
+    }
+}
+#endif
 
 struct ShowGrokErrorKey: EnvironmentKey {
     static let defaultValue: Binding<Bool> = .constant(false)

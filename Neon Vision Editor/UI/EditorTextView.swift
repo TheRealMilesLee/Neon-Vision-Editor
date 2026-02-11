@@ -1,6 +1,10 @@
 import SwiftUI
 import Foundation
 
+extension Notification.Name {
+    static let pastedFileURL = Notification.Name("pastedFileURL")
+}
+
 #if os(macOS)
 import AppKit
 
@@ -14,6 +18,7 @@ final class AcceptingTextView: NSTextView {
     private var isVimInsertMode: Bool = true
     private var vimObservers: [NSObjectProtocol] = []
     private var didConfigureVimMode: Bool = false
+    private var didApplyDeepInvisibleDisable: Bool = false
     private let dropReadChunkSize = 64 * 1024
     fileprivate var isApplyingDroppedContent: Bool = false
     private var inlineSuggestion: String?
@@ -21,6 +26,13 @@ final class AcceptingTextView: NSTextView {
     private var inlineSuggestionView: NSTextField?
     fileprivate var isApplyingInlineSuggestion: Bool = false
     fileprivate var recentlyAcceptedInlineSuggestion: Bool = false
+    fileprivate var isApplyingPaste: Bool = false
+    var autoIndentEnabled: Bool = true
+    var autoCloseBracketsEnabled: Bool = true
+    var indentStyle: String = "spaces"
+    var indentWidth: Int = 4
+    var highlightCurrentLine: Bool = true
+    private let editorInsetX: CGFloat = 12
 
     // We want the caret at the *start* of the paste.
     private var pendingPasteCaretLocation: Int?
@@ -41,6 +53,8 @@ final class AcceptingTextView: NSTextView {
             guard let self else { return }
             self.window?.makeFirstResponder(self)
         }
+        textContainerInset = NSSize(width: editorInsetX, height: 12)
+        forceDisableInvisibleGlyphRendering(deep: true)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -51,6 +65,15 @@ final class AcceptingTextView: NSTextView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains([.shift, .option]) {
+            let delta = event.scrollingDeltaY
+            if abs(delta) > 0.1 {
+                let step: Double = delta > 0 ? 1 : -1
+                NotificationCenter.default.post(name: .zoomEditorFontRequested, object: step)
+                return
+            }
+        }
         cancelPendingPasteCaretEnforcement()
         super.scrollWheel(with: event)
         updateInlineSuggestionPosition()
@@ -69,6 +92,7 @@ final class AcceptingTextView: NSTextView {
     override func layout() {
         super.layout()
         updateInlineSuggestionPosition()
+        forceDisableInvisibleGlyphRendering()
     }
 
     // MARK: - Drag & Drop: insert file contents instead of file path
@@ -82,110 +106,14 @@ final class AcceptingTextView: NSTextView {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         let pb = sender.draggingPasteboard
         if let nsurls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [NSURL],
-           let first = nsurls.first {
-            let url: URL = first as URL
-            let didAccess = url.startAccessingSecurityScopedResource()
-            let selectionAtDrop = clampedSelectionRange()
-            let fileName = url.lastPathComponent
-            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-            let attrSize = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
-            let resourceSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? 0
-            let totalBytes = max(attrSize, resourceSize)
-            let largeFileMode = totalBytes >= 1_000_000
-
-            NotificationCenter.default.post(
-                name: .droppedFileLoadStarted,
-                object: nil,
-                userInfo: [
-                    "fileName": fileName,
-                    "totalBytes": totalBytes,
-                    "largeFileMode": largeFileMode,
-                    "isDeterminate": totalBytes > 0
-                ]
-            )
-
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                defer {
-                    if didAccess {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                }
-                guard let self else { return }
-
-                do {
-                    let data = try self.readDroppedFileData(at: url, totalBytes: totalBytes) { fraction in
-                        NotificationCenter.default.post(
-                            name: .droppedFileLoadProgress,
-                            object: nil,
-                            userInfo: [
-                                "fraction": fraction * 0.55,
-                                "fileName": "Reading file",
-                                "largeFileMode": largeFileMode
-                            ]
-                        )
-                    }
-                    let content = self.decodeDroppedFileText(data, fileURL: url)
-
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
-                        self.applyDroppedContentInChunks(
-                            content,
-                            at: selectionAtDrop,
-                            fileName: fileName,
-                            largeFileMode: largeFileMode || data.count >= 1_000_000
-                        ) { success, insertedLength in
-                            guard success else {
-                                NotificationCenter.default.post(
-                                    name: .droppedFileLoadFinished,
-                                    object: nil,
-                                    userInfo: [
-                                        "success": false,
-                                        "fileName": fileName,
-                                        "largeFileMode": largeFileMode || data.count >= 1_000_000,
-                                        "message": "Failed while applying dropped content."
-                                    ]
-                                )
-                                return
-                            }
-
-                            let newLoc = selectionAtDrop.location + insertedLength
-                            let caretLoc = largeFileMode ? selectionAtDrop.location : newLoc
-                            self.setSelectedRange(NSRange(location: caretLoc, length: 0))
-                            // Scrolling a full multi-MB inserted range is extremely expensive.
-                            // Keep viewport work bounded by scrolling only to the caret.
-                            self.scrollRangeToVisible(NSRange(location: caretLoc, length: 0))
-                            self.didChangeText()
-
-                            NotificationCenter.default.post(name: .droppedFileURL, object: url)
-                            if insertedLength <= 120_000 {
-                                NotificationCenter.default.post(name: .pastedText, object: content)
-                            }
-                            NotificationCenter.default.post(
-                                name: .droppedFileLoadFinished,
-                                object: nil,
-                                userInfo: [
-                                    "success": true,
-                                    "fileName": fileName,
-                                    "largeFileMode": largeFileMode || data.count >= 1_000_000
-                                ]
-                            )
-                        }
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(
-                            name: .droppedFileLoadFinished,
-                            object: nil,
-                            userInfo: [
-                                "success": false,
-                                "fileName": fileName,
-                                "largeFileMode": largeFileMode,
-                                "message": error.localizedDescription
-                            ]
-                        )
-                    }
-                }
+           !nsurls.isEmpty {
+            let urls = nsurls.map { $0 as URL }
+            if urls.count == 1 {
+                NotificationCenter.default.post(name: .pastedFileURL, object: urls[0])
+            } else {
+                NotificationCenter.default.post(name: .pastedFileURL, object: urls)
             }
+            // Do not insert content; let higher-level controller open a new tab.
             return true
         }
         return false
@@ -380,13 +308,13 @@ final class AcceptingTextView: NSTextView {
         let encodings: [String.Encoding] = [.utf8, .utf16, .utf16LittleEndian, .utf16BigEndian, .windowsCP1252, .isoLatin1]
         for encoding in encodings {
             if let decoded = String(data: data, encoding: encoding) {
-                return decoded
+                return Self.sanitizePlainText(decoded)
             }
         }
         if let fallback = try? String(contentsOf: fileURL, encoding: .utf8) {
-            return fallback
+            return Self.sanitizePlainText(fallback)
         }
-        return String(decoding: data, as: UTF8.self)
+        return Self.sanitizePlainText(String(decoding: data, as: UTF8.self))
     }
 
     // MARK: - Typing helpers (existing behavior)
@@ -398,10 +326,14 @@ final class AcceptingTextView: NSTextView {
             super.insertText(insertString, replacementRange: replacementRange)
             return
         }
+        let sanitized = sanitizedPlainText(s)
+
+        // Ensure invisibles off after insertion
+        self.layoutManager?.showsInvisibleCharacters = false
+        self.layoutManager?.showsControlCharacters = false
 
         // Auto-indent by copying leading whitespace
-        if s == "\n" {
-            // Auto-indent: copy leading whitespace from current line
+        if sanitized == "\n" && autoIndentEnabled {
             let ns = (string as NSString)
             let sel = selectedRange()
             let lineRange = ns.lineRange(for: NSRange(location: sel.location, length: 0))
@@ -416,14 +348,23 @@ final class AcceptingTextView: NSTextView {
 
         // Auto-close common bracket/quote pairs
         let pairs: [String: String] = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
-        if let closing = pairs[s] {
+        if autoCloseBracketsEnabled, let closing = pairs[sanitized] {
             let sel = selectedRange()
-            super.insertText(s + closing, replacementRange: replacementRange)
+            super.insertText(sanitized + closing, replacementRange: replacementRange)
             setSelectedRange(NSRange(location: sel.location + 1, length: 0))
             return
         }
 
-        super.insertText(insertString, replacementRange: replacementRange)
+        super.insertText(sanitized, replacementRange: replacementRange)
+    }
+
+    /// Remove control/format characters that render as visible placeholders and normalize NBSP/CR to safe whitespace.
+    static func sanitizePlainText(_ input: String) -> String {
+        EditorTextSanitizer.sanitize(input)
+    }
+
+    private func sanitizedPlainText(_ input: String) -> String {
+        Self.sanitizePlainText(input)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -502,34 +443,170 @@ final class AcceptingTextView: NSTextView {
         if acceptInlineSuggestion() {
             return
         }
-        super.insertTab(sender)
+        // Keep Tab insertion deterministic and avoid platform-level invisible glyph rendering.
+        let insertion: String
+        if indentStyle == "tabs" {
+            insertion = "\t"
+        } else {
+            insertion = String(repeating: " ", count: max(1, indentWidth))
+        }
+        super.insertText(sanitizedPlainText(insertion), replacementRange: selectedRange())
+        forceDisableInvisibleGlyphRendering()
     }
 
     // Paste: capture insertion point and enforce caret position after paste across async updates.
     override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        if let nsurls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [NSURL],
+           !nsurls.isEmpty {
+            let urls = nsurls.map { $0 as URL }
+            if urls.count == 1 {
+                NotificationCenter.default.post(name: .pastedFileURL, object: urls[0])
+            } else {
+                NotificationCenter.default.post(name: .pastedFileURL, object: urls)
+            }
+            return
+        }
+        if let urls = fileURLsFromPasteboard(pasteboard), !urls.isEmpty {
+            if urls.count == 1 {
+                NotificationCenter.default.post(name: .pastedFileURL, object: urls[0])
+            } else {
+                NotificationCenter.default.post(name: .pastedFileURL, object: urls)
+            }
+            return
+        }
         // Capture where paste begins (start of insertion/replacement)
         pendingPasteCaretLocation = selectedRange().location
 
-        // Keep your existing notification behavior
-        let pastedString = NSPasteboard.general.string(forType: .string)
+        if let raw = pasteboardPlainString(from: pasteboard), !raw.isEmpty {
+            if let pathURL = fileURLFromString(raw) {
+                NotificationCenter.default.post(name: .pastedFileURL, object: pathURL)
+                return
+            }
+            let sanitized = sanitizedPlainText(raw)
+            isApplyingPaste = true
+            textStorage?.beginEditing()
+            replaceCharacters(in: selectedRange(), with: sanitized)
+            textStorage?.endEditing()
+            isApplyingPaste = false
 
+            // Ensure invisibles are off after paste
+            self.layoutManager?.showsInvisibleCharacters = false
+            self.layoutManager?.showsControlCharacters = false
+
+            NotificationCenter.default.post(name: .pastedText, object: sanitized)
+            didChangeText()
+
+            schedulePasteCaretEnforcement()
+            return
+        }
+
+        isApplyingPaste = true
         super.paste(sender)
+        DispatchQueue.main.async { [weak self] in
+            self?.isApplyingPaste = false
 
-        if let pastedString, !pastedString.isEmpty {
-            NotificationCenter.default.post(name: .pastedText, object: pastedString)
+            // Ensure invisibles are off after async paste
+            self?.layoutManager?.showsInvisibleCharacters = false
+            self?.layoutManager?.showsControlCharacters = false
         }
 
         // Enforce caret after paste (multiple ticks beats late selection changes)
         schedulePasteCaretEnforcement()
     }
 
+    private func pasteboardPlainString(from pasteboard: NSPasteboard) -> String? {
+        if let raw = pasteboard.string(forType: .string), !raw.isEmpty {
+            return raw
+        }
+        if let strings = pasteboard.readObjects(forClasses: [NSString.self], options: nil) as? [NSString],
+           let first = strings.first,
+           first.length > 0 {
+            return first as String
+        }
+        if let rtf = pasteboard.data(forType: .rtf),
+           let attributed = try? NSAttributedString(
+               data: rtf,
+               options: [.documentType: NSAttributedString.DocumentType.rtf],
+               documentAttributes: nil
+           ),
+           !attributed.string.isEmpty {
+            return attributed.string
+        }
+        return nil
+    }
+
+    private func fileURLsFromPasteboard(_ pasteboard: NSPasteboard) -> [URL]? {
+        if let fileURLString = pasteboard.string(forType: .fileURL),
+           let url = URL(string: fileURLString),
+           url.isFileURL,
+           FileManager.default.fileExists(atPath: url.path) {
+            return [url]
+        }
+        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+        if let list = pasteboard.propertyList(forType: filenamesType) as? [String] {
+            let urls = list.map { URL(fileURLWithPath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
+            if !urls.isEmpty { return urls }
+        }
+        return nil
+    }
+
+    private func fileURLFromString(_ text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: trimmed), url.isFileURL, FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        // Plain paths (with spaces or ~)
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        if FileManager.default.fileExists(atPath: expanded) {
+            return URL(fileURLWithPath: expanded)
+        }
+        return nil
+    }
+
     override func didChangeText() {
         super.didChangeText()
+        forceDisableInvisibleGlyphRendering()
         if !isApplyingInlineSuggestion {
             clearInlineSuggestion()
         }
         // Pasting triggers didChangeText; schedule enforcement again.
         schedulePasteCaretEnforcement()
+    }
+
+    private func forceDisableInvisibleGlyphRendering(deep: Bool = false) {
+        layoutManager?.showsInvisibleCharacters = false
+        layoutManager?.showsControlCharacters = false
+
+        guard deep, !didApplyDeepInvisibleDisable else { return }
+        didApplyDeepInvisibleDisable = true
+
+        let selectors = [
+            "setShowsInvisibleCharacters:",
+            "setShowsControlCharacters:",
+            "setDisplaysInvisibleCharacters:",
+            "setDisplaysControlCharacters:"
+        ]
+        for selectorName in selectors {
+            let selector = NSSelectorFromString(selectorName)
+            let value = NSNumber(value: false)
+            if responds(to: selector) {
+                _ = perform(selector, with: value)
+            }
+            if let lm = layoutManager, lm.responds(to: selector) {
+                _ = lm.perform(selector, with: value)
+            }
+        }
+        if #available(macOS 12.0, *) {
+            if let tlm = value(forKey: "textLayoutManager") as? NSObject {
+                for selectorName in selectors {
+                    let selector = NSSelectorFromString(selectorName)
+                    if tlm.responds(to: selector) {
+                        _ = tlm.perform(selector, with: NSNumber(value: false))
+                    }
+                }
+            }
+        }
     }
 
     func showInlineSuggestion(_ suggestion: String, at location: Int) {
@@ -568,14 +645,19 @@ final class AcceptingTextView: NSTextView {
     private func acceptInlineSuggestion() -> Bool {
         guard let suggestion = inlineSuggestion,
               let loc = inlineSuggestionLocation else { return false }
+        let sanitizedSuggestion = sanitizedPlainText(suggestion)
+        guard !sanitizedSuggestion.isEmpty else {
+            clearInlineSuggestion()
+            return false
+        }
         let sel = selectedRange()
         guard sel.length == 0, sel.location == loc else {
             clearInlineSuggestion()
             return false
         }
         isApplyingInlineSuggestion = true
-        textStorage?.replaceCharacters(in: NSRange(location: loc, length: 0), with: suggestion)
-        setSelectedRange(NSRange(location: loc + (suggestion as NSString).length, length: 0))
+        textStorage?.replaceCharacters(in: NSRange(location: loc, length: 0), with: sanitizedSuggestion)
+        setSelectedRange(NSRange(location: loc + (sanitizedSuggestion as NSString).length, length: 0))
         isApplyingInlineSuggestion = false
         recentlyAcceptedInlineSuggestion = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -657,6 +739,58 @@ final class AcceptingTextView: NSTextView {
         )
     }
 
+    private func scalarName(for value: UInt32) -> String {
+        switch value {
+        case 0x20: return "SPACE"
+        case 0x09: return "TAB"
+        case 0x0A: return "LF"
+        case 0x0D: return "CR"
+        case 0x2581: return "LOWER_ONE_EIGHTH_BLOCK"
+        default: return "U+\(String(format: "%04X", value))"
+        }
+    }
+
+    private func inspectWhitespaceScalarsAtCaret() {
+        let ns = string as NSString
+        let length = ns.length
+        let caret = min(max(selectedRange().location, 0), max(length - 1, 0))
+        let lineRange = ns.lineRange(for: NSRange(location: caret, length: 0))
+        let line = ns.substring(with: lineRange)
+        let lineOneBased = ns.substring(to: lineRange.location).reduce(1) { $1 == "\n" ? $0 + 1 : $0 }
+        var counts: [UInt32: Int] = [:]
+        for scalar in line.unicodeScalars {
+            let value = scalar.value
+            let isWhitespace = scalar.properties.generalCategory == .spaceSeparator || value == 0x20 || value == 0x09
+            let isLineBreak = value == 0x0A || value == 0x0D
+            let isControlPicture = (0x2400...0x243F).contains(value)
+            let isLowBlock = value == 0x2581
+            if isWhitespace || isLineBreak || isControlPicture || isLowBlock {
+                counts[value, default: 0] += 1
+            }
+        }
+
+        let header = "Line \(lineOneBased) at UTF16@\(selectedRange().location), whitespace scalars:"
+        let body: String
+        if counts.isEmpty {
+            body = "none detected"
+        } else {
+            let rows = counts.keys.sorted().map { key in
+                "\(scalarName(for: key)) x\(counts[key] ?? 0)"
+            }
+            body = rows.joined(separator: ", ")
+        }
+
+        let windowNumber = window?.windowNumber ?? -1
+        NotificationCenter.default.post(
+            name: .whitespaceScalarInspectionResult,
+            object: nil,
+            userInfo: [
+                EditorCommandUserInfo.windowNumber: windowNumber,
+                EditorCommandUserInfo.inspectionMessage: "\(header)\n\(body)"
+            ]
+        )
+    }
+
     private func configureVimMode() {
         // Vim enabled starts in NORMAL; disabled uses regular insert typing.
         isVimInsertMode = !UserDefaults.standard.bool(forKey: vimModeDefaultsKey)
@@ -674,7 +808,45 @@ final class AcceptingTextView: NSTextView {
             self.postVimModeState()
         }
         vimObservers.append(observer)
+
+        let inspectorObserver = NotificationCenter.default.addObserver(
+            forName: .inspectWhitespaceScalarsRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] notif in
+            guard let self else { return }
+            if let target = notif.userInfo?[EditorCommandUserInfo.windowNumber] as? Int,
+               let own = self.window?.windowNumber,
+               target != own {
+                return
+            }
+            self.inspectWhitespaceScalarsAtCaret()
+        }
+        vimObservers.append(inspectorObserver)
     }
+
+    private func trimTrailingWhitespaceIfEnabled() {
+        let enabled = UserDefaults.standard.bool(forKey: "SettingsTrimTrailingWhitespace")
+        guard enabled else { return }
+        let original = self.string
+        let lines = original.components(separatedBy: .newlines)
+        var changed = false
+        let trimmedLines = lines.map { line -> String in
+            let trimmed = line.replacingOccurrences(of: #"[\t\x20]+$"#, with: "", options: .regularExpression)
+            if trimmed != line { changed = true }
+            return trimmed
+        }
+        guard changed else { return }
+        let newString = trimmedLines.joined(separator: "\n")
+        let oldSelected = self.selectedRange()
+        self.textStorage?.beginEditing()
+        self.string = newString
+        self.textStorage?.endEditing()
+        let newLoc = min(oldSelected.location, (newString as NSString).length)
+        self.setSelectedRange(NSRange(location: newLoc, length: 0))
+        self.didChangeText()
+    }
+
 }
 
 // NSViewRepresentable wrapper around NSTextView to integrate with SwiftUI.
@@ -686,6 +858,23 @@ struct CustomTextEditor: NSViewRepresentable {
     @Binding var isLineWrapEnabled: Bool
     let isLargeFileMode: Bool
     let translucentBackgroundEnabled: Bool
+    let showLineNumbers: Bool
+    let showInvisibleCharacters: Bool
+    let highlightCurrentLine: Bool
+    let indentStyle: String
+    let indentWidth: Int
+    let autoIndentEnabled: Bool
+    let autoCloseBracketsEnabled: Bool
+    let highlightRefreshToken: Int
+
+    private var fontName: String {
+        UserDefaults.standard.string(forKey: "SettingsEditorFontName") ?? ""
+    }
+
+    private var lineHeightMultiple: CGFloat {
+        let stored = UserDefaults.standard.double(forKey: "SettingsLineHeight")
+        return CGFloat(stored > 0 ? stored : 1.0)
+    }
 
     // Toggle soft-wrapping by adjusting text container sizing and scroller visibility.
     private func applyWrapMode(isWrapped: Bool, textView: NSTextView, scrollView: NSScrollView) {
@@ -716,6 +905,54 @@ struct CustomTextEditor: NSViewRepresentable {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
+    private func resolvedFont() -> NSFont {
+        if let named = NSFont(name: fontName, size: fontSize) {
+            return named
+        }
+        return NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+    }
+
+    private func paragraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineHeightMultiple = max(0.9, lineHeightMultiple)
+        return style
+    }
+
+    private func applyInvisibleCharacterPreference(_ textView: NSTextView) {
+        // Hard-disable invisible/control glyph rendering in editor text.
+        textView.layoutManager?.showsInvisibleCharacters = false
+        textView.layoutManager?.showsControlCharacters = false
+        let value = NSNumber(value: false)
+        let selectors = [
+            "setShowsInvisibleCharacters:",
+            "setShowsControlCharacters:",
+            "setDisplaysInvisibleCharacters:",
+            "setDisplaysControlCharacters:"
+        ]
+        for selectorName in selectors {
+            let selector = NSSelectorFromString(selectorName)
+            if textView.responds(to: selector) {
+                let enabled = selectorName.contains("ControlCharacters") ? NSNumber(value: false) : value
+                textView.perform(selector, with: enabled)
+            }
+            if let layoutManager = textView.layoutManager, layoutManager.responds(to: selector) {
+                let enabled = selectorName.contains("ControlCharacters") ? NSNumber(value: false) : value
+                _ = layoutManager.perform(selector, with: enabled)
+            }
+        }
+        if #available(macOS 12.0, *) {
+            if let tlm = textView.value(forKey: "textLayoutManager") as? NSObject {
+                for selectorName in selectors {
+                    let selector = NSSelectorFromString(selectorName)
+                    if tlm.responds(to: selector) {
+                        let enabled = selectorName.contains("ControlCharacters") ? NSNumber(value: false) : value
+                        _ = tlm.perform(selector, with: enabled)
+                    }
+                }
+            }
+        }
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
         // Build scroll view and text view
         let scrollView = NSScrollView()
@@ -725,30 +962,68 @@ struct CustomTextEditor: NSViewRepresentable {
         scrollView.contentView.postsBoundsChangedNotifications = true
 
         let textView = AcceptingTextView(frame: .zero)
+        textView.identifier = NSUserInterfaceItemIdentifier("NeonEditorTextView")
         // Configure editing behavior and visuals
         textView.isEditable = true
         textView.isRichText = false
         textView.usesFindBar = true
+        textView.usesInspectorBar = false
+        textView.usesFontPanel = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
 
+        // Apply visibility preference from Settings (off by default).
+        applyInvisibleCharacterPreference(textView)
+        textView.textStorage?.beginEditing()
+        if let storage = textView.textStorage {
+            let fullRange = NSRange(location: 0, length: storage.length)
+            storage.removeAttribute(.backgroundColor, range: fullRange)
+            storage.removeAttribute(.underlineStyle, range: fullRange)
+            storage.removeAttribute(.strikethroughStyle, range: fullRange)
+        }
+        textView.textStorage?.endEditing()
+
+        let theme = currentEditorTheme(colorScheme: colorScheme)
         if translucentBackgroundEnabled {
             textView.backgroundColor = .clear
             textView.drawsBackground = false
         } else {
-            textView.backgroundColor = .textBackgroundColor
+            let bg = (colorScheme == .light) ? NSColor.textBackgroundColor : NSColor(theme.background)
+            textView.backgroundColor = bg
             textView.drawsBackground = true
         }
 
-        textView.textContainerInset = NSSize(width: 12, height: 12)
+        // Use NSRulerView line numbering (v0.4.4-beta behavior).
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isSelectable = true
         textView.allowsUndo = true
-        textView.textColor = .labelColor
-        textView.insertionPointColor = .controlAccentColor
+        let baseTextColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.textColor : NSColor(theme.text)
+        textView.textColor = baseTextColor
+        textView.insertionPointColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.labelColor : NSColor(theme.cursor)
+        textView.selectedTextAttributes = [
+            .backgroundColor: NSColor(theme.selection)
+        ]
+        textView.usesInspectorBar = false
+        textView.usesFontPanel = false
         textView.layoutManager?.allowsNonContiguousLayout = true
+
+        // Keep horizontal rulers disabled; vertical ruler is dedicated to line numbers.
+        textView.usesRuler = true
+        textView.isRulerVisible = showLineNumbers
+        scrollView.hasHorizontalRuler = false
+        scrollView.horizontalRulerView = nil
+        scrollView.hasVerticalRuler = showLineNumbers
+        scrollView.rulersVisible = showLineNumbers
+        scrollView.verticalRulerView = showLineNumbers ? LineNumberRulerView(textView: textView) : nil
+
+        applyInvisibleCharacterPreference(textView)
+        textView.autoIndentEnabled = autoIndentEnabled
+        textView.autoCloseBracketsEnabled = autoCloseBracketsEnabled
+        textView.indentStyle = indentStyle
+        textView.indentWidth = indentWidth
+        textView.highlightCurrentLine = highlightCurrentLine
 
         // Disable smart substitutions/detections that can interfere with selection when recoloring
         textView.isAutomaticTextCompletionEnabled = false
@@ -768,16 +1043,20 @@ struct CustomTextEditor: NSViewRepresentable {
         // Configure the text view delegate
         textView.delegate = context.coordinator
 
-        // Install line number ruler
-        scrollView.hasVerticalRuler = !isLargeFileMode
-        scrollView.rulersVisible = !isLargeFileMode
-        scrollView.verticalRulerView = LineNumberRulerView(textView: textView)
-
         // Apply wrapping and seed initial content
         applyWrapMode(isWrapped: isLineWrapEnabled && !isLargeFileMode, textView: textView, scrollView: scrollView)
 
-        // Seed initial text
-        textView.string = text
+        // Seed initial text (strip control pictures when invisibles are hidden)
+        let seeded = AcceptingTextView.sanitizePlainText(text)
+        textView.string = seeded
+        if seeded != text {
+            // Keep binding clean of control-picture glyphs.
+            DispatchQueue.main.async {
+                if self.text != seeded {
+                    self.text = seeded
+                }
+            }
+        }
         DispatchQueue.main.async { [weak scrollView, weak textView] in
             guard let sv = scrollView, let tv = textView else { return }
             sv.window?.makeFirstResponder(tv)
@@ -806,13 +1085,57 @@ struct CustomTextEditor: NSViewRepresentable {
             textView.isSelectable = true
             let acceptingView = textView as? AcceptingTextView
             let isDropApplyInFlight = acceptingView?.isApplyingDroppedContent ?? false
-            if !(acceptingView?.recentlyAcceptedInlineSuggestion ?? false),
-               !isDropApplyInFlight && textView.string != text {
-                textView.string = text
+
+            // Sanitize and avoid publishing binding during update
+            let target = AcceptingTextView.sanitizePlainText(text)
+            if textView.string != target {
+                textView.string = target
+                DispatchQueue.main.async {
+                    if self.text != target {
+                        self.text = target
+                    }
+                }
             }
-            if textView.font?.pointSize != fontSize {
-                textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+
+            let targetFont = resolvedFont()
+            if textView.font != targetFont {
+                textView.font = targetFont
             }
+            let style = paragraphStyle()
+            if textView.defaultParagraphStyle != style {
+                textView.defaultParagraphStyle = style
+                textView.typingAttributes[.paragraphStyle] = style
+                let nsLen = (textView.string as NSString).length
+                if nsLen <= 200_000, let storage = textView.textStorage {
+                    storage.beginEditing()
+                    storage.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: nsLen))
+                    storage.endEditing()
+                }
+            }
+
+            // Defensive: sanitize and clear style attributes to prevent control-picture glyphs and ruler-driven styles.
+            let sanitized = AcceptingTextView.sanitizePlainText(textView.string)
+            if sanitized != textView.string {
+                textView.string = sanitized
+                DispatchQueue.main.async {
+                    if self.text != sanitized {
+                        self.text = sanitized
+                    }
+                }
+            }
+            if let storage = textView.textStorage {
+                storage.beginEditing()
+                let fullRange = NSRange(location: 0, length: storage.length)
+                storage.removeAttribute(.underlineStyle, range: fullRange)
+                storage.removeAttribute(.strikethroughStyle, range: fullRange)
+                storage.endEditing()
+            }
+
+            let theme = currentEditorTheme(colorScheme: colorScheme)
+
+            let effectiveHighlightCurrentLine = highlightCurrentLine
+            let effectiveWrap = (isLineWrapEnabled && !isLargeFileMode)
+
             // Background color adjustments for translucency
             if translucentBackgroundEnabled {
                 nsView.drawsBackground = false
@@ -820,13 +1143,49 @@ struct CustomTextEditor: NSViewRepresentable {
                 textView.drawsBackground = false
             } else {
                 nsView.drawsBackground = false
-                textView.backgroundColor = .textBackgroundColor
+                let bg = (colorScheme == .light) ? NSColor.textBackgroundColor : NSColor(theme.background)
+                textView.backgroundColor = bg
                 textView.drawsBackground = true
             }
+            let baseTextColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.textColor : NSColor(theme.text)
+            textView.textColor = baseTextColor
+            textView.insertionPointColor = (colorScheme == .light && !translucentBackgroundEnabled) ? NSColor.labelColor : NSColor(theme.cursor)
+            textView.selectedTextAttributes = [
+                .backgroundColor: NSColor(theme.selection)
+            ]
+            let showLineNumbersByDefault = showLineNumbers
+            nsView.hasHorizontalRuler = false
+            nsView.horizontalRulerView = nil
+            nsView.hasVerticalRuler = showLineNumbersByDefault
+            nsView.rulersVisible = showLineNumbersByDefault
+            if showLineNumbersByDefault {
+                if !(nsView.verticalRulerView is LineNumberRulerView) {
+                    nsView.verticalRulerView = LineNumberRulerView(textView: textView)
+                }
+            } else {
+                nsView.verticalRulerView = nil
+            }
+
+            // Defensive clear of underline/strikethrough styles (always clear)
+            if let storage = textView.textStorage {
+                storage.beginEditing()
+                let fullRange = NSRange(location: 0, length: storage.length)
+                storage.removeAttribute(.underlineStyle, range: fullRange)
+                storage.removeAttribute(.strikethroughStyle, range: fullRange)
+                storage.endEditing()
+            }
+
+            // Re-apply invisible-character visibility preference after style updates.
+            applyInvisibleCharacterPreference(textView)
+
+            nsView.tile()
             // Keep the text container width in sync & relayout
-            nsView.hasVerticalRuler = !isLargeFileMode
-            nsView.rulersVisible = !isLargeFileMode
-            applyWrapMode(isWrapped: isLineWrapEnabled && !isLargeFileMode, textView: textView, scrollView: nsView)
+            acceptingView?.autoIndentEnabled = autoIndentEnabled
+            acceptingView?.autoCloseBracketsEnabled = autoCloseBracketsEnabled
+            acceptingView?.indentStyle = indentStyle
+            acceptingView?.indentWidth = indentWidth
+            acceptingView?.highlightCurrentLine = effectiveHighlightCurrentLine
+            applyWrapMode(isWrapped: effectiveWrap, textView: textView, scrollView: nsView)
 
             // Force immediate reflow after toggling wrap
             if let container = textView.textContainer, let lm = textView.layoutManager {
@@ -846,6 +1205,7 @@ struct CustomTextEditor: NSViewRepresentable {
 
             // Only schedule highlight if needed (e.g., language/color scheme changes or external text updates)
             context.coordinator.parent = self
+
             if !isDropApplyInFlight {
                 context.coordinator.scheduleHighlightIfNeeded()
             }
@@ -855,6 +1215,7 @@ struct CustomTextEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
+
 
     // Coordinator: NSTextViewDelegate that bridges NSText changes to SwiftUI and manages highlighting.
     class Coordinator: NSObject, NSTextViewDelegate {
@@ -868,6 +1229,8 @@ struct CustomTextEditor: NSViewRepresentable {
         private var lastHighlightedText: String = ""
         private var lastLanguage: String?
         private var lastColorScheme: ColorScheme?
+        var lastLineHeight: CGFloat?
+        private var lastHighlightToken: Int = 0
 
         init(_ parent: CustomTextEditor) {
             self.parent = parent
@@ -907,6 +1270,8 @@ struct CustomTextEditor: NSViewRepresentable {
 
             let lang = parent.language
             let scheme = parent.colorScheme
+            let lineHeightValue: CGFloat = parent.lineHeightMultiple
+            let token = parent.highlightRefreshToken
             let text: String = {
                 if let currentText = currentText {
                     return currentText
@@ -927,6 +1292,8 @@ struct CustomTextEditor: NSViewRepresentable {
                 self.lastHighlightedText = text
                 self.lastLanguage = lang
                 self.lastColorScheme = scheme
+                self.lastLineHeight = lineHeightValue
+                self.lastHighlightToken = token
                 return
             }
 
@@ -939,19 +1306,20 @@ struct CustomTextEditor: NSViewRepresentable {
                 return
             }
 
-            if text == lastHighlightedText && lastLanguage == lang && lastColorScheme == scheme {
+            if text == lastHighlightedText && lastLanguage == lang && lastColorScheme == scheme && lastLineHeight == lineHeightValue && lastHighlightToken == token {
                 return
             }
-            rehighlight()
+            rehighlight(token: token)
         }
 
         /// Perform regex-based token coloring off-main, then apply attributes on the main thread.
-        func rehighlight() {
+        func rehighlight(token: Int) {
             guard let textView = textView else { return }
             // Snapshot current state
             let textSnapshot = textView.string
             let language = parent.language
             let scheme = parent.colorScheme
+            let lineHeightValue: CGFloat = parent.lineHeightMultiple
             let selected = textView.selectedRange()
             let colors = SyntaxColors.fromVibrantLightTheme(colorScheme: scheme)
             let patterns = getSyntaxPatterns(for: language, colors: colors)
@@ -987,6 +1355,8 @@ struct CustomTextEditor: NSViewRepresentable {
                     }
                     tv.textStorage?.endEditing()
 
+                    self.parent.applyInvisibleCharacterPreference(tv)
+
                     // Restore selection only if it hasn't changed since we started
                     if NSEqualRanges(tv.selectedRange(), selected) {
                         tv.setSelectedRange(selected)
@@ -996,6 +1366,11 @@ struct CustomTextEditor: NSViewRepresentable {
                     self.lastHighlightedText = textSnapshot
                     self.lastLanguage = language
                     self.lastColorScheme = scheme
+                    self.lastLineHeight = lineHeightValue
+                    self.lastHighlightToken = token
+
+                    // Re-apply visibility preference after recoloring.
+                    self.parent.applyInvisibleCharacterPreference(tv)
                 }
             }
 
@@ -1011,6 +1386,26 @@ struct CustomTextEditor: NSViewRepresentable {
                 // until the final didChangeText emitted after import completion.
                 return
             }
+            let sanitized = AcceptingTextView.sanitizePlainText(textView.string)
+            if sanitized != textView.string {
+                textView.string = sanitized
+            }
+            if sanitized != parent.text {
+                parent.text = sanitized
+                parent.applyInvisibleCharacterPreference(textView)
+            }
+            if let accepting = textView as? AcceptingTextView, accepting.isApplyingPaste {
+                parent.applyInvisibleCharacterPreference(textView)
+                let snapshot = textView.string
+                highlightQueue.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                    DispatchQueue.main.async {
+                        self?.parent.text = snapshot
+                        self?.scheduleHighlightIfNeeded(currentText: snapshot)
+                    }
+                }
+                return
+            }
+            parent.applyInvisibleCharacterPreference(textView)
             // Update SwiftUI binding, caret status, and rehighlight.
             parent.text = textView.string
             updateCaretStatusAndHighlight()
@@ -1054,7 +1449,9 @@ struct CustomTextEditor: NSViewRepresentable {
             let fullRange = NSRange(location: 0, length: ns.length)
             tv.textStorage?.beginEditing()
             tv.textStorage?.removeAttribute(.backgroundColor, range: fullRange)
-            tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.12), range: lineRange)
+            if parent.highlightCurrentLine {
+                tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.12), range: lineRange)
+            }
             tv.textStorage?.endEditing()
         }
 
@@ -1103,11 +1500,13 @@ struct CustomTextEditor: NSViewRepresentable {
                 tv.scrollRangeToVisible(NSRange(location: location, length: 0))
 
                 // Stronger highlight for the entire target line
-                let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
                 let fullRange = NSRange(location: 0, length: totalLength)
                 tv.textStorage?.beginEditing()
                 tv.textStorage?.removeAttribute(.backgroundColor, range: fullRange)
-                tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.18), range: lineRange)
+                if self.parent.highlightCurrentLine {
+                    let lineRange = ns.lineRange(for: NSRange(location: location, length: 0))
+                    tv.textStorage?.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.18), range: lineRange)
+                }
                 tv.textStorage?.endEditing()
             }
         }
@@ -1184,14 +1583,43 @@ struct CustomTextEditor: UIViewRepresentable {
     @Binding var isLineWrapEnabled: Bool
     let isLargeFileMode: Bool
     let translucentBackgroundEnabled: Bool
+    let showLineNumbers: Bool
+    let showInvisibleCharacters: Bool
+    let highlightCurrentLine: Bool
+    let indentStyle: String
+    let indentWidth: Int
+    let autoIndentEnabled: Bool
+    let autoCloseBracketsEnabled: Bool
+    let highlightRefreshToken: Int
+
+    private var fontName: String {
+        UserDefaults.standard.string(forKey: "SettingsEditorFontName") ?? ""
+    }
+
+    private var lineHeightMultiple: CGFloat {
+        let stored = UserDefaults.standard.double(forKey: "SettingsLineHeight")
+        return CGFloat(stored > 0 ? stored : 1.0)
+    }
 
     func makeUIView(context: Context) -> LineNumberedTextViewContainer {
         let container = LineNumberedTextViewContainer()
         let textView = container.textView
 
         textView.delegate = context.coordinator
-        textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        if let named = UIFont(name: fontName, size: fontSize) {
+            textView.font = named
+        } else {
+            textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = max(0.9, lineHeightMultiple)
+        textView.typingAttributes[.paragraphStyle] = paragraphStyle
         textView.text = text
+        if text.count <= 200_000 {
+            textView.textStorage.beginEditing()
+            textView.textStorage.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: textView.textStorage.length))
+            textView.textStorage.endEditing()
+        }
         textView.autocorrectionType = .no
         textView.autocapitalizationType = .none
         textView.smartDashesType = .no
@@ -1222,7 +1650,22 @@ struct CustomTextEditor: UIViewRepresentable {
         if textView.font?.pointSize != fontSize {
             textView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
-        textView.backgroundColor = translucentBackgroundEnabled ? .clear : .systemBackground
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = max(0.9, lineHeightMultiple)
+        textView.typingAttributes[.paragraphStyle] = paragraphStyle
+        if context.coordinator.lastLineHeight != lineHeightMultiple {
+            let len = textView.textStorage.length
+            if len > 0 && len <= 200_000 {
+                textView.textStorage.beginEditing()
+                textView.textStorage.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: len))
+                textView.textStorage.endEditing()
+            }
+            context.coordinator.lastLineHeight = lineHeightMultiple
+        }
+        let theme = currentEditorTheme(colorScheme: colorScheme)
+        textView.textColor = UIColor(theme.text)
+        textView.tintColor = UIColor(theme.cursor)
+        textView.backgroundColor = translucentBackgroundEnabled ? .clear : UIColor(theme.background)
         textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
         textView.textContainer.widthTracksTextView = isLineWrapEnabled && !isLargeFileMode
         if isLargeFileMode {
@@ -1248,6 +1691,8 @@ struct CustomTextEditor: UIViewRepresentable {
         private var lastHighlightedText: String = ""
         private var lastLanguage: String?
         private var lastColorScheme: ColorScheme?
+        var lastLineHeight: CGFloat?
+        private var lastHighlightToken: Int = 0
         private var isApplyingHighlight = false
 
         init(_ parent: CustomTextEditor) {
@@ -1259,27 +1704,31 @@ struct CustomTextEditor: UIViewRepresentable {
             let text = currentText ?? textView.text ?? ""
             let lang = parent.language
             let scheme = parent.colorScheme
+            let lineHeight = parent.lineHeightMultiple
+            let token = parent.highlightRefreshToken
 
             if parent.isLargeFileMode {
                 lastHighlightedText = text
                 lastLanguage = lang
                 lastColorScheme = scheme
+                lastLineHeight = lineHeight
+                lastHighlightToken = token
                 return
             }
 
-            if text == lastHighlightedText && lang == lastLanguage && scheme == lastColorScheme {
+            if text == lastHighlightedText && lang == lastLanguage && scheme == lastColorScheme && lineHeight == lastLineHeight && lastHighlightToken == token {
                 return
             }
 
             pendingHighlight?.cancel()
             let work = DispatchWorkItem { [weak self] in
-                self?.rehighlight(text: text, language: lang, colorScheme: scheme)
+                self?.rehighlight(text: text, language: lang, colorScheme: scheme, token: token)
             }
             pendingHighlight = work
             highlightQueue.asyncAfter(deadline: .now() + 0.1, execute: work)
         }
 
-        private func rehighlight(text: String, language: String, colorScheme: ColorScheme) {
+        private func rehighlight(text: String, language: String, colorScheme: ColorScheme, token: Int) {
             let nsText = text as NSString
             let fullRange = NSRange(location: 0, length: nsText.length)
             let baseColor: UIColor = colorScheme == .dark ? .white : .label
@@ -1311,6 +1760,11 @@ struct CustomTextEditor: UIViewRepresentable {
                 let selectedRange = textView.selectedRange
                 self.isApplyingHighlight = true
                 textView.attributedText = attributed
+                if self.parent.highlightCurrentLine {
+                    let ns = text as NSString
+                    let lineRange = ns.lineRange(for: selectedRange)
+                    textView.textStorage.addAttribute(.backgroundColor, value: UIColor.secondarySystemFill, range: lineRange)
+                }
                 textView.selectedRange = selectedRange
                 textView.typingAttributes = [
                     .foregroundColor: baseColor,
@@ -1320,6 +1774,8 @@ struct CustomTextEditor: UIViewRepresentable {
                 self.lastHighlightedText = text
                 self.lastLanguage = language
                 self.lastColorScheme = colorScheme
+                self.lastLineHeight = self.parent.lineHeightMultiple
+                self.lastHighlightToken = token
                 self.container?.updateLineNumbers(for: text, fontSize: self.parent.fontSize)
                 self.syncLineNumberScroll()
             }
@@ -1330,6 +1786,55 @@ struct CustomTextEditor: UIViewRepresentable {
             parent.text = textView.text
             container?.updateLineNumbers(for: textView.text, fontSize: parent.fontSize)
             scheduleHighlightIfNeeded(currentText: textView.text)
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            if text == "\n", parent.autoIndentEnabled {
+                let ns = textView.text as NSString
+                let lineRange = ns.lineRange(for: NSRange(location: range.location, length: 0))
+                let currentLine = ns.substring(with: NSRange(
+                    location: lineRange.location,
+                    length: max(0, range.location - lineRange.location)
+                ))
+                let indent = currentLine.prefix { $0 == " " || $0 == "\t" }
+                let normalized = normalizedIndentation(String(indent))
+                let replacement = "\n" + normalized
+                textView.textStorage.replaceCharacters(in: range, with: replacement)
+                textView.selectedRange = NSRange(location: range.location + replacement.count, length: 0)
+                textViewDidChange(textView)
+                return false
+            }
+
+            if parent.autoCloseBracketsEnabled, text.count == 1 {
+                let pairs: [String: String] = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
+                if let closing = pairs[text] {
+                    let insertion = text + closing
+                    textView.textStorage.replaceCharacters(in: range, with: insertion)
+                    textView.selectedRange = NSRange(location: range.location + 1, length: 0)
+                    textViewDidChange(textView)
+                    return false
+                }
+            }
+
+            return true
+        }
+
+        private func normalizedIndentation(_ indent: String) -> String {
+            let width = max(1, parent.indentWidth)
+            switch parent.indentStyle {
+            case "tabs":
+                let spacesCount = indent.filter { $0 == " " }.count
+                let tabsCount = indent.filter { $0 == "\t" }.count
+                let totalSpaces = spacesCount + (tabsCount * width)
+                let tabs = String(repeating: "\t", count: totalSpaces / width)
+                let leftover = String(repeating: " ", count: totalSpaces % width)
+                return tabs + leftover
+            default:
+                let tabsCount = indent.filter { $0 == "\t" }.count
+                let spacesCount = indent.filter { $0 == " " }.count
+                let totalSpaces = spacesCount + (tabsCount * width)
+                return String(repeating: " ", count: totalSpaces)
+            }
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {

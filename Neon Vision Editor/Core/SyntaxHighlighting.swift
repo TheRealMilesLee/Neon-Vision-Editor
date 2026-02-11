@@ -57,7 +57,7 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
     case "swift":
         return [
             // Keywords (extended to include `import`)
-            "\\b(func|struct|class|enum|protocol|extension|if|else|for|while|switch|case|default|guard|defer|throw|try|catch|return|init|deinit|import)\\b": colors.keyword,
+            "\\b(func|struct|class|enum|protocol|extension|actor|if|else|for|while|switch|case|default|guard|defer|throw|try|catch|return|init|deinit|import|typealias|associatedtype|where|public|private|fileprivate|internal|open|static|mutating|nonmutating|inout|async|await|throws|rethrows)\\b": colors.keyword,
 
             // Strings and Characters
             "\"[^\"]*\"": colors.string,
@@ -65,6 +65,8 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
 
             // Numbers
             "\\b([0-9]+(\\.[0-9]+)?)\\b": colors.number,
+            "\\b0x[0-9A-Fa-f]+\\b": colors.number,
+            "\\b0b[01]+\\b": colors.number,
 
             // Comments (single and multi-line)
             "//.*": colors.comment,
@@ -91,9 +93,15 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
 
             // Variable declarations
             "\\b(var|let)\\b": colors.variable,
+            "\\b(self|super)\\b": colors.variable,
 
             // Common Swift types
-            "\\b(String|Int|Double|Bool)\\b": colors.type,
+            "\\b(String|Int|Double|Bool|Float|UInt|Int64|CGFloat|Any|AnyObject|Void|Never|Self)\\b": colors.type,
+            "\\b(true|false|nil)\\b": colors.atom,
+
+            // Function and type names
+            "\\bfunc\\s+([A-Za-z_][A-Za-z0-9_]*)": colors.def,
+            "\\b(class|struct|enum|protocol|actor)\\s+([A-Za-z_][A-Za-z0-9_]*)": colors.type,
 
             // Regex literals and components (Swift /…/)
             "/[^/\\n]*/": colors.builtin, // whole regex literal
@@ -108,16 +116,18 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         ]
     case "python":
         return [
-            "\\b(def|class|if|else|for|while|try|except|with|as|import|from)\\b": colors.keyword,
-            "\\b(int|str|float|bool|list|dict)\\b": colors.type,
+            "\\b(def|class|if|else|elif|for|while|try|except|with|as|import|from|return|yield|async|await)\\b": colors.keyword,
+            "\\b(int|str|float|bool|list|dict|set|tuple|None|True|False)\\b": colors.type,
+            "@\\w+": colors.attribute,
             "\"[^\"]*\"|'[^']*'": colors.string,
             "\\b([0-9]+(\\.[0-9]+)?)\\b": colors.number,
             "#.*": colors.comment
         ]
     case "javascript":
         return [
-            "\\b(function|var|let|const|if|else|for|while|do|try|catch)\\b": colors.keyword,
-            "\\b(Number|String|Boolean|Object|Array)\\b": colors.type,
+            "\\b(function|var|let|const|if|else|for|while|do|try|catch|finally|return|class|extends|new|import|export|async|await)\\b": colors.keyword,
+            "\\b(Number|String|Boolean|Object|Array|Map|Set|Promise|Date)\\b": colors.type,
+            "\\b(true|false|null|undefined)\\b": colors.atom,
             "\"[^\"]*\"|'[^']*'|\\`[^\\`]*\\`": colors.string,
             "\\b([0-9]+(\\.[0-9]+)?)\\b": colors.number,
             "//.*|/\\*([^*]|(\\*+[^*/]))*\\*+/": colors.comment
@@ -132,9 +142,17 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             #"<\?php|\?>"#: colors.meta
         ]
     case "html":
-        return ["<[^>]+>": colors.tag]
+        return [
+            "<[^>]+>": colors.tag,
+            "\\b[a-zA-Z-]+(?=\\=)": colors.property,
+            "\"[^\"]*\"|'[^']*'": colors.string
+        ]
     case "css":
-        return ["\\b([a-zA-Z-]+\\s*:\\s*[^;]+;)": colors.property]
+        return [
+            "\\b([a-zA-Z-]+)\\s*:": colors.property,
+            "#[0-9A-Fa-f]{3,6}\\b": colors.number,
+            "\"[^\"]*\"|'[^']*'": colors.string
+        ]
     case "c", "cpp":
         return [
             "\\b(int|float|double|char|void|if|else|for|while|do|switch|case|return)\\b": colors.keyword,
@@ -153,9 +171,15 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         ]
     case "markdown":
         return [
-            "^#{1,6}\\s+.+$": colors.keyword,
-            "\\*\\*[^*\\n]+\\*\\*": colors.def,
-            "(?<!_)_[^_\\n]+_(?!_)": colors.def
+            #"(?m)^\s{0,3}#{1,6}\s+.*$"#: colors.meta,
+            #"(?m)^\s{0,3}(=+|-+)\s*$"#: colors.meta,
+            #"`{1,3}[^`]+`{1,3}"#: colors.string,
+            #"(?m)^```[A-Za-z0-9_-]*\s*$|(?m)^~~~[A-Za-z0-9_-]*\s*$"#: colors.keyword,
+            #"(?m)^\s*[-*+]\s+.*$|(?m)^\s*\d+\.\s+.*$"#: colors.keyword,
+            #"\*\*[^*\n]+\*\*|__[^_\n]+__"#: colors.def,
+            #"(?<!_)_[^_\n]+_(?!_)|(?<!\*)\*[^*\n]+\*(?!\*)"#: colors.def,
+            #"\[[^\]]+\]\([^)]+\)"#: colors.string,
+            #"(?m)^>\s+.*$"#: colors.comment
         ]
     case "bash":
         return [
@@ -262,9 +286,15 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         ]
     case "yaml":
         return [
-            #"^\s*-[\s\S]*$"#: colors.keyword,
-            #"\b(true|false|null)\b"#: colors.keyword,
-            #"\b[0-9]+\b"#: colors.number
+            #"(?m)^\s*#.*$"#: colors.comment,
+            #"(?m)^\s*-\s+.*$"#: colors.keyword,
+            #"(?m)^\s*[A-Za-z0-9_.-]+\s*:"#: colors.property,
+            #"\"([^\"\\]|\\.)*\"|'[^']*'"#: colors.string,
+            #"\b(true|false|null|yes|no|on|off)\b"#: colors.keyword,
+            #"\b-?[0-9]+(\.[0-9]+)?\b"#: colors.number,
+            #"(?m)^---$|(?m)^\.\.\.$"#: colors.meta,
+            #"&[A-Za-z0-9_-]+|\\*[A-Za-z0-9_-]+"#: colors.variable,
+            #"!<[^>]+>|![A-Za-z0-9_./:-]+"#: colors.attribute
         ]
     case "toml":
         return [

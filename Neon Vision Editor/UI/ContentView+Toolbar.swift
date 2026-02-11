@@ -36,7 +36,15 @@ extension ContentView {
         Button(action: { viewModel.addNewTab() }) {
             Image(systemName: "plus.square.on.square")
         }
-        .help("New Tab")
+        .help("New Tab (Cmd+T)")
+    }
+
+    @ViewBuilder
+    private var settingsControl: some View {
+        Button(action: { showSettingsSheet = true }) {
+            Image(systemName: "gearshape")
+        }
+        .help("Settings (Cmd+,)")
     }
 
     @ViewBuilder
@@ -108,11 +116,11 @@ extension ContentView {
 
                 Button("API Settings…") {
                     showAISelectorPopover = false
-                    showAPISettings = true
+                    openAPISettings()
                 }
                 .buttonStyle(.bordered)
             }
-                .padding(12)
+            .padding(12)
         }
     }
 
@@ -125,7 +133,7 @@ extension ContentView {
             Button("Gemini") { selectedModel = .gemini }
             Button("Anthropic") { selectedModel = .anthropic }
             Divider()
-            Button("API Settings…") { showAPISettings = true }
+            Button("API Settings…") { openAPISettings() }
         } label: {
             Image(systemName: "brain.head.profile")
         }
@@ -166,7 +174,7 @@ extension ContentView {
         Button(action: { openFileFromToolbar() }) {
             Image(systemName: "folder")
         }
-        .help("Open File…")
+        .help("Open File… (Cmd+O)")
     }
 
     @ViewBuilder
@@ -175,7 +183,7 @@ extension ContentView {
             Image(systemName: "square.and.arrow.down")
         }
         .disabled(viewModel.selectedTab == nil)
-        .help("Save File")
+        .help("Save File (Cmd+S)")
     }
 
     @ViewBuilder
@@ -183,7 +191,7 @@ extension ContentView {
         Button(action: { toggleSidebarFromToolbar() }) {
             Image(systemName: "sidebar.left")
         }
-        .help("Toggle Sidebar")
+        .help("Toggle Sidebar (Cmd+Opt+S)")
     }
 
     @ViewBuilder
@@ -199,23 +207,7 @@ extension ContentView {
         Button(action: { showFindReplace = true }) {
             Image(systemName: "magnifyingglass")
         }
-        .help("Find & Replace")
-    }
-
-    @ViewBuilder
-    private var lineWrapControl: some View {
-        Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
-            Image(systemName: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
-        }
-        .help(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap")
-    }
-
-    @ViewBuilder
-    private var autoCompletionControl: some View {
-        Button(action: { toggleAutoCompletion() }) {
-            Image(systemName: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
-        }
-        .help(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion")
+        .help("Find & Replace (Cmd+F)")
     }
 
     @ViewBuilder
@@ -225,17 +217,11 @@ extension ContentView {
         if iPadPromotedActionsCount >= 3 { toggleSidebarControl }
         if iPadPromotedActionsCount >= 4 { toggleProjectSidebarControl }
         if iPadPromotedActionsCount >= 5 { findReplaceControl }
-        if iPadPromotedActionsCount >= 6 { lineWrapControl }
-        if iPadPromotedActionsCount >= 7 { autoCompletionControl }
     }
 
     @ViewBuilder
     private var moreActionsControl: some View {
         Menu {
-            Button(action: { toggleAutoCompletion() }) {
-                Label(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion", systemImage: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
-            }
-
             Button(action: { insertTemplateForCurrentLanguage() }) {
                 Label("Insert Template", systemImage: "doc.badge.plus")
             }
@@ -276,9 +262,6 @@ extension ContentView {
                 Label("Translucent Window Background", systemImage: enableTranslucentWindow ? "rectangle.fill" : "rectangle")
             }
 
-            Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
-                Label(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap", systemImage: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
-            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -292,6 +275,7 @@ extension ContentView {
         aiSelectorControl
         activeProviderBadgeControl
         clearEditorControl
+        settingsControl
         moreActionsControl
     }
 
@@ -305,8 +289,17 @@ extension ContentView {
         iPadPromotedActions
         Spacer(minLength: 18)
         clearEditorControl
+        settingsControl
         moreActionsControl
     }
+#endif
+    #if os(macOS)
+    private func openSettingsWindow() {
+        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
+    }
+
 #endif
 
     @ToolbarContentBuilder
@@ -390,7 +383,7 @@ extension ContentView {
 
                     Button("API Settings…") {
                         showAISelectorPopover = false
-                        showAPISettings = true
+                        openAPISettings()
                     }
                     .buttonStyle(.bordered)
                 }
@@ -406,6 +399,23 @@ extension ContentView {
                 .help("Active provider")
 
             Button(action: {
+                openSettings()
+            }) {
+                Image(systemName: "gearshape")
+            }
+            .help("Settings")
+
+            Button(action: { adjustEditorFontSize(-1) }) {
+                Image(systemName: "textformat.size.smaller")
+            }
+            .help("Decrease Font Size")
+
+            Button(action: { adjustEditorFontSize(1) }) {
+                Image(systemName: "textformat.size.larger")
+            }
+            .help("Increase Font Size")
+
+            Button(action: {
                 clearEditorContent()
             }) {
                 Image(systemName: "trash")
@@ -419,22 +429,15 @@ extension ContentView {
             }
             .help("Insert Template for Current Language")
 
-            Button(action: {
-                toggleAutoCompletion()
-            }) {
-                Image(systemName: isAutoCompletionEnabled ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
-            }
-            .help(isAutoCompletionEnabled ? "Disable Code Completion" : "Enable Code Completion")
-
             Button(action: { openFileFromToolbar() }) {
                 Image(systemName: "folder")
             }
-            .help("Open File…")
+        .help("Open File… (Cmd+O)")
 
             Button(action: { viewModel.addNewTab() }) {
                 Image(systemName: "plus.square.on.square")
             }
-            .help("New Tab")
+        .help("New Tab (Cmd+T)")
 
             #if os(macOS)
             Button(action: {
@@ -442,7 +445,7 @@ extension ContentView {
             }) {
                 Image(systemName: "macwindow.badge.plus")
             }
-            .help("New Window")
+            .help("New Window (Cmd+N)")
             #endif
 
             Button(action: {
@@ -451,7 +454,7 @@ extension ContentView {
                 Image(systemName: "square.and.arrow.down")
             }
             .disabled(viewModel.selectedTab == nil)
-            .help("Save File")
+            .help("Save File (Cmd+S)")
 
             Button(action: {
                 toggleSidebarFromToolbar()
@@ -459,7 +462,7 @@ extension ContentView {
                 Image(systemName: "sidebar.left")
                     .symbolVariant(viewModel.showSidebar ? .fill : .none)
             }
-            .help("Toggle Sidebar")
+            .help("Toggle Sidebar (Cmd+Opt+S)")
 
             Button(action: {
                 showProjectStructureSidebar.toggle()
@@ -474,7 +477,7 @@ extension ContentView {
             }) {
                 Image(systemName: "magnifyingglass")
             }
-            .help("Find & Replace")
+            .help("Find & Replace (Cmd+F)")
 
             Button(action: {
                 viewModel.isBrainDumpMode.toggle()
@@ -496,10 +499,6 @@ extension ContentView {
             .help("Toggle Translucent Window Background")
             .accessibilityLabel("Translucent Window Background")
 
-            Button(action: { viewModel.isLineWrapEnabled.toggle() }) {
-                Image(systemName: viewModel.isLineWrapEnabled ? "text.justify" : "text.alignleft")
-            }
-            .help(viewModel.isLineWrapEnabled ? "Disable Wrap" : "Enable Wrap")
         }
 #endif
     }
