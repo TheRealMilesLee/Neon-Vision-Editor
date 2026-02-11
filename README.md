@@ -17,7 +17,7 @@
 </p>
 
 > Status: **beta**  
-> Latest release: **v0.4.4-beta**  
+> Latest release: **v0.4.5-beta**  
 > Platform target: **macOS 26 (Tahoe)**  compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
