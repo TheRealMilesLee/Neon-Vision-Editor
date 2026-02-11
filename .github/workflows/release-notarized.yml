@@ -70,6 +70,7 @@ jobs:
       - name: Build macOS archive (signed)
         env:
           ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           xcodebuild \
             -project "Neon Vision Editor.xcodeproj" \
@@ -77,6 +78,9 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
             archive
 
       - name: Export app
