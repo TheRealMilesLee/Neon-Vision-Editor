@@ -7,6 +7,7 @@ struct NeonSettingsView: View {
     let supportsOpenInTabs: Bool
     let supportsTranslucency: Bool
     @EnvironmentObject private var supportPurchaseManager: SupportPurchaseManager
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("SettingsOpenInTabs") private var openInTabs: String = "system"
     @AppStorage("SettingsEditorFontName") private var editorFontName: String = ""
     @AppStorage("SettingsEditorFontSize") private var editorFontSize: Double = 14
@@ -78,6 +79,14 @@ struct NeonSettingsView: View {
         "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb",
         "markdown", "bash", "zsh", "powershell", "standard", "plain"
     ]
+    
+    private var isCompactSettingsLayout: Bool {
+#if os(iOS)
+        horizontalSizeClass == .compact
+#else
+        false
+#endif
+    }
 
     init(
         supportsOpenInTabs: Bool = true,
@@ -108,7 +117,9 @@ struct NeonSettingsView: View {
                 .tabItem { Label("Support", systemImage: "heart") }
                 .tag("support")
         }
+#if os(macOS)
         .frame(minWidth: 860, minHeight: 620)
+#endif
         .onAppear {
             if settingsActiveTab == "code" {
                 settingsActiveTab = "editor"
@@ -154,7 +165,7 @@ struct NeonSettingsView: View {
                     if supportsOpenInTabs {
                         HStack(alignment: .center, spacing: 12) {
                             Text("Open in Tabs")
-                                .frame(width: 140, alignment: .leading)
+                                .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                             Picker("", selection: $openInTabs) {
                                 Text("Follow System").tag("system")
                                 Text("Always").tag("always")
@@ -166,7 +177,7 @@ struct NeonSettingsView: View {
 
                     HStack(alignment: .center, spacing: 12) {
                         Text("Appearance")
-                            .frame(width: 140, alignment: .leading)
+                            .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Picker("", selection: $appearance) {
                             Text("System").tag("system")
                             Text("Light").tag("light")
@@ -187,7 +198,7 @@ struct NeonSettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         Text("Font Name")
-                            .frame(width: 140, alignment: .leading)
+                            .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         TextField("Font Name", text: $editorFontName)
                             .textFieldStyle(.plain)
                             .padding(.vertical, 6)
@@ -198,7 +209,7 @@ struct NeonSettingsView: View {
                                     .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
                             )
                             .cornerRadius(6)
-                            .frame(width: 240)
+                            .frame(maxWidth: isCompactSettingsLayout ? .infinity : 240)
 #if os(macOS)
                         Button("Choose…") {
                             fontPicker.open(currentName: editorFontName, size: editorFontSize)
@@ -212,9 +223,9 @@ struct NeonSettingsView: View {
 
                     HStack(alignment: .center, spacing: 12) {
                         Text("Line Height")
-                            .frame(width: 140, alignment: .leading)
+                            .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Slider(value: $lineHeight, in: 1.0...1.8, step: 0.05)
-                            .frame(width: 240)
+                            .frame(maxWidth: isCompactSettingsLayout ? .infinity : 240)
                         Text(String(format: "%.2fx", lineHeight))
                             .frame(width: 54, alignment: .trailing)
                     }
@@ -287,13 +298,13 @@ struct NeonSettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         Text("Language")
-                            .frame(width: 140, alignment: .leading)
+                            .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Picker("", selection: $settingsTemplateLanguage) {
                             ForEach(templateLanguages, id: \.self) { lang in
                                 Text(languageLabel(for: lang)).tag(lang)
                             }
                         }
-                        .frame(width: 220, alignment: .leading)
+                        .frame(maxWidth: isCompactSettingsLayout ? .infinity : 220, alignment: .leading)
                         .pickerStyle(.menu)
                         .padding(.vertical, 6)
                         .padding(.horizontal, 8)
@@ -368,7 +379,7 @@ struct NeonSettingsView: View {
                         .listRowBackground(Color.clear)
                     }
                 }
-                .frame(minWidth: 200)
+                .frame(minWidth: isCompactSettingsLayout ? nil : 200)
                 .listStyle(.plain)
                 .background(Color.clear)
                 if #available(iOS 16.0, *) {
@@ -491,13 +502,13 @@ struct NeonSettingsView: View {
 
     private func settingsContainer<Content: View>(maxWidth: CGFloat = 560, @ViewBuilder _ content: () -> Content) -> some View {
         ScrollView {
-            VStack(alignment: .center, spacing: 20) {
+            VStack(alignment: isCompactSettingsLayout ? .leading : .center, spacing: 20) {
                 content()
             }
             .frame(maxWidth: maxWidth, alignment: .center)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isCompactSettingsLayout ? .topLeading : .top)
             .padding(.top, 16)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, isCompactSettingsLayout ? 12 : 24)
         }
         .background(.ultraThinMaterial)
     }
@@ -505,7 +516,7 @@ struct NeonSettingsView: View {
     private func colorRow(title: String, color: Binding<Color>) -> some View {
         HStack {
             Text(title)
-                .frame(width: 120, alignment: .leading)
+                .frame(width: isCompactSettingsLayout ? nil : 120, alignment: .leading)
             ColorPicker("", selection: color)
                 .labelsHidden()
             Spacer()
@@ -513,25 +524,46 @@ struct NeonSettingsView: View {
     }
 
     private func aiKeyRow(title: String, placeholder: String, value: Binding<String>, provider: APITokenKey) -> some View {
-        HStack(spacing: 12) {
-            Text(title)
-                .frame(width: 120, alignment: .leading)
-            SecureField(placeholder, text: value)
-                .textFieldStyle(.plain)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
-                .background(inputFieldBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
-                )
-                .cornerRadius(6)
-                .frame(width: 200)
-                .onChange(of: value.wrappedValue) { _, new in
-                    SecureTokenStore.setToken(new, for: provider)
+        Group {
+            if isCompactSettingsLayout {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                    SecureField(placeholder, text: value)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .background(inputFieldBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                        )
+                        .cornerRadius(6)
+                        .onChange(of: value.wrappedValue) { _, new in
+                            SecureTokenStore.setToken(new, for: provider)
+                        }
                 }
+            } else {
+                HStack(spacing: 12) {
+                    Text(title)
+                        .frame(width: 120, alignment: .leading)
+                    SecureField(placeholder, text: value)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .background(inputFieldBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                        )
+                        .cornerRadius(6)
+                        .frame(width: 200)
+                        .onChange(of: value.wrappedValue) { _, new in
+                            SecureTokenStore.setToken(new, for: provider)
+                        }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: isCompactSettingsLayout ? .leading : .center)
     }
 
     private func languageLabel(for lang: String) -> String {

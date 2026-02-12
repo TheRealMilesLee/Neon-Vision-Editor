@@ -6,6 +6,10 @@ import UIKit
 #endif
 
 extension ContentView {
+    private var compactActiveProviderName: String {
+        activeProviderName.components(separatedBy: " (").first ?? activeProviderName
+    }
+
 #if os(iOS)
     private var isIPadToolbarLayout: Bool {
         UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
@@ -142,9 +146,13 @@ extension ContentView {
 
     @ViewBuilder
     private var activeProviderBadgeControl: some View {
-        Text(activeProviderName)
+        Text(compactActiveProviderName)
             .font(.caption)
             .foregroundColor(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .minimumScaleFactor(0.9)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Color.secondary.opacity(0.12), in: Capsule())
@@ -390,9 +398,13 @@ extension ContentView {
                 .padding(12)
             }
 
-            Text(activeProviderName)
+            Text(compactActiveProviderName)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.9)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(Color.secondary.opacity(0.12), in: Capsule())
