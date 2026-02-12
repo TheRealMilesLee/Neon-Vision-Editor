@@ -39,7 +39,7 @@ struct NeonSettingsView: View {
     @State private var geminiAPIToken: String = SecureTokenStore.token(for: .gemini)
     @State private var anthropicAPIToken: String = SecureTokenStore.token(for: .anthropic)
     @State private var showSupportPurchaseDialog: Bool = false
-    private let privacyPolicyURL = URL(string: "https://github.com/h3pdesign/Neon-Vision-Editor/blob/main/PRIVACY.md")!
+    private let privacyPolicyURL = URL(string: "https://github.com/h3pdesign/Neon-Vision-Editor/blob/main/PRIVACY.md")
 
     @AppStorage("SettingsThemeName") private var selectedTheme: String = "Neon Glow"
     @AppStorage("SettingsThemeTextColor") private var themeTextHex: String = "#EDEDED"
@@ -490,8 +490,10 @@ struct NeonSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Link("Privacy Policy", destination: privacyPolicyURL)
-                        .font(.footnote.weight(.semibold))
+                    if let privacyPolicyURL {
+                        Link("Privacy Policy", destination: privacyPolicyURL)
+                            .font(.footnote.weight(.semibold))
+                    }
 
                     if supportPurchaseManager.canBypassInCurrentBuild {
                         Divider()

@@ -66,7 +66,12 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 echo "Running release prep for ${TAG}..."
-scripts/release_prep.sh "$TAG" "${DATE_ARG[@]}" --push
+prep_cmd=(scripts/release_prep.sh "$TAG")
+if [[ ${#DATE_ARG[@]} -gt 0 ]]; then
+  prep_cmd+=("${DATE_ARG[@]}")
+fi
+prep_cmd+=(--push)
+"${prep_cmd[@]}"
 
 echo "Tag push completed. Unsigned release workflow should start automatically."
 
@@ -81,4 +86,3 @@ echo "Done."
 echo "Check runs:"
 echo "  gh run list --workflow release.yml --limit 5"
 echo "  gh run list --workflow release-notarized.yml --limit 5"
-

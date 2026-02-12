@@ -33,11 +33,7 @@ final class SupportPurchaseManager: ObservableObject {
     }
 
     var canBypassInCurrentBuild: Bool {
-#if DEBUG
-        true
-#else
         allowsTestingBypass
-#endif
     }
 
     func refreshStoreState() async {
@@ -144,10 +140,6 @@ final class SupportPurchaseManager: ObservableObject {
     }
 
     private func refreshBypassEligibility() async {
-#if DEBUG
-        canUseInAppPurchases = true
-        allowsTestingBypass = true
-#else
         do {
             let appTransactionResult = try await AppTransaction.shared
             switch appTransactionResult {
@@ -162,7 +154,6 @@ final class SupportPurchaseManager: ObservableObject {
             canUseInAppPurchases = false
             allowsTestingBypass = false
         }
-#endif
     }
 
     private func observeTransactionUpdates() -> Task<Void, Never> {

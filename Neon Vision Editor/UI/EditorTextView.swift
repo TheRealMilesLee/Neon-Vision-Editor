@@ -1633,7 +1633,15 @@ final class LineNumberedTextViewContainer: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        configureViews()
+    }
 
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureViews()
+    }
+
+    private func configureViews() {
         lineNumberView.translatesAutoresizingMaskIntoConstraints = false
         textView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1673,10 +1681,6 @@ final class LineNumberedTextViewContainer: UIView {
             textView.topAnchor.constraint(equalTo: topAnchor),
             textView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
     }
 
     func updateLineNumbers(for text: String, fontSize: CGFloat) {

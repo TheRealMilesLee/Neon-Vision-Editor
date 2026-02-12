@@ -323,7 +323,7 @@ struct ContentView: View {
         // Try Grok
         if !grokAPIToken.isEmpty {
             do {
-                let url = URL(string: "https://api.x.ai/v1/chat/completions")!
+                guard let url = URL(string: "https://api.x.ai/v1/chat/completions") else { return "" }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
@@ -358,7 +358,7 @@ struct ContentView: View {
         // Try OpenAI
         if !openAIAPIToken.isEmpty {
             do {
-                let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+                guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else { return "" }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
@@ -428,7 +428,7 @@ struct ContentView: View {
         // Try Anthropic
         if !anthropicAPIToken.isEmpty {
             do {
-                let url = URL(string: "https://api.anthropic.com/v1/messages")!
+                guard let url = URL(string: "https://api.anthropic.com/v1/messages") else { return "" }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")
@@ -497,7 +497,11 @@ struct ContentView: View {
                 return res
             }
             do {
-                let url = URL(string: "https://api.x.ai/v1/chat/completions")!
+                guard let url = URL(string: "https://api.x.ai/v1/chat/completions") else {
+                    let res = await appleModelCompletion(prefix: prefix, language: language)
+                    await MainActor.run { lastProviderUsed = "Grok (fallback to Apple)" }
+                    return res
+                }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(grokAPIToken)", forHTTPHeaderField: "Authorization")
@@ -543,7 +547,11 @@ struct ContentView: View {
                 return res
             }
             do {
-                let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+                guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
+                    let res = await appleModelCompletion(prefix: prefix, language: language)
+                    await MainActor.run { lastProviderUsed = "OpenAI (fallback to Apple)" }
+                    return res
+                }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(openAIAPIToken)", forHTTPHeaderField: "Authorization")
@@ -637,7 +645,11 @@ struct ContentView: View {
                 return res
             }
             do {
-                let url = URL(string: "https://api.anthropic.com/v1/messages")!
+                guard let url = URL(string: "https://api.anthropic.com/v1/messages") else {
+                    let res = await appleModelCompletion(prefix: prefix, language: language)
+                    await MainActor.run { lastProviderUsed = "Anthropic (fallback to Apple)" }
+                    return res
+                }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue(anthropicAPIToken, forHTTPHeaderField: "x-api-key")

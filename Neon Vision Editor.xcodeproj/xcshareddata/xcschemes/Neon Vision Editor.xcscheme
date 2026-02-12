@@ -50,6 +50,9 @@
             ReferencedContainer = "container:Neon Vision Editor.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <StoreKitConfigurationFileReference
+         identifier = "../../Neon Vision Editor/SupportOptional.storekit">
+      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
