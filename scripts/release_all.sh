@@ -18,7 +18,7 @@ What it does:
   2) Commit docs changes
   3) Create annotated tag
   4) Push main and tag to origin
-  5) (optional) Trigger notarized release workflow
+  5) (optional) Trigger self-hosted notarized release workflow
 EOF
 }
 
@@ -77,12 +77,12 @@ echo "Tag push completed. Unsigned release workflow should start automatically."
 
 if [[ "$TRIGGER_NOTARIZED" -eq 1 ]]; then
   echo "Triggering notarized workflow for ${TAG}..."
-  gh workflow run release-notarized.yml -f tag="$TAG"
-  echo "Triggered: release-notarized.yml (tag=${TAG})"
+  gh workflow run release-notarized-selfhosted.yml -f tag="$TAG"
+  echo "Triggered: release-notarized-selfhosted.yml (tag=${TAG})"
 fi
 
 echo
 echo "Done."
 echo "Check runs:"
 echo "  gh run list --workflow release.yml --limit 5"
-echo "  gh run list --workflow release-notarized.yml --limit 5"
+echo "  gh run list --workflow release-notarized-selfhosted.yml --limit 5"

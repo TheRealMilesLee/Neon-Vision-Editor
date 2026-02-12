@@ -1,0 +1,174 @@
+name: Release macOS app (notarized, self-hosted)
+run-name: notarized release (self-hosted) ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing Git tag to release (e.g. v0.4.6)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: [self-hosted, macOS]
+
+    steps:
+      - name: Checkout tag
+        env:
+          TAG_NAME: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git init
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
+          git checkout FETCH_HEAD
+
+      - name: Verify Xcode version
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
+          if [[ "${XCODE_MAJOR:-0}" -lt 17 ]]; then
+            echo "Xcode 17+ required for AppIcon.icon (dark/light icon composer assets)." >&2
+            exit 1
+          fi
+
+      - name: Import signing certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+
+          echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import cert.p12 -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN"
+
+      - name: Build archive
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "Neon Vision Editor.xcodeproj" \
+            -scheme "Neon Vision Editor" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            archive
+
+      - name: Export app
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+          EXPORT_PATH: ${{ runner.temp }}/export
+        run: |
+          set -euo pipefail
+          mkdir -p "$EXPORT_PATH"
+
+          cat > export.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>developer-id</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist export.plist
+
+      - name: Verify app icon payload
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+        run: |
+          set -euo pipefail
+          APP="$EXPORT_PATH/Neon Vision Editor.app"
+          INFO="$APP/Contents/Info.plist"
+          CAR="$APP/Contents/Resources/Assets.car"
+
+          ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
+          if [[ "$ICON_NAME" != "AppIcon" ]]; then
+            echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
+            exit 1
+          fi
+
+          xcrun --sdk macosx assetutil --info "$CAR" > icon-info.json
+          if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' icon-info.json; then
+            echo "Missing AppIcon iconstack rendition in Assets.car." >&2
+            exit 1
+          fi
+          if ! grep -Eq '"Name" : "AppIcon"' icon-info.json; then
+            echo "Missing AppIcon image renditions in Assets.car." >&2
+            exit 1
+          fi
+          echo "Icon payload preflight passed."
+
+      - name: Notarize
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APP="$EXPORT_PATH/Neon Vision Editor.app"
+
+          ditto -c -k --keepParent "$APP" submit.zip
+
+          xcrun notarytool submit submit.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "$APP"
+
+      - name: Zip notarized app
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent "$EXPORT_PATH/Neon Vision Editor.app" Neon.Vision.Editor.app.zip
+
+      - name: Create or Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" Neon.Vision.Editor.app.zip --clobber
+          else
+            gh release create "$TAG_NAME" Neon.Vision.Editor.app.zip \
+              --title "Neon Vision Editor $TAG_NAME"
+          fi
+
+      - name: Trigger homebrew-tap update
+        env:
+          GH_TOKEN: ${{ secrets.TAP_BOT_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api repos/h3pdesign/homebrew-tap/dispatches \
+            -f event_type=notarized_release \
+            -f client_payload[tag]="$TAG_NAME"
