@@ -23,7 +23,8 @@ final class SupportPurchaseManager: ObservableObject {
 #elseif DEBUG
         return true
 #else
-        return environment == .sandbox
+        _ = environment
+        return false
 #endif
     }
 
