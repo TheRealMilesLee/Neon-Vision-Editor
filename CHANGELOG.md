@@ -7,13 +7,15 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 ## [v0.4.8] - 2026-02-12
 
 ### Added
-- TODO
+- Extended release automation coverage for the next tag cycle, including synchronized README/changelog/welcome-tour release content updates.
 
 ### Improved
-- TODO
+- macOS settings parity with iOS by wiring the `Open in Tabs` preference into live window tabbing behavior.
+- Welcome Tour release highlights are now aligned with distribution content for current App Store/TestFlight-facing builds.
 
 ### Fixed
-- TODO
+- Release workflow environment compatibility by removing hard `rg` dependency from docs validation steps.
+- Release pipeline guard failures caused by placeholder release notes (`TODO`) in the tag section.
 
 ## [v0.4.7] - 2026-02-12
 
