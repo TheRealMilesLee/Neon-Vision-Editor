@@ -220,12 +220,11 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.4-beta:",
+            subtitle: "Major changes since v0.4.5:",
             bullets: [
-                "Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.",
-                "Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).",
-                "New cross-platform theme settings panel and iOS app icon asset catalog set.",
-                "Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions."
+                "TODO",
+                "TODO",
+                "TODO"
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

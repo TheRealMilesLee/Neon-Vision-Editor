@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.5**
+- Latest release: **v0.4.6**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
 
@@ -121,6 +121,12 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.6 (summary)
+
+- TODO
+- TODO
+- TODO
+
 ### v0.4.5 (summary)
 
 - Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.
@@ -179,12 +185,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.5`
+- Tag: `v0.4.6`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.5
+git rev-parse --verify v0.4.6
 ```
 
 - Verify downloaded artifact checksum locally:
