@@ -220,7 +220,7 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.5:",
+            subtitle: "Major changes since v0.4.6:",
             bullets: [
                 "TODO",
                 "TODO",
