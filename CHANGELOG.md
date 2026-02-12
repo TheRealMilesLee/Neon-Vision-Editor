@@ -7,13 +7,19 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 ## [v0.4.6] - 2026-02-12
 
 ### Added
-- TODO
+- Self-hosted notarized release workflow for macOS (`release-notarized-selfhosted.yml`) targeting macOS runners with Xcode 17+.
+- Automated icon payload preflight in notarized release pipelines to block publishing assets with missing AppIcon renditions.
+- Release automation wiring so `scripts/release_all.sh --notarized` triggers the self-hosted notarized workflow.
 
 ### Improved
-- TODO
+- Release tooling robustness in `release_all.sh` / `release_prep.sh` for optional arguments and end-to-end docs flow.
+- Welcome Tour release page automation now derives the first card from the selected changelog section during release prep.
+- Notarized workflow now validates toolchain requirements for icon-composer-based app icon assets.
 
 ### Fixed
-- TODO
+- Support purchase testing bypass is now hidden in distributed release builds (kept only for debug/simulator testing paths).
+- Replaced deprecated receipt URL usage in support purchase gating with StoreKit transaction environment checks.
+- Restored release icon source mapping to `AppIcon.icon` (dark/light icon pipeline) instead of using the fallback iOS icon set in release builds.
 
 ## [v0.4.5] - 2026-02-11
 

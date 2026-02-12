@@ -149,6 +149,26 @@ jobs:
           set -euo pipefail
           ditto -c -k --keepParent "$EXPORT_PATH/Neon Vision Editor.app" Neon.Vision.Editor.app.zip
 
+      - name: Extract changelog section
+        env:
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          ./scripts/extract_changelog_section.sh CHANGELOG.md "$TAG_NAME" > release-notes.md
+
+      - name: Validate release docs are in sync
+        env:
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if rg -n "^- TODO$" release-notes.md >/dev/null; then
+            echo "CHANGELOG section for ${TAG_NAME} still contains TODO entries." >&2
+            exit 1
+          fi
+          rg -n "^> Latest release: \\*\\*${TAG_NAME}\\*\\*$" README.md >/dev/null
+          rg -n "^- Latest release: \\*\\*${TAG_NAME}\\*\\*$" README.md >/dev/null
+          rg -n "^### ${TAG_NAME} \\(summary\\)$" README.md >/dev/null
+
       - name: Create or Update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -158,9 +178,11 @@ jobs:
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" Neon.Vision.Editor.app.zip --clobber
+            gh release edit "$TAG_NAME" --title "Neon Vision Editor $TAG_NAME" --notes-file release-notes.md
           else
             gh release create "$TAG_NAME" Neon.Vision.Editor.app.zip \
-              --title "Neon Vision Editor $TAG_NAME"
+              --title "Neon Vision Editor $TAG_NAME" \
+              --notes-file release-notes.md
           fi
 
       - name: Trigger homebrew-tap update
