@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.4-beta:",
+            subtitle: "Major changes since v0.4.7:",
             bullets: [
-                "Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.",
-                "Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).",
-                "New cross-platform theme settings panel and iOS app icon asset catalog set.",
-                "Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions."
+                "Extended release automation coverage for the next tag cycle, including synchronized README/changelog/welcome-tour release content updates.",
+                "macOS settings parity with iOS by wiring the `Open in Tabs` preference into live window tabbing behavior.",
+                "Welcome Tour release highlights are now aligned with distribution content for current App Store/TestFlight-facing builds.",
+                "Release workflow environment compatibility by removing hard `rg` dependency from docs validation steps."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],
@@ -383,6 +383,7 @@ struct WelcomeTourView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .padding(.bottom, 10)
 
                 if page.title == "Toolbar Map" && page.bullets.count >= 2 {
                     HStack(alignment: .firstTextBaseline, spacing: 18) {

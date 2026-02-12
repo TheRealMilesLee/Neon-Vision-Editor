@@ -557,6 +557,7 @@ struct NeonSettingsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Theme Colors")
                         .font(.headline)
+                    Spacer(minLength: 6)
 
                     colorRow(title: "Text", color: isCustom ? hexBinding($themeTextHex, fallback: .white) : .constant(palette.text))
                         .disabled(!isCustom)
@@ -593,6 +594,9 @@ struct NeonSettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+#if os(iOS)
+            .padding(.top, 20)
+#endif
         }
     }
 

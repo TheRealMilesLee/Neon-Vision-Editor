@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   release:
+    concurrency:
+      group: release-${{ inputs.tag }}
+      cancel-in-progress: true
     runs-on: macos-latest
 
     steps:

@@ -64,8 +64,35 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  echo "Tag ${TAG} already exists. Aborting release prep before making any changes." >&2
+  exit 1
+fi
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Working tree is not clean. Commit/stash existing changes first." >&2
+  exit 1
+fi
+
+EXPECTED_VERSION="${TAG#v}"
+PBXPROJ_FILE="Neon Vision Editor.xcodeproj/project.pbxproj"
+if [[ ! -f "$PBXPROJ_FILE" ]]; then
+  echo "Missing ${PBXPROJ_FILE}; cannot validate MARKETING_VERSION." >&2
+  exit 1
+fi
+CURRENT_VERSION="$(
+  rg --no-filename --only-matching 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PBXPROJ_FILE" \
+    | awk '{print $3}' \
+    | sort -u \
+    | head -n1
+)"
+if [[ -z "${CURRENT_VERSION}" ]]; then
+  echo "Could not read MARKETING_VERSION from ${PBXPROJ_FILE}." >&2
+  exit 1
+fi
+if [[ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]]; then
+  echo "Version mismatch: tag ${TAG} requires MARKETING_VERSION ${EXPECTED_VERSION}, found ${CURRENT_VERSION}." >&2
+  echo "Update MARKETING_VERSION or use a matching tag before running release." >&2
   exit 1
 fi
 
@@ -84,11 +111,6 @@ else
   COMMIT_MSG="docs(release): prepare ${TAG}"
   git commit -m "$COMMIT_MSG"
   echo "Created commit: $COMMIT_MSG"
-fi
-
-if git rev-parse "$TAG" >/dev/null 2>&1; then
-  echo "Tag ${TAG} already exists. Aborting tag creation." >&2
-  exit 1
 fi
 
 git tag -a "$TAG" -m "Release ${TAG}"

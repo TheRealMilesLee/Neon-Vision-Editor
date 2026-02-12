@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   release:
+    concurrency:
+      group: release-${{ github.ref_name }}
+      cancel-in-progress: true
     runs-on: macos-latest
     steps:
       - name: Checkout (no external actions)
@@ -24,12 +27,20 @@ jobs:
           git checkout -b "release-${TAG_NAME}" FETCH_HEAD
 
       - name: Show Xcode Version
-        run: xcodebuild -version
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
+          if [[ "${XCODE_MAJOR:-0}" -lt 17 ]]; then
+            echo "Xcode 17+ required for AppIcon.icon (dark/light icon composer assets)." >&2
+            exit 1
+          fi
 
       - name: Build macOS archive
         env:
           ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
         run: |
+          set -euo pipefail
           xcodebuild \
             -project "Neon Vision Editor.xcodeproj" \
             -scheme "Neon Vision Editor" \
@@ -43,10 +54,37 @@ jobs:
             DEVELOPMENT_TEAM="" \
             archive
 
+      - name: Verify app icon payload
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
+        run: |
+          set -euo pipefail
+          APP="$ARCHIVE_PATH/Products/Applications/Neon Vision Editor.app"
+          INFO="$APP/Contents/Info.plist"
+          CAR="$APP/Contents/Resources/Assets.car"
+
+          ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
+          if [[ "$ICON_NAME" != "AppIcon" ]]; then
+            echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
+            exit 1
+          fi
+
+          xcrun --sdk macosx assetutil --info "$CAR" > icon-info.json
+          if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' icon-info.json; then
+            echo "Missing AppIcon iconstack rendition in Assets.car." >&2
+            exit 1
+          fi
+          if ! grep -Eq '"Name" : "AppIcon"' icon-info.json; then
+            echo "Missing AppIcon image renditions in Assets.car." >&2
+            exit 1
+          fi
+          echo "Icon payload preflight passed."
+
       - name: Zip app
         env:
           ARCHIVE_PATH: ${{ runner.temp }}/NeonVisionEditor.xcarchive
         run: |
+          set -euo pipefail
           APP_PATH="$ARCHIVE_PATH/Products/Applications/Neon Vision Editor.app"
           if [[ ! -d "$APP_PATH" ]]; then
             echo "App not found at $APP_PATH" >&2
@@ -58,6 +96,7 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           ./scripts/extract_changelog_section.sh CHANGELOG.md "$TAG_NAME" > release-notes.md
 
       - name: Validate release docs are in sync
@@ -79,8 +118,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "Neon.Vision.Editor.app.zip" --clobber
-            gh release edit "$TAG_NAME" --title "Neon Vision Editor $TAG_NAME" --notes-file release-notes.md
+            echo "Release ${TAG_NAME} already exists; skipping unsigned asset upload to avoid clobbering notarized artifacts."
           else
             gh release create "$TAG_NAME" \
               --title "Neon Vision Editor $TAG_NAME" \

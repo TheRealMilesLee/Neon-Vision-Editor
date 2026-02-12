@@ -24,8 +24,8 @@ jobs:
     runs-on: [self-hosted, macOS]
     environment: self-hosted-release
     concurrency:
-      group: release-notarized-selfhosted
-      cancel-in-progress: false
+      group: release-${{ inputs.tag }}
+      cancel-in-progress: true
 
     steps:
       - name: Validate trusted self-hosted request

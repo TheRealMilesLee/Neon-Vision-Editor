@@ -87,13 +87,21 @@ def extract_release_headings(changelog: str) -> list[str]:
     return re.findall(r"^## \[(v[^\]]+)\] - \d{4}-\d{2}-\d{2}$", changelog, flags=re.M)
 
 
+def is_prerelease_tag(tag: str) -> bool:
+    return "-" in tag
+
+
 def previous_release_tag(changelog: str, tag: str) -> str | None:
     headings = extract_release_headings(changelog)
     if tag not in headings:
         return None
     idx = headings.index(tag)
-    if idx + 1 < len(headings):
-        return headings[idx + 1]
+    # For stable releases, skip prerelease tags when computing "since ...".
+    # Example: v0.4.8 should show v0.4.7, not v0.4.4-beta.
+    for candidate in headings[idx + 1 :]:
+        if not is_prerelease_tag(tag) and is_prerelease_tag(candidate):
+            continue
+        return candidate
     return None
 
 

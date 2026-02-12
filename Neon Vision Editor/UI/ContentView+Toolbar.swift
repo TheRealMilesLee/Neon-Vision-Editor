@@ -209,6 +209,12 @@ extension ContentView {
             }) {
                 Label("Brain Dump Mode", systemImage: "note.text")
             }
+            
+            Button(action: {
+                showWelcomeTour = true
+            }) {
+                Label("Welcome Tour", systemImage: "sparkles.rectangle.stack")
+            }
 
             Button(action: {
                 enableTranslucentWindow.toggle()
@@ -321,6 +327,7 @@ extension ContentView {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(Color.secondary.opacity(0.12), in: Capsule())
+                .padding(.leading, 6)
                 .help("Active provider")
 
             Button(action: {
