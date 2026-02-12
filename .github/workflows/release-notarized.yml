@@ -17,6 +17,11 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Select Xcode 17+
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "17.0"
+
       - name: Checkout tag
         env:
           TAG_NAME: ${{ inputs.tag }}
@@ -30,7 +35,14 @@ jobs:
           git checkout FETCH_HEAD
 
       - name: Show Xcode version
-        run: xcodebuild -version
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
+          if [[ "${XCODE_MAJOR:-0}" -lt 17 ]]; then
+            echo "Xcode 17+ required for AppIcon.icon (dark/light icon composer assets)." >&2
+            exit 1
+          fi
 
       - name: Import signing certificate
         env:
