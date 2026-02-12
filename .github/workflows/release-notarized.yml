@@ -89,6 +89,32 @@ jobs:
             -exportPath "$EXPORT_PATH" \
             -exportOptionsPlist export.plist
 
+      - name: Verify app icon payload
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+        run: |
+          set -euo pipefail
+          APP="$EXPORT_PATH/Neon Vision Editor.app"
+          INFO="$APP/Contents/Info.plist"
+          CAR="$APP/Contents/Resources/Assets.car"
+
+          ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
+          if [[ "$ICON_NAME" != "AppIcon" ]]; then
+            echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
+            exit 1
+          fi
+
+          xcrun --sdk macosx assetutil --info "$CAR" > icon-info.json
+          if ! rg -q '"RenditionName" : "AppIcon\.iconstack"' icon-info.json; then
+            echo "Missing AppIcon iconstack rendition in Assets.car." >&2
+            exit 1
+          fi
+          if ! rg -q '"Name" : "AppIcon"' icon-info.json; then
+            echo "Missing AppIcon image renditions in Assets.car." >&2
+            exit 1
+          fi
+          echo "Icon payload preflight passed."
+
       - name: Notarize
         env:
           EXPORT_PATH: ${{ runner.temp }}/export
