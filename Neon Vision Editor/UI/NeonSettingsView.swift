@@ -194,14 +194,7 @@ struct NeonSettingsView: View {
     }
 
     private var preferredColorSchemeOverride: ColorScheme? {
-        switch appearance {
-        case "light":
-            return .light
-        case "dark":
-            return .dark
-        default:
-            return nil
-        }
+        ReleaseRuntimePolicy.preferredColorScheme(for: appearance)
     }
 
 #if os(macOS)

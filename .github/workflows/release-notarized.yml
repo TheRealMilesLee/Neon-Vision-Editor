@@ -17,7 +17,7 @@ jobs:
     concurrency:
       group: release-${{ inputs.tag }}
       cancel-in-progress: true
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: Checkout tag
@@ -32,15 +32,10 @@ jobs:
           git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
           git checkout FETCH_HEAD
 
-      - name: Verify Xcode version
+      - name: Select/verify Xcode 17+
         run: |
           set -euo pipefail
-          xcodebuild -version
-          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
-          if [[ "${XCODE_MAJOR:-0}" -lt 17 ]]; then
-            echo "Xcode 17+ required for AppIcon.icon (dark/light icon composer assets)." >&2
-            exit 1
-          fi
+          scripts/ci/select_xcode17.sh
 
       - name: Import signing certificate
         env:
@@ -105,25 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           APP="$EXPORT_PATH/Neon Vision Editor.app"
-          INFO="$APP/Contents/Info.plist"
-          CAR="$APP/Contents/Resources/Assets.car"
-
-          ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
-          if [[ "$ICON_NAME" != "AppIcon" ]]; then
-            echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
-            exit 1
-          fi
-
-          xcrun --sdk macosx assetutil --info "$CAR" > icon-info.json
-          if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' icon-info.json; then
-            echo "Missing AppIcon iconstack rendition in Assets.car." >&2
-            exit 1
-          fi
-          if ! grep -Eq '"Name" : "AppIcon"' icon-info.json; then
-            echo "Missing AppIcon image renditions in Assets.car." >&2
-            exit 1
-          fi
-          echo "Icon payload preflight passed."
+          scripts/ci/verify_icon_payload.sh "$APP"
 
       - name: Notarize
         env:
@@ -173,6 +150,7 @@ jobs:
           grep -nE "^### ${TAG_NAME} \\(summary\\)$" README.md >/dev/null
 
       - name: Create or Update GitHub Release
+        id: publish_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ inputs.tag }}
@@ -187,6 +165,38 @@ jobs:
               --title "Neon Vision Editor $TAG_NAME" \
               --notes-file release-notes.md
           fi
+
+      - name: Verify published release asset payload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          scripts/ci/verify_release_asset.sh "$TAG_NAME"
+
+      - name: Roll back broken published release asset
+        if: ${{ failure() && steps.publish_release.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release delete-asset "$TAG_NAME" "Neon.Vision.Editor.app.zip" -y || true
+          gh release edit "$TAG_NAME" --draft true || true
+          echo "Rolled back release asset and marked release as draft due to post-publish verification failure."
+
+      - name: Create release-failure alert issue
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh issue create \
+            --title "Release failure: ${TAG_NAME} (run ${GITHUB_RUN_ID})" \
+            --body "Automated release failed for ${TAG_NAME}. Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --label "release-alert"
 
       - name: Trigger homebrew-tap update
         env:

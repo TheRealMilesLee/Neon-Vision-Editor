@@ -99,14 +99,7 @@ struct NeonVisionEditorApp: App {
     #endif
 
     private var preferredAppearance: ColorScheme? {
-        switch appearance {
-        case "light":
-            return .light
-        case "dark":
-            return .dark
-        default:
-            return nil
-        }
+        ReleaseRuntimePolicy.preferredColorScheme(for: appearance)
     }
 
 #if os(macOS)

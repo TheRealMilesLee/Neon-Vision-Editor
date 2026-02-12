@@ -6,20 +6,22 @@ usage() {
 Run end-to-end release flow in one command.
 
 Usage:
-  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--notarized] [--self-hosted]
+  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--skip-notarized] [--github-hosted] [--dry-run]
 
 Examples:
-  scripts/release_all.sh v0.4.6
-  scripts/release_all.sh 0.4.6 --date 2026-02-12
-  scripts/release_all.sh v0.4.6 --notarized
-  scripts/release_all.sh v0.4.6 --notarized --self-hosted
+  scripts/release_all.sh v0.4.9
+  scripts/release_all.sh 0.4.9 --date 2026-02-12
+  scripts/release_all.sh v0.4.9 --github-hosted
+  scripts/release_all.sh v0.4.9 --dry-run
 
 What it does:
-  1) Prepare README/CHANGELOG docs
-  2) Commit docs changes
-  3) Create annotated tag
-  4) Push main and tag to origin
-  5) (optional) Trigger notarized release workflow (GitHub-hosted by default)
+  1) Run release preflight checks (docs + build + icon payload + tests)
+  2) Prepare README/CHANGELOG docs
+  3) Commit docs changes
+  4) Create annotated tag
+  5) Push main and tag to origin
+  6) Trigger notarized release workflow (self-hosted by default)
+  7) Wait for notarized workflow and verify uploaded release asset payload
 EOF
 }
 
@@ -37,8 +39,9 @@ if [[ "$TAG" != v* ]]; then
 fi
 
 DATE_ARG=()
-TRIGGER_NOTARIZED=0
-USE_SELF_HOSTED=0
+TRIGGER_NOTARIZED=1
+USE_SELF_HOSTED=1
+DRY_RUN=0
 
 while [[ "${1:-}" != "" ]]; do
   case "$1" in
@@ -50,11 +53,14 @@ while [[ "${1:-}" != "" ]]; do
       fi
       DATE_ARG=(--date "$1")
       ;;
-    --notarized)
-      TRIGGER_NOTARIZED=1
+    --skip-notarized)
+      TRIGGER_NOTARIZED=0
       ;;
-    --self-hosted)
-      USE_SELF_HOSTED=1
+    --github-hosted)
+      USE_SELF_HOSTED=0
+      ;;
+    --dry-run)
+      DRY_RUN=1
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -70,6 +76,14 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "Running release preflight for ${TAG}..."
+scripts/ci/release_preflight.sh "$TAG"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "Dry-run requested. Preflight completed; no commits/tags/workflows were created."
+  exit 0
+fi
+
 echo "Running release prep for ${TAG}..."
 prep_cmd=(scripts/release_prep.sh "$TAG")
 if [[ ${#DATE_ARG[@]} -gt 0 ]]; then
@@ -78,22 +92,35 @@ fi
 prep_cmd+=(--push)
 "${prep_cmd[@]}"
 
-echo "Tag push completed. Unsigned release workflow should start automatically."
+echo "Tag push completed."
 
 if [[ "$TRIGGER_NOTARIZED" -eq 1 ]]; then
   echo "Triggering notarized workflow for ${TAG}..."
   if [[ "$USE_SELF_HOSTED" -eq 1 ]]; then
     gh workflow run release-notarized-selfhosted.yml -f tag="$TAG" -f use_self_hosted=true
-    echo "Triggered: release-notarized-selfhosted.yml (tag=${TAG}, use_self_hosted=true)"
+    WORKFLOW_NAME="release-notarized-selfhosted.yml"
+    echo "Triggered: ${WORKFLOW_NAME} (tag=${TAG}, use_self_hosted=true)"
   else
     gh workflow run release-notarized.yml -f tag="$TAG"
-    echo "Triggered: release-notarized.yml (tag=${TAG})"
+    WORKFLOW_NAME="release-notarized.yml"
+    echo "Triggered: ${WORKFLOW_NAME} (tag=${TAG})"
   fi
+
+  echo "Waiting for ${WORKFLOW_NAME} run..."
+  sleep 6
+  RUN_ID="$(gh run list --workflow "$WORKFLOW_NAME" --limit 20 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | contains(\"${TAG}\")) | .databaseId" | head -n1)"
+  if [[ -z "$RUN_ID" ]]; then
+    echo "Could not find workflow run for ${TAG}." >&2
+    exit 1
+  fi
+  gh run watch "$RUN_ID"
+  scripts/ci/verify_release_asset.sh "$TAG"
 fi
 
 echo
 echo "Done."
 echo "Check runs:"
-echo "  gh run list --workflow release.yml --limit 5"
+echo "  gh run list --workflow pre-release-ci.yml --limit 5"
+echo "  gh run list --workflow release-dry-run.yml --limit 5"
 echo "  gh run list --workflow release-notarized.yml --limit 5"
 echo "  gh run list --workflow release-notarized-selfhosted.yml --limit 5"

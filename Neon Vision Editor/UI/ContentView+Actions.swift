@@ -8,7 +8,7 @@ import UIKit
 
 extension ContentView {
     func openSettings(tab: String? = nil) {
-        settingsActiveTab = tab ?? "general"
+        settingsActiveTab = ReleaseRuntimePolicy.settingsTab(from: tab)
 #if os(macOS)
         if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
             _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
@@ -202,43 +202,34 @@ extension ContentView {
         guard !findQuery.isEmpty else { return }
         findStatusMessage = ""
         let source = currentContentBinding.wrappedValue
-        let ns = source as NSString
         let fingerprint = "\(findQuery)|\(findUsesRegex)|\(findCaseSensitive)"
         if fingerprint != iOSLastFindFingerprint {
             iOSLastFindFingerprint = fingerprint
             iOSFindCursorLocation = 0
         }
 
-        let clampedStart = min(max(0, iOSFindCursorLocation), ns.length)
-        let forwardRange = NSRange(location: clampedStart, length: max(0, ns.length - clampedStart))
-        let wrapRange = NSRange(location: 0, length: max(0, clampedStart))
-
-        let foundRange: NSRange?
-        if findUsesRegex {
-            guard let regex = try? NSRegularExpression(pattern: findQuery, options: findCaseSensitive ? [] : [.caseInsensitive]) else {
+        guard let next = ReleaseRuntimePolicy.nextFindMatch(
+            in: source,
+            query: findQuery,
+            useRegex: findUsesRegex,
+            caseSensitive: findCaseSensitive,
+            cursorLocation: iOSFindCursorLocation
+        ) else {
+            if findUsesRegex, (try? NSRegularExpression(pattern: findQuery, options: findCaseSensitive ? [] : [.caseInsensitive])) == nil {
                 findStatusMessage = "Invalid regex pattern"
                 return
             }
-            foundRange = regex.firstMatch(in: source, options: [], range: forwardRange)?.range
-                ?? regex.firstMatch(in: source, options: [], range: wrapRange)?.range
-        } else {
-            let opts: NSString.CompareOptions = findCaseSensitive ? [] : [.caseInsensitive]
-            foundRange = ns.range(of: findQuery, options: opts, range: forwardRange).toOptional()
-                ?? ns.range(of: findQuery, options: opts, range: wrapRange).toOptional()
-        }
-
-        guard let match = foundRange else {
             findStatusMessage = "No matches found"
             return
         }
 
-        iOSFindCursorLocation = match.upperBound
+        iOSFindCursorLocation = next.nextCursorLocation
         NotificationCenter.default.post(
             name: .moveCursorToRange,
             object: nil,
             userInfo: [
-                EditorCommandUserInfo.rangeLocation: match.location,
-                EditorCommandUserInfo.rangeLength: match.length
+                EditorCommandUserInfo.rangeLocation: next.range.location,
+                EditorCommandUserInfo.rangeLength: next.range.length
             ]
         )
 #endif
