@@ -222,9 +222,10 @@ struct WelcomeTourView: View {
             title: "What’s New in This Release",
             subtitle: "Major changes since v0.4.6:",
             bullets: [
-                "TODO",
-                "TODO",
-                "TODO"
+                "Indentation-based scope detection fallback for Python/YAML to render scoped-region and guide markers when bracket-only matching is not sufficient.",
+                "Release workflow compatibility fallback for doc validation (`grep`-based checks), so release jobs no longer depend on `rg` being preinstalled on runners.",
+                "Scope/bracket highlighting stability by dropping stale asynchronous highlight passes and applying only the latest generation.",
+                "Visibility of matched bracket tokens and scope guide markers for easier detection on iOS and macOS."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

@@ -123,9 +123,11 @@ If macOS blocks first launch:
 
 ### v0.4.7 (summary)
 
-- Added indentation-based scope detection fallback for Python/YAML so scoped-region and guide visualization works even without strong bracket pairs.
-- Improved syntax highlight stability by canceling stale async highlight applications and only applying the newest pass.
-- Fixed settings/appearance behavior: native settings scene persistence path and consistent iOS light/dark/system override updates.
+- Indentation-based scope detection fallback for Python/YAML to render scoped-region and guide markers when bracket-only matching is not sufficient.
+- Release workflow compatibility fallback for doc validation (`grep`-based checks), so release jobs no longer depend on `rg` being preinstalled on runners.
+- Scope/bracket highlighting stability by dropping stale asynchronous highlight passes and applying only the latest generation.
+- Visibility of matched bracket tokens and scope guide markers for easier detection on iOS and macOS.
+- Settings window opening/persistence path now uses the native Settings scene behavior, avoiding custom frame persistence conflicts.
 
 ### v0.4.6 (summary)
 
