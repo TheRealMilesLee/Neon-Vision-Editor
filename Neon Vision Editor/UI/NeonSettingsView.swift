@@ -39,6 +39,7 @@ struct NeonSettingsView: View {
     @State private var geminiAPIToken: String = SecureTokenStore.token(for: .gemini)
     @State private var anthropicAPIToken: String = SecureTokenStore.token(for: .anthropic)
     @State private var showSupportPurchaseDialog: Bool = false
+    private let privacyPolicyURL = URL(string: "https://github.com/h3pdesign/Neon-Vision-Editor/blob/main/PRIVACY.md")!
 
     @AppStorage("SettingsThemeName") private var selectedTheme: String = "Neon Glow"
     @AppStorage("SettingsThemeTextColor") private var themeTextHex: String = "#EDEDED"
@@ -454,6 +455,9 @@ struct NeonSettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("In-App Purchase is optional and only used to support the app.")
                         .foregroundStyle(.secondary)
+                    Text("One-time, non-consumable purchase. No subscription and no auto-renewal.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     if supportPurchaseManager.canUseInAppPurchases {
                         Text("Price: \(supportPurchaseManager.supportPriceLabel)")
                             .font(.headline)
@@ -466,6 +470,11 @@ struct NeonSettingsView: View {
                                 showSupportPurchaseDialog = true
                             }
                             .disabled(supportPurchaseManager.isPurchasing || supportPurchaseManager.isLoadingProducts)
+
+                            Button("Restore Purchases") {
+                                Task { await supportPurchaseManager.restorePurchases() }
+                            }
+                            .disabled(supportPurchaseManager.isLoadingProducts)
 
                             Button("Refresh Price") {
                                 Task { await supportPurchaseManager.refreshProducts() }
@@ -480,6 +489,10 @@ struct NeonSettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+
+                    Link("Privacy Policy", destination: privacyPolicyURL)
+                        .font(.footnote.weight(.semibold))
+
                     if supportPurchaseManager.canBypassInCurrentBuild {
                         Divider()
                         Text("TestFlight/Sandbox: You can bypass purchase for testing.")

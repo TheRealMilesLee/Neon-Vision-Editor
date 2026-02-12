@@ -170,6 +170,7 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Privacy & Security
 
+- Privacy policy: [`PRIVACY.md`](PRIVACY.md).
 - API keys are stored in Keychain (`SecureTokenStore`), not `UserDefaults`.
 - Network traffic uses HTTPS.
 - No telemetry.
