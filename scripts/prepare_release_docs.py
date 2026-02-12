@@ -19,6 +19,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 CHANGELOG = ROOT / "CHANGELOG.md"
+WELCOME_TOUR_SWIFT = ROOT / "Neon Vision Editor" / "UI" / "PanelsAndHelpers.swift"
 
 
 def normalize_tag(raw: str) -> str:
@@ -80,6 +81,68 @@ def summarize_section(section_body: str, limit: int = 5) -> list[str]:
     if not bullets:
         return ["- See CHANGELOG.md entry."]
     return bullets[:limit]
+
+
+def extract_release_headings(changelog: str) -> list[str]:
+    return re.findall(r"^## \[(v[^\]]+)\] - \d{4}-\d{2}-\d{2}$", changelog, flags=re.M)
+
+
+def previous_release_tag(changelog: str, tag: str) -> str | None:
+    headings = extract_release_headings(changelog)
+    if tag not in headings:
+        return None
+    idx = headings.index(tag)
+    if idx + 1 < len(headings):
+        return headings[idx + 1]
+    return None
+
+
+def swift_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def update_welcome_tour_release_page(swift_source: str, tag: str, bullets: list[str], prev_tag: str | None) -> str:
+    if not bullets:
+        bullet_lines = ['                "See CHANGELOG.md for details"']
+    else:
+        bullet_lines = [f'                "{swift_string(bullet[2:])}"' for bullet in bullets]
+
+    if prev_tag:
+        subtitle = f"Major changes since {prev_tag}:"
+    else:
+        subtitle = f"Highlights for {tag}:"
+
+    new_block = (
+        "        TourPage(\n"
+        '            title: "What\u2019s New in This Release",\n'
+        f'            subtitle: "{swift_string(subtitle)}",\n'
+        "            bullets: [\n"
+        + ",\n".join(bullet_lines)
+        + "\n"
+        "            ],\n"
+        '            iconName: "sparkles.rectangle.stack",\n'
+        "            colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],\n"
+        "            toolbarItems: []\n"
+        "        ),"
+    )
+
+    pattern = re.compile(
+        r'        TourPage\(\n'
+        r'            title: "What[^\n]*This Release",\n'
+        r"            subtitle: [^\n]*\n"
+        r"            bullets: \[\n"
+        r".*?"
+        r"            \],\n"
+        r'            iconName: "sparkles\.rectangle\.stack",\n'
+        r"            colors: \[Color\(red: 0\.40, green: 0\.28, blue: 0\.90\), Color\(red: 0\.96, green: 0\.46, blue: 0\.55\)\],\n"
+        r"            toolbarItems: \[\]\n"
+        r"        \),",
+        flags=re.S,
+    )
+
+    if not pattern.search(swift_source):
+        raise ValueError("Could not find Welcome Tour 'What's New' page block to update.")
+    return pattern.sub(new_block, swift_source, count=1)
 
 
 def upsert_readme_summary(readme: str, tag: str, bullets: list[str]) -> str:
@@ -155,6 +218,12 @@ def main() -> int:
     readme = upsert_readme_summary(readme, tag, bullets)
     write_text(README, readme)
     print(f"Updated README release references and {tag} summary.")
+
+    welcome_src = read_text(WELCOME_TOUR_SWIFT)
+    prev_tag = previous_release_tag(changelog, tag)
+    welcome_src = update_welcome_tour_release_page(welcome_src, tag, bullets[:4], prev_tag)
+    write_text(WELCOME_TOUR_SWIFT, welcome_src)
+    print(f"Updated Welcome Tour release page from CHANGELOG for {tag}.")
 
     return 0
 

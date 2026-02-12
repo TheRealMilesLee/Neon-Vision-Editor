@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.4: stability, settings, and platform support.",
+            subtitle: "Major changes since v0.4.4-beta:",
             bullets: [
-                "Editor settings are now consolidated in Settings and aligned with toolbar actions",
-                "Line numbers and ruler rendering are stabilized for scrolling and tab switching",
-                "Whitespace/control glyph injection paths were cleaned up for paste/open/typing flows",
-                "Sequoia + Tahoe compatibility updates and refreshed iOS/macOS icon pipeline"
+                "Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.",
+                "Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).",
+                "New cross-platform theme settings panel and iOS app icon asset catalog set.",
+                "Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],
@@ -363,51 +363,50 @@ struct WelcomeTourView: View {
 
     @ViewBuilder
     private func tourCard(for page: TourPage) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Spacer(minLength: 0)
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(colors: page.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 56, height: 56)
+                        Image(systemName: page.iconName)
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
 
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(colors: page.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 56, height: 56)
-                    Image(systemName: page.iconName)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(page.title)
-                        .font(.system(size: 28, weight: .bold))
-                    Text(page.subtitle)
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if page.title == "Toolbar Map" && page.bullets.count >= 2 {
-                HStack(alignment: .firstTextBaseline, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        bulletRow(page.bullets[0])
-                        Text("scroll for viewing all toolbar options.")
-                            .font(.system(size: 12, weight: .medium))
+                        Text(page.title)
+                            .font(.system(size: 28, weight: .bold))
+                        Text(page.subtitle)
+                            .font(.system(size: 16))
                             .foregroundStyle(.secondary)
                     }
-                    bulletRow(page.bullets[1])
                 }
-                .padding(.bottom, 0)
-            } else {
-                ForEach(page.bullets, id: \.self) { bullet in
-                    bulletRow(bullet)
+
+                if page.title == "Toolbar Map" && page.bullets.count >= 2 {
+                    HStack(alignment: .firstTextBaseline, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            bulletRow(page.bullets[0])
+                            Text("scroll for viewing all toolbar options.")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        bulletRow(page.bullets[1])
+                    }
+                    .padding(.bottom, 0)
+                } else {
+                    ForEach(page.bullets, id: \.self) { bullet in
+                        bulletRow(bullet)
+                    }
+                }
+
+                if !page.toolbarItems.isEmpty {
+                    toolbarGrid(items: page.toolbarItems)
+                        .padding(.top, page.title == "Toolbar Map" ? -8 : 0)
                 }
             }
-
-            if !page.toolbarItems.isEmpty {
-                toolbarGrid(items: page.toolbarItems)
-                    .padding(.top, page.title == "Toolbar Map" ? -8 : 0)
-            }
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .padding(22)
         .background(
@@ -658,4 +657,3 @@ struct WindowAccessor: NSViewRepresentable {
     }
 }
 #endif
-

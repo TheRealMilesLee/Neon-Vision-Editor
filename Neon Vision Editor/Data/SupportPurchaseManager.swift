@@ -16,6 +16,25 @@ final class SupportPurchaseManager: ObservableObject {
 
     private var transactionUpdatesTask: Task<Void, Never>?
     private let bypassDefaultsKey = "SupportPurchaseBypassEnabled"
+    
+    private var isTestFlightBuild: Bool {
+#if targetEnvironment(simulator)
+        return false
+#else
+        guard let receiptURL = Bundle.main.appStoreReceiptURL else { return false }
+        return receiptURL.lastPathComponent == "sandboxReceipt"
+#endif
+    }
+
+    private var shouldAllowTestingBypass: Bool {
+#if targetEnvironment(simulator)
+        return true
+#elseif DEBUG
+        return true
+#else
+        return isTestFlightBuild
+#endif
+    }
 
     init() {
         transactionUpdatesTask = observeTransactionUpdates()
@@ -145,7 +164,8 @@ final class SupportPurchaseManager: ObservableObject {
             switch appTransactionResult {
             case .verified(let appTransaction):
                 canUseInAppPurchases = true
-                allowsTestingBypass = appTransaction.environment != .production
+                _ = appTransaction
+                allowsTestingBypass = shouldAllowTestingBypass
             case .unverified:
                 canUseInAppPurchases = false
                 allowsTestingBypass = false

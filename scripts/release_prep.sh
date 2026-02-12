@@ -15,7 +15,7 @@ Examples:
 
 Notes:
   - Runs scripts/prepare_release_docs.py
-  - Commits README.md and CHANGELOG.md changes
+  - Commits README.md, CHANGELOG.md, and Welcome Tour release page updates
   - Creates annotated tag <tag>
   - With --push, pushes commit and tag to origin/main
 EOF
@@ -76,10 +76,10 @@ if [[ ${#DATE_ARG[@]} -gt 0 ]]; then
 fi
 "${docs_cmd[@]}"
 
-git add README.md CHANGELOG.md
+git add README.md CHANGELOG.md "Neon Vision Editor/UI/PanelsAndHelpers.swift"
 
 if git diff --cached --quiet; then
-  echo "No README/CHANGELOG changes to commit."
+  echo "No README/CHANGELOG/Welcome Tour changes to commit."
 else
   COMMIT_MSG="docs(release): prepare ${TAG}"
   git commit -m "$COMMIT_MSG"
