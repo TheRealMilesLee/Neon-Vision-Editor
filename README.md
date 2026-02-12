@@ -164,7 +164,6 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Known Limitations
 
-- Not notarized yet.
 - Intel Macs are not fully validated.
 - Vim support is intentionally basic (not full Vim emulation).
 - iOS/iPad editor functionality is still more limited than macOS.
