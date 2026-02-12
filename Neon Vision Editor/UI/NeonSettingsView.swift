@@ -10,13 +10,22 @@ struct NeonSettingsView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("SettingsOpenInTabs") private var openInTabs: String = "system"
     @AppStorage("SettingsEditorFontName") private var editorFontName: String = ""
+    @AppStorage("SettingsUseSystemFont") private var useSystemFont: Bool = false
     @AppStorage("SettingsEditorFontSize") private var editorFontSize: Double = 14
     @AppStorage("SettingsLineHeight") private var lineHeight: Double = 1.0
     @AppStorage("SettingsAppearance") private var appearance: String = "system"
     @AppStorage("EnableTranslucentWindow") private var translucentWindow: Bool = false
+    @AppStorage("SettingsReopenLastSession") private var reopenLastSession: Bool = true
+    @AppStorage("SettingsOpenWithBlankDocument") private var openWithBlankDocument: Bool = true
+    @AppStorage("SettingsDefaultNewFileLanguage") private var defaultNewFileLanguage: String = "plain"
+    @AppStorage("SettingsConfirmCloseDirtyTab") private var confirmCloseDirtyTab: Bool = true
+    @AppStorage("SettingsConfirmClearEditor") private var confirmClearEditor: Bool = true
 
     @AppStorage("SettingsShowLineNumbers") private var showLineNumbers: Bool = true
     @AppStorage("SettingsHighlightCurrentLine") private var highlightCurrentLine: Bool = false
+    @AppStorage("SettingsHighlightMatchingBrackets") private var highlightMatchingBrackets: Bool = false
+    @AppStorage("SettingsShowScopeGuides") private var showScopeGuides: Bool = false
+    @AppStorage("SettingsHighlightScopeBackground") private var highlightScopeBackground: Bool = false
     @AppStorage("SettingsLineWrapEnabled") private var lineWrapEnabled: Bool = false
     @AppStorage("SettingsIndentStyle") private var indentStyle: String = "spaces"
     @AppStorage("SettingsIndentWidth") private var indentWidth: Int = 4
@@ -28,6 +37,7 @@ struct NeonSettingsView: View {
     @AppStorage("SettingsCompletionEnabled") private var completionEnabled: Bool = false
     @AppStorage("SettingsCompletionFromDocument") private var completionFromDocument: Bool = false
     @AppStorage("SettingsCompletionFromSyntax") private var completionFromSyntax: Bool = false
+    @AppStorage("SelectedAIModel") private var selectedAIModelRaw: String = AIModel.appleIntelligence.rawValue
     @AppStorage("SettingsActiveTab") private var settingsActiveTab: String = "general"
     @AppStorage("SettingsTemplateLanguage") private var settingsTemplateLanguage: String = "swift"
 #if os(macOS)
@@ -39,6 +49,7 @@ struct NeonSettingsView: View {
     @State private var geminiAPIToken: String = SecureTokenStore.token(for: .gemini)
     @State private var anthropicAPIToken: String = SecureTokenStore.token(for: .anthropic)
     @State private var showSupportPurchaseDialog: Bool = false
+    @State private var availableEditorFonts: [String] = []
     private let privacyPolicyURL = URL(string: "https://github.com/h3pdesign/Neon-Vision-Editor/blob/main/PRIVACY.md")
 
     @AppStorage("SettingsThemeName") private var selectedTheme: String = "Neon Glow"
@@ -121,19 +132,42 @@ struct NeonSettingsView: View {
 #if os(macOS)
         .frame(minWidth: 860, minHeight: 620)
 #endif
+        .preferredColorScheme(preferredColorSchemeOverride)
         .onAppear {
-            if settingsActiveTab == "code" {
-                settingsActiveTab = "editor"
-            }
+            settingsActiveTab = "general"
+            refreshAvailableEditorFonts()
             if supportPurchaseManager.supportProduct == nil {
                 Task { await supportPurchaseManager.refreshStoreState() }
             }
 #if os(macOS)
             fontPicker.onChange = { selected in
+                useSystemFont = false
                 editorFontName = selected.fontName
                 editorFontSize = Double(selected.pointSize)
             }
+            applyAppearanceImmediately()
 #endif
+        }
+        .onChange(of: appearance) { _, _ in
+#if os(macOS)
+            applyAppearanceImmediately()
+#endif
+        }
+        .onChange(of: showScopeGuides) { _, enabled in
+            if enabled && lineWrapEnabled {
+                lineWrapEnabled = false
+            }
+        }
+        .onChange(of: highlightScopeBackground) { _, enabled in
+            if enabled && lineWrapEnabled {
+                lineWrapEnabled = false
+            }
+        }
+        .onChange(of: lineWrapEnabled) { _, enabled in
+            if enabled {
+                showScopeGuides = false
+                highlightScopeBackground = false
+            }
         }
         .confirmationDialog("Support Neon Vision Editor", isPresented: $showSupportPurchaseDialog, titleVisibility: .visible) {
             Button("Support \(supportPurchaseManager.supportPriceLabel)") {
@@ -158,6 +192,36 @@ struct NeonSettingsView: View {
             Text(supportPurchaseManager.statusMessage ?? "")
         }
     }
+
+    private var preferredColorSchemeOverride: ColorScheme? {
+        switch appearance {
+        case "light":
+            return .light
+        case "dark":
+            return .dark
+        default:
+            return nil
+        }
+    }
+
+#if os(macOS)
+    private func applyAppearanceImmediately() {
+        let target: NSAppearance?
+        switch appearance {
+        case "light":
+            target = NSAppearance(named: .aqua)
+        case "dark":
+            target = NSAppearance(named: .darkAqua)
+        default:
+            target = nil
+        }
+        NSApp.appearance = target
+        for window in NSApp.windows {
+            window.appearance = target
+            window.displayIfNeeded()
+        }
+    }
+#endif
 
     private var generalTab: some View {
         settingsContainer {
@@ -197,29 +261,63 @@ struct NeonSettingsView: View {
 
             GroupBox("Editor Font") {
                 VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Use System Font", isOn: $useSystemFont)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                     HStack(alignment: .center, spacing: 12) {
-                        Text("Font Name")
+                        Text("Font")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
-                        TextField("Font Name", text: $editorFontName)
-                            .textFieldStyle(.plain)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 8)
-                            .background(inputFieldBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
-                            )
-                            .cornerRadius(6)
-                            .frame(maxWidth: isCompactSettingsLayout ? .infinity : 240)
+                        Picker("", selection: selectedFontBinding) {
+                            Text("System").tag(systemFontSentinel)
+                            ForEach(availableEditorFonts, id: \.self) { fontName in
+                                Text(fontName).tag(fontName)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .background(inputFieldBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                        )
+                        .cornerRadius(6)
+                        .frame(maxWidth: isCompactSettingsLayout ? .infinity : 240, alignment: .leading)
+                        .onChange(of: selectedFontValue) { _, _ in
+                            useSystemFont = (selectedFontValue == systemFontSentinel)
+                            if !useSystemFont && !selectedFontValue.isEmpty {
+                                editorFontName = selectedFontValue
+                            }
+                        }
+                        .onChange(of: useSystemFont) { _, isSystem in
+                            if isSystem {
+                                selectedFontValue = systemFontSentinel
+                            } else if !editorFontName.isEmpty {
+                                selectedFontValue = editorFontName
+                            }
+                        }
+                        .onChange(of: editorFontName) { _, newValue in
+                            guard !useSystemFont else { return }
+                            if !newValue.isEmpty {
+                                selectedFontValue = newValue
+                            }
+                        }
 #if os(macOS)
                         Button("Choose…") {
+                            useSystemFont = false
                             fontPicker.open(currentName: editorFontName, size: editorFontSize)
                         }
+                        .disabled(useSystemFont)
 #endif
+                    }
+
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("Font Size")
+                            .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Stepper(value: $editorFontSize, in: 10...28, step: 1) {
                             Text("\(Int(editorFontSize)) pt")
                         }
-                        .frame(maxWidth: 120)
+                        .frame(maxWidth: isCompactSettingsLayout ? .infinity : 220, alignment: .leading)
                     }
 
                     HStack(alignment: .center, spacing: 12) {
@@ -233,7 +331,64 @@ struct NeonSettingsView: View {
                 }
                 .padding(12)
             }
+
+            GroupBox("Startup") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Open with Blank Document", isOn: $openWithBlankDocument)
+                    Toggle("Reopen Last Session", isOn: $reopenLastSession)
+                        .disabled(openWithBlankDocument)
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("Default New File Language")
+                            .frame(width: isCompactSettingsLayout ? nil : 180, alignment: .leading)
+                        Picker("", selection: $defaultNewFileLanguage) {
+                            ForEach(templateLanguages, id: \.self) { lang in
+                                Text(languageLabel(for: lang)).tag(lang)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
+                .padding(12)
+            }
+
+            GroupBox("Confirmations") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Confirm Before Closing Dirty Tab", isOn: $confirmCloseDirtyTab)
+                    Toggle("Confirm Before Clearing Editor", isOn: $confirmClearEditor)
+                }
+                .padding(12)
+            }
         }
+    }
+
+    private let systemFontSentinel = "__system__"
+    @State private var selectedFontValue: String = "__system__"
+
+    private var selectedFontBinding: Binding<String> {
+        Binding(
+            get: {
+                if useSystemFont { return systemFontSentinel }
+                if editorFontName.isEmpty { return systemFontSentinel }
+                return editorFontName
+            },
+            set: { selectedFontValue = $0 }
+        )
+    }
+
+    private func refreshAvailableEditorFonts() {
+#if os(macOS)
+        let names = NSFontManager.shared.availableFonts
+#else
+        let names = UIFont.familyNames
+            .sorted()
+            .flatMap { UIFont.fontNames(forFamilyName: $0) }
+#endif
+        var merged = Array(Set(names)).sorted()
+        if !editorFontName.isEmpty && !merged.contains(editorFontName) {
+            merged.insert(editorFontName, at: 0)
+        }
+        availableEditorFonts = merged
+        selectedFontValue = useSystemFont ? systemFontSentinel : (editorFontName.isEmpty ? systemFontSentinel : editorFontName)
     }
 
     private var editorTab: some View {
@@ -245,7 +400,16 @@ struct NeonSettingsView: View {
                             .font(.headline)
                         Toggle("Show Line Numbers", isOn: $showLineNumbers)
                         Toggle("Highlight Current Line", isOn: $highlightCurrentLine)
+                        Toggle("Highlight Matching Brackets", isOn: $highlightMatchingBrackets)
+                        Toggle("Show Scope Guides (Non-Swift)", isOn: $showScopeGuides)
+                        Toggle("Highlight Scoped Region", isOn: $highlightScopeBackground)
                         Toggle("Line Wrap", isOn: $lineWrapEnabled)
+                        Text("When Line Wrap is enabled, scope guides/scoped region are turned off to avoid layout conflicts.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text("Scope guides are intended for non-Swift languages. Swift favors matching-token highlight.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         Text("Invisible character markers are disabled to avoid whitespace glyph artifacts.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -318,7 +482,7 @@ struct NeonSettingsView: View {
                     }
 
                     TextEditor(text: templateBinding(for: settingsTemplateLanguage))
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 13, weight: .regular, design: .monospaced))
                         .frame(minHeight: 200, maxHeight: 320)
                         .scrollContentBackground(.hidden)
                         .background(Color.clear)
@@ -434,6 +598,26 @@ struct NeonSettingsView: View {
 
     private var aiTab: some View {
         settingsContainer(maxWidth: 520) {
+            GroupBox("AI Model") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Model", selection: selectedAIModelBinding) {
+                        Text("Apple Intelligence").tag(AIModel.appleIntelligence)
+                        Text("Grok").tag(AIModel.grok)
+                        Text("OpenAI").tag(AIModel.openAI)
+                        Text("Gemini").tag(AIModel.gemini)
+                        Text("Anthropic").tag(AIModel.anthropic)
+                    }
+                    .pickerStyle(.menu)
+
+                    Text("Choose the default model used by editor AI actions.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+            }
+            .frame(maxWidth: 420)
+            .frame(maxWidth: .infinity, alignment: .center)
+
             GroupBox("AI Provider API Keys") {
                 VStack(alignment: .center, spacing: 12) {
                     aiKeyRow(title: "Grok", placeholder: "sk-…", value: $grokAPIToken, provider: .grok)
@@ -447,6 +631,13 @@ struct NeonSettingsView: View {
             .frame(maxWidth: 420)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+
+    private var selectedAIModelBinding: Binding<AIModel> {
+        Binding(
+            get: { AIModel(rawValue: selectedAIModelRaw) ?? .appleIntelligence },
+            set: { selectedAIModelRaw = $0.rawValue }
+        )
     }
 
     private var supportTab: some View {

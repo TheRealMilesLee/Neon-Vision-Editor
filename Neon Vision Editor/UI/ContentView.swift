@@ -44,7 +44,7 @@ struct ContentView: View {
     @Environment(\.grokErrorMessage) var grokErrorMessage
 
     // Single-document fallback state (used when no tab model is selected)
-    @State var selectedModel: AIModel = .appleIntelligence
+    @AppStorage("SelectedAIModel") private var selectedModelRaw: String = AIModel.appleIntelligence.rawValue
     @State var singleContent: String = ""
     @State var singleLanguage: String = "plain"
     @State var caretStatus: String = "Ln 1, Col 1"
@@ -53,6 +53,9 @@ struct ContentView: View {
     @AppStorage("SettingsLineHeight") var editorLineHeight: Double = 1.0
     @AppStorage("SettingsShowLineNumbers") var showLineNumbers: Bool = true
     @AppStorage("SettingsHighlightCurrentLine") var highlightCurrentLine: Bool = false
+    @AppStorage("SettingsHighlightMatchingBrackets") var highlightMatchingBrackets: Bool = false
+    @AppStorage("SettingsShowScopeGuides") var showScopeGuides: Bool = false
+    @AppStorage("SettingsHighlightScopeBackground") var highlightScopeBackground: Bool = false
     @AppStorage("SettingsLineWrapEnabled") var settingsLineWrapEnabled: Bool = false
     // Removed showHorizontalRuler and showVerticalRuler AppStorage properties
     @AppStorage("SettingsIndentStyle") var indentStyle: String = "spaces"
@@ -63,6 +66,10 @@ struct ContentView: View {
     @AppStorage("SettingsCompletionEnabled") var isAutoCompletionEnabled: Bool = false
     @AppStorage("SettingsCompletionFromDocument") var completionFromDocument: Bool = false
     @AppStorage("SettingsCompletionFromSyntax") var completionFromSyntax: Bool = false
+    @AppStorage("SettingsReopenLastSession") var reopenLastSession: Bool = true
+    @AppStorage("SettingsOpenWithBlankDocument") var openWithBlankDocument: Bool = true
+    @AppStorage("SettingsConfirmCloseDirtyTab") var confirmCloseDirtyTab: Bool = true
+    @AppStorage("SettingsConfirmClearEditor") var confirmClearEditor: Bool = true
     @AppStorage("SettingsActiveTab") var settingsActiveTab: String = "general"
     @AppStorage("SettingsTemplateLanguage") private var settingsTemplateLanguage: String = "swift"
     @AppStorage("SettingsThemeName") private var settingsThemeName: String = "Neon Glow"
@@ -80,9 +87,6 @@ struct ContentView: View {
     @State private var isApplyingCompletion: Bool = false
     @State var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
 
-    // Added missing popover UI state
-    @State var showAISelectorPopover: Bool = false
-
     @State var showFindReplace: Bool = false
     @State var showSettingsSheet: Bool = false
     @State var findQuery: String = ""
@@ -90,6 +94,8 @@ struct ContentView: View {
     @State var findUsesRegex: Bool = false
     @State var findCaseSensitive: Bool = false
     @State var findStatusMessage: String = ""
+    @State var iOSFindCursorLocation: Int = 0
+    @State var iOSLastFindFingerprint: String = ""
     @State var showProjectStructureSidebar: Bool = false
     @State var showCompactSidebarSheet: Bool = false
     @State var projectRootFolderURL: URL? = nil
@@ -98,6 +104,7 @@ struct ContentView: View {
     @State var projectFolderSecurityURL: URL? = nil
     @State var pendingCloseTabID: UUID? = nil
     @State var showUnsavedCloseDialog: Bool = false
+    @State var showClearEditorConfirmDialog: Bool = false
     @State var showIOSFileImporter: Bool = false
     @State var showIOSFileExporter: Bool = false
     @State var iosExportDocument: PlainTextDocument = PlainTextDocument(text: "")
@@ -122,6 +129,7 @@ struct ContentView: View {
     @State private var languagePromptSelection: String = "plain"
     @State private var languagePromptInsertTemplate: Bool = false
     @State private var whitespaceInspectorMessage: String? = nil
+    @State private var didApplyStartupBehavior: Bool = false
 
 #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
     var appleModelAvailable: Bool { true }
@@ -130,6 +138,11 @@ struct ContentView: View {
 #endif
 
     var activeProviderName: String { lastProviderUsed }
+
+    var selectedModel: AIModel {
+        get { AIModel(rawValue: selectedModelRaw) ?? .appleIntelligence }
+        set { selectedModelRaw = newValue.rawValue }
+    }
 
     /// Prompts the user for a Grok token if none is saved. Persists to Keychain.
     /// Returns true if a token is present/was saved; false if cancelled or empty.
@@ -942,7 +955,7 @@ struct ContentView: View {
         let viewWithEditorActions = view
             .onReceive(NotificationCenter.default.publisher(for: .clearEditorRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
-                clearEditorContent()
+                requestClearEditorContent()
             }
             .onChange(of: isAutoCompletionEnabled) { _, enabled in
                 if enabled && viewModel.isBrainDumpMode {
@@ -1002,14 +1015,13 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .showAPISettingsRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
-                showAISelectorPopover = false
                 openAPISettings()
             }
             .onReceive(NotificationCenter.default.publisher(for: .selectAIModelRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
                 guard let modelRawValue = notif.object as? String,
                       let model = AIModel(rawValue: modelRawValue) else { return }
-                selectedModel = model
+                selectedModelRaw = model.rawValue
             }
 
         return viewWithPanels
@@ -1118,6 +1130,21 @@ struct ContentView: View {
         .onChange(of: settingsThemeName) { _, _ in
             highlightRefreshToken += 1
         }
+        .onChange(of: highlightMatchingBrackets) { _, _ in
+            highlightRefreshToken += 1
+        }
+        .onChange(of: showScopeGuides) { _, _ in
+            highlightRefreshToken += 1
+        }
+        .onChange(of: highlightScopeBackground) { _, _ in
+            highlightRefreshToken += 1
+        }
+        .onChange(of: viewModel.isLineWrapEnabled) { _, _ in
+            highlightRefreshToken += 1
+        }
+        .onReceive(viewModel.$tabs) { _ in
+            persistSessionIfReady()
+        }
         .sheet(isPresented: $showFindReplace) {
             FindReplacePanel(
                 findQuery: $findQuery,
@@ -1131,6 +1158,11 @@ struct ContentView: View {
             )
 #if canImport(UIKit)
                 .frame(maxWidth: 420)
+#if os(iOS)
+                .presentationDetents([.height(280), .medium])
+                .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.scrolls)
+#endif
 #else
                 .frame(width: 420)
 #endif
@@ -1142,6 +1174,11 @@ struct ContentView: View {
                 supportsTranslucency: false
             )
             .environmentObject(supportPurchaseManager)
+#if os(iOS)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationContentInteraction(.scrolls)
+#endif
         }
 #endif
 #if os(iOS)
@@ -1202,6 +1239,12 @@ struct ContentView: View {
                 Text("This file has unsaved changes.")
             }
         }
+        .confirmationDialog("Clear editor content?", isPresented: $showClearEditorConfirmDialog, titleVisibility: .visible) {
+            Button("Clear", role: .destructive) { clearEditorContent() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove all text in the current editor.")
+        }
 #if canImport(UIKit)
         .fileImporter(
             isPresented: $showIOSFileImporter,
@@ -1223,6 +1266,8 @@ struct ContentView: View {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
             showProjectStructureSidebar = false
+
+            applyStartupBehaviorIfNeeded()
 
             // Restore Brain Dump mode from defaults
             if UserDefaults.standard.object(forKey: "BrainDumpModeEnabled") != nil {
@@ -1258,6 +1303,55 @@ struct ContentView: View {
         // Keep iPhone layout single-column to avoid horizontal clipping.
         return viewModel.showSidebar && !viewModel.isBrainDumpMode && horizontalSizeClass == .regular
 #endif
+    }
+
+    private func applyStartupBehaviorIfNeeded() {
+        guard !didApplyStartupBehavior else { return }
+
+        if viewModel.tabs.contains(where: { $0.fileURL != nil }) {
+            didApplyStartupBehavior = true
+            persistSessionIfReady()
+            return
+        }
+
+        if openWithBlankDocument {
+            didApplyStartupBehavior = true
+            persistSessionIfReady()
+            return
+        }
+
+        if reopenLastSession {
+            let paths = UserDefaults.standard.stringArray(forKey: "LastSessionFileURLs") ?? []
+            let selectedPath = UserDefaults.standard.string(forKey: "LastSessionSelectedFileURL")
+            let urls = paths.compactMap { URL(string: $0) }
+
+            if !urls.isEmpty {
+                viewModel.tabs.removeAll()
+                viewModel.selectedTabID = nil
+
+                for url in urls {
+                    viewModel.openFile(url: url)
+                }
+
+                if let selectedPath, let selectedURL = URL(string: selectedPath) {
+                    _ = viewModel.focusTabIfOpen(for: selectedURL)
+                }
+
+                if viewModel.tabs.isEmpty {
+                    viewModel.addNewTab()
+                }
+            }
+        }
+
+        didApplyStartupBehavior = true
+        persistSessionIfReady()
+    }
+
+    private func persistSessionIfReady() {
+        guard didApplyStartupBehavior else { return }
+        let urls = viewModel.tabs.compactMap { $0.fileURL?.absoluteString }
+        UserDefaults.standard.set(urls, forKey: "LastSessionFileURLs")
+        UserDefaults.standard.set(viewModel.selectedTab?.fileURL?.absoluteString, forKey: "LastSessionSelectedFileURL")
     }
 
     // Sidebar shows a lightweight table of contents (TOC) derived from the current document.
@@ -1710,6 +1804,9 @@ struct ContentView: View {
                     showLineNumbers: showLineNumbers,
                     showInvisibleCharacters: false,
                     highlightCurrentLine: highlightCurrentLine,
+                    highlightMatchingBrackets: highlightMatchingBrackets,
+                    showScopeGuides: showScopeGuides,
+                    highlightScopeBackground: highlightScopeBackground,
                     indentStyle: indentStyle,
                     indentWidth: indentWidth,
                     autoIndentEnabled: autoIndentEnabled,

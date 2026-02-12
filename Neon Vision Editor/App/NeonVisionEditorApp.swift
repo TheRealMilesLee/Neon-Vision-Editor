@@ -5,6 +5,9 @@ import FoundationModels
 #if os(macOS)
 import AppKit
 #endif
+#if os(iOS)
+import UIKit
+#endif
 
 #if os(macOS)
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -73,6 +76,7 @@ private struct DetachedWindowContentView: View {
 struct NeonVisionEditorApp: App {
     @StateObject private var viewModel = EditorViewModel()
     @StateObject private var supportPurchaseManager = SupportPurchaseManager()
+    @AppStorage("SettingsAppearance") private var appearance: String = "system"
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var useAppleIntelligence: Bool = true
@@ -93,6 +97,66 @@ struct NeonVisionEditorApp: App {
     }
     #endif
 
+    private var preferredAppearance: ColorScheme? {
+        switch appearance {
+        case "light":
+            return .light
+        case "dark":
+            return .dark
+        default:
+            return nil
+        }
+    }
+
+#if os(macOS)
+    private var appKitAppearance: NSAppearance? {
+        switch appearance {
+        case "light":
+            return NSAppearance(named: .aqua)
+        case "dark":
+            return NSAppearance(named: .darkAqua)
+        default:
+            return nil
+        }
+    }
+
+    private func applyGlobalAppearanceOverride() {
+        let override = appKitAppearance
+        NSApp.appearance = override
+        for window in NSApp.windows {
+            window.appearance = override
+            window.invalidateShadow()
+            window.displayIfNeeded()
+        }
+    }
+#endif
+
+#if os(iOS)
+    private var userInterfaceStyle: UIUserInterfaceStyle {
+        switch appearance {
+        case "light":
+            return .light
+        case "dark":
+            return .dark
+        default:
+            return .unspecified
+        }
+    }
+
+    private func applyIOSAppearanceOverride() {
+        let style = userInterfaceStyle
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .forEach { scene in
+                scene.windows.forEach { window in
+                    if window.overrideUserInterfaceStyle != style {
+                        window.overrideUserInterfaceStyle = style
+                    }
+                }
+            }
+    }
+#endif
+
     init() {
         let defaults = UserDefaults.standard
         SecureTokenStore.migrateLegacyUserDefaultsTokens()
@@ -108,8 +172,12 @@ struct NeonVisionEditorApp: App {
         defaults.register(defaults: [
             "SettingsShowLineNumbers": true,
             "SettingsHighlightCurrentLine": false,
+            "SettingsHighlightMatchingBrackets": false,
+            "SettingsShowScopeGuides": false,
+            "SettingsHighlightScopeBackground": false,
             "SettingsLineWrapEnabled": false,
             "SettingsShowInvisibleCharacters": false,
+            "SettingsUseSystemFont": false,
             "SettingsIndentStyle": "spaces",
             "SettingsIndentWidth": 4,
             "SettingsAutoIndent": true,
@@ -118,7 +186,12 @@ struct NeonVisionEditorApp: App {
             "SettingsTrimWhitespaceForSyntaxDetection": false,
             "SettingsCompletionEnabled": false,
             "SettingsCompletionFromDocument": false,
-            "SettingsCompletionFromSyntax": false
+            "SettingsCompletionFromSyntax": false,
+            "SettingsReopenLastSession": true,
+            "SettingsOpenWithBlankDocument": true,
+            "SettingsDefaultNewFileLanguage": "plain",
+            "SettingsConfirmCloseDirtyTab": true,
+            "SettingsConfirmClearEditor": true
         ])
         let whitespaceMigrationKey = "SettingsMigrationWhitespaceGlyphResetV1"
         if !defaults.bool(forKey: whitespaceMigrationKey) {
@@ -158,8 +231,11 @@ struct NeonVisionEditorApp: App {
                 .environmentObject(viewModel)
                 .environmentObject(supportPurchaseManager)
                 .onAppear { appDelegate.viewModel = viewModel }
+                .onAppear { applyGlobalAppearanceOverride() }
+                .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
+                .preferredColorScheme(preferredAppearance)
                 .frame(minWidth: 600, minHeight: 400)
                 .task {
                     #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
@@ -187,22 +263,25 @@ struct NeonVisionEditorApp: App {
                 showGrokError: $showGrokError,
                 grokErrorMessage: $grokErrorMessage
             )
+            .onAppear { applyGlobalAppearanceOverride() }
+            .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
+            .preferredColorScheme(preferredAppearance)
         }
         .defaultSize(width: 1000, height: 600)
         .handlesExternalEvents(matching: [])
 
-        
-        WindowGroup("Settings", id: "settings") {
+        Settings {
             NeonSettingsView()
                 .environmentObject(supportPurchaseManager)
-                .background(NonRestorableWindow())
+                .onAppear { applyGlobalAppearanceOverride() }
+                .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
+                .preferredColorScheme(preferredAppearance)
         }
-        .defaultSize(width: 860, height: 620)
 
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
-                    openWindow(id: "settings")
+                    showSettingsWindow()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
@@ -307,24 +386,6 @@ struct NeonVisionEditorApp: App {
             CommandMenu("AI") {
                 Button("API Settings…") {
                     postWindowCommand(.showAPISettingsRequested)
-                }
-
-                Divider()
-
-                Button("Use Apple Intelligence") {
-                    postWindowCommand(.selectAIModelRequested, object: AIModel.appleIntelligence.rawValue)
-                }
-                Button("Use Grok") {
-                    postWindowCommand(.selectAIModelRequested, object: AIModel.grok.rawValue)
-                }
-                Button("Use OpenAI") {
-                    postWindowCommand(.selectAIModelRequested, object: AIModel.openAI.rawValue)
-                }
-                Button("Use Gemini") {
-                    postWindowCommand(.selectAIModelRequested, object: AIModel.gemini.rawValue)
-                }
-                Button("Use Anthropic") {
-                    postWindowCommand(.selectAIModelRequested, object: AIModel.anthropic.rawValue)
                 }
             }
 
@@ -464,40 +525,21 @@ struct NeonVisionEditorApp: App {
                 .environmentObject(supportPurchaseManager)
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
+                .onAppear { applyIOSAppearanceOverride() }
+                .onChange(of: appearance) { _, _ in applyIOSAppearanceOverride() }
+                .preferredColorScheme(preferredAppearance)
         }
 #endif
     }
 
     private func showSettingsWindow() {
         #if os(macOS)
-        openWindow(id: "settings")
+        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
         #endif
     }
 }
-
-#if os(macOS)
-private struct NonRestorableWindow: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                window.isRestorable = false
-                window.identifier = nil
-            }
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            if let window = nsView.window {
-                window.isRestorable = false
-                window.identifier = nil
-            }
-        }
-    }
-}
-#endif
 
 struct ShowGrokErrorKey: EnvironmentKey {
     static let defaultValue: Binding<Bool> = .constant(false)

@@ -101,6 +101,15 @@ extension ContentView {
         caretStatus = "Ln 1, Col 1"
     }
 
+    func requestClearEditorContent() {
+        let hasText = !currentContentBinding.wrappedValue.isEmpty
+        if confirmClearEditor && hasText {
+            showClearEditorConfirmDialog = true
+        } else {
+            clearEditorContent()
+        }
+    }
+
     func toggleSidebarFromToolbar() {
 #if os(iOS)
         if horizontalSizeClass == .compact {
@@ -112,7 +121,7 @@ extension ContentView {
     }
 
     func requestCloseTab(_ tab: TabData) {
-        if tab.isDirty {
+        if tab.isDirty && confirmCloseDirtyTab {
             pendingCloseTabID = tab.id
             showUnsavedCloseDialog = true
         } else {
@@ -188,7 +197,48 @@ extension ContentView {
             }
         }
 #else
-        findStatusMessage = "Find next is currently available on macOS editor."
+        guard !findQuery.isEmpty else { return }
+        findStatusMessage = ""
+        let source = currentContentBinding.wrappedValue
+        let ns = source as NSString
+        let fingerprint = "\(findQuery)|\(findUsesRegex)|\(findCaseSensitive)"
+        if fingerprint != iOSLastFindFingerprint {
+            iOSLastFindFingerprint = fingerprint
+            iOSFindCursorLocation = 0
+        }
+
+        let clampedStart = min(max(0, iOSFindCursorLocation), ns.length)
+        let forwardRange = NSRange(location: clampedStart, length: max(0, ns.length - clampedStart))
+        let wrapRange = NSRange(location: 0, length: max(0, clampedStart))
+
+        let foundRange: NSRange?
+        if findUsesRegex {
+            guard let regex = try? NSRegularExpression(pattern: findQuery, options: findCaseSensitive ? [] : [.caseInsensitive]) else {
+                findStatusMessage = "Invalid regex pattern"
+                return
+            }
+            foundRange = regex.firstMatch(in: source, options: [], range: forwardRange)?.range
+                ?? regex.firstMatch(in: source, options: [], range: wrapRange)?.range
+        } else {
+            let opts: NSString.CompareOptions = findCaseSensitive ? [] : [.caseInsensitive]
+            foundRange = ns.range(of: findQuery, options: opts, range: forwardRange).toOptional()
+                ?? ns.range(of: findQuery, options: opts, range: wrapRange).toOptional()
+        }
+
+        guard let match = foundRange else {
+            findStatusMessage = "No matches found"
+            return
+        }
+
+        iOSFindCursorLocation = match.upperBound
+        NotificationCenter.default.post(
+            name: .moveCursorToRange,
+            object: nil,
+            userInfo: [
+                EditorCommandUserInfo.rangeLocation: match.location,
+                EditorCommandUserInfo.rangeLength: match.length
+            ]
+        )
 #endif
     }
 

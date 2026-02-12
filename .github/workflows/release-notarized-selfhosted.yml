@@ -8,15 +8,46 @@ on:
         description: "Existing Git tag to release (e.g. v0.4.6)"
         required: true
         type: string
+      use_self_hosted:
+        description: "Allow self-hosted runner usage (requires trusted release context)"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
   release:
+    if: ${{ inputs.use_self_hosted == true }}
     runs-on: [self-hosted, macOS]
+    environment: self-hosted-release
+    concurrency:
+      group: release-notarized-selfhosted
+      cancel-in-progress: false
 
     steps:
+      - name: Validate trusted self-hosted request
+        env:
+          TAG_NAME: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git init
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch --depth=1 origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          git fetch --depth=1 origin "refs/heads/main:refs/remotes/origin/main"
+          TAG_SHA="$(git rev-list -n1 "refs/tags/${TAG_NAME}")"
+          MAIN_SHA="$(git rev-list -n1 "refs/remotes/origin/main")"
+          echo "Tag SHA: ${TAG_SHA}"
+          echo "Main SHA: ${MAIN_SHA}"
+          if [[ "${TAG_SHA}" != "${MAIN_SHA}" ]]; then
+            echo "Self-hosted releases are only allowed for tags that point to origin/main HEAD." >&2
+            exit 1
+          fi
+
       - name: Checkout tag
         env:
           TAG_NAME: ${{ inputs.tag }}

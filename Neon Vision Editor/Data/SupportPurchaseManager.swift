@@ -40,7 +40,7 @@ final class SupportPurchaseManager: ObservableObject {
     }
 
     var supportPriceLabel: String {
-        supportProduct?.displayPrice ?? "EUR 4.90"
+        supportProduct?.displayPrice ?? "$4.99"
     }
 
     var canBypassInCurrentBuild: Bool {

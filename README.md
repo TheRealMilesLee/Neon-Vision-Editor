@@ -213,6 +213,14 @@ cd Neon-Vision-Editor
 open "Neon Vision Editor.xcodeproj"
 ```
 
+## Git hooks
+
+To auto-increment Xcode `CURRENT_PROJECT_VERSION` on every commit:
+
+```bash
+scripts/install_git_hooks.sh
+```
+
 ## Support
 
 If you want to support development:

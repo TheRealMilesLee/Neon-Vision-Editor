@@ -142,7 +142,7 @@ class EditorViewModel: ObservableObject {
     
     func addNewTab() {
         // Keep language discovery active for new untitled tabs.
-        let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: "plain", fileURL: nil, languageLocked: false)
+        let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: defaultNewTabLanguage(), fileURL: nil, languageLocked: false)
         tabs.append(newTab)
         selectedTabID = newTab.id
     }
@@ -437,5 +437,11 @@ class EditorViewModel: ObservableObject {
 #if DEBUG
         print(message)
 #endif
+    }
+
+    private func defaultNewTabLanguage() -> String {
+        let stored = UserDefaults.standard.string(forKey: "SettingsDefaultNewFileLanguage") ?? "plain"
+        let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.isEmpty ? "plain" : trimmed
     }
 }

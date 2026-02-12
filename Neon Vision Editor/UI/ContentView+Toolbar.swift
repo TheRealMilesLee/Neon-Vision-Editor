@@ -93,58 +93,6 @@ extension ContentView {
     }
 
     @ViewBuilder
-    private var aiSelectorControl: some View {
-        Button(action: {
-            showAISelectorPopover.toggle()
-        }) {
-            Image(systemName: "brain.head.profile")
-        }
-        .help("AI Model & Settings")
-        .popover(isPresented: $showAISelectorPopover) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("AI Model").font(.headline)
-                Picker("AI Model", selection: $selectedModel) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "brain.head.profile")
-                        Text("Apple Intelligence")
-                    }
-                    .tag(AIModel.appleIntelligence)
-                    Text("Grok").tag(AIModel.grok)
-                    Text("OpenAI").tag(AIModel.openAI)
-                    Text("Gemini").tag(AIModel.gemini)
-                    Text("Anthropic").tag(AIModel.anthropic)
-                }
-                .labelsHidden()
-                .frame(width: 170)
-                .controlSize(.large)
-
-                Button("API Settings…") {
-                    showAISelectorPopover = false
-                    openAPISettings()
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(12)
-        }
-    }
-
-    @ViewBuilder
-    private var aiSelectorMenuControl: some View {
-        Menu {
-            Button("Apple Intelligence") { selectedModel = .appleIntelligence }
-            Button("Grok") { selectedModel = .grok }
-            Button("OpenAI") { selectedModel = .openAI }
-            Button("Gemini") { selectedModel = .gemini }
-            Button("Anthropic") { selectedModel = .anthropic }
-            Divider()
-            Button("API Settings…") { openAPISettings() }
-        } label: {
-            Image(systemName: "brain.head.profile")
-        }
-        .help("AI Model & Settings")
-    }
-
-    @ViewBuilder
     private var activeProviderBadgeControl: some View {
         Text(compactActiveProviderName)
             .font(.caption)
@@ -162,7 +110,7 @@ extension ContentView {
     @ViewBuilder
     private var clearEditorControl: some View {
         Button(action: {
-            clearEditorContent()
+            requestClearEditorContent()
         }) {
             Image(systemName: "trash")
         }
@@ -280,7 +228,6 @@ extension ContentView {
     private var iOSToolbarControls: some View {
         languagePickerControl
         newTabControl
-        aiSelectorControl
         activeProviderBadgeControl
         clearEditorControl
         settingsControl
@@ -289,7 +236,6 @@ extension ContentView {
 
     @ViewBuilder
     private var iPadDistributedToolbarControls: some View {
-        aiSelectorMenuControl
         activeProviderBadgeControl
         languagePickerControl
         newTabControl
@@ -365,39 +311,6 @@ extension ContentView {
             .frame(width: 140)
             .padding(.vertical, 2)
 
-            Button(action: {
-                showAISelectorPopover.toggle()
-            }) {
-                Image(systemName: "brain.head.profile")
-            }
-            .help("AI Model & Settings")
-            .popover(isPresented: $showAISelectorPopover) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("AI Model").font(.headline)
-                    Picker("AI Model", selection: $selectedModel) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "brain.head.profile")
-                            Text("Apple Intelligence")
-                        }
-                        .tag(AIModel.appleIntelligence)
-                        Text("Grok").tag(AIModel.grok)
-                        Text("OpenAI").tag(AIModel.openAI)
-                        Text("Gemini").tag(AIModel.gemini)
-                        Text("Anthropic").tag(AIModel.anthropic)
-                    }
-                    .labelsHidden()
-                    .frame(width: 170)
-                    .controlSize(.large)
-
-                    Button("API Settings…") {
-                        showAISelectorPopover = false
-                        openAPISettings()
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(12)
-            }
-
             Text(compactActiveProviderName)
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -428,7 +341,7 @@ extension ContentView {
             .help("Increase Font Size")
 
             Button(action: {
-                clearEditorContent()
+                requestClearEditorContent()
             }) {
                 Image(systemName: "trash")
             }

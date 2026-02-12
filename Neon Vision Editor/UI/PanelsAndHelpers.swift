@@ -558,6 +558,7 @@ extension Notification.Name {
     static let selectAIModelRequested = Notification.Name("selectAIModelRequested")
     static let showQuickSwitcherRequested = Notification.Name("showQuickSwitcherRequested")
     static let showWelcomeTourRequested = Notification.Name("showWelcomeTourRequested")
+    static let moveCursorToRange = Notification.Name("moveCursorToRange")
     static let toggleVimModeRequested = Notification.Name("toggleVimModeRequested")
     static let vimModeStateDidChange = Notification.Name("vimModeStateDidChange")
     static let droppedFileURL = Notification.Name("droppedFileURL")
@@ -578,6 +579,8 @@ extension NSRange {
 enum EditorCommandUserInfo {
     static let windowNumber = "targetWindowNumber"
     static let inspectionMessage = "inspectionMessage"
+    static let rangeLocation = "rangeLocation"
+    static let rangeLength = "rangeLength"
 }
 
 #if os(macOS)
