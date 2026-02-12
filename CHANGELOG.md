@@ -7,13 +7,16 @@ The format follows *Keep a Changelog*. Versions use semantic versioning with pre
 ## [v0.4.7] - 2026-02-12
 
 ### Added
-- TODO
+- Indentation-based scope detection fallback for Python/YAML to render scoped-region and guide markers when bracket-only matching is not sufficient.
+- Release workflow compatibility fallback for doc validation (`grep`-based checks), so release jobs no longer depend on `rg` being preinstalled on runners.
 
 ### Improved
-- TODO
+- Scope/bracket highlighting stability by dropping stale asynchronous highlight passes and applying only the latest generation.
+- Visibility of matched bracket tokens and scope guide markers for easier detection on iOS and macOS.
 
 ### Fixed
-- TODO
+- Settings window opening/persistence path now uses the native Settings scene behavior, avoiding custom frame persistence conflicts.
+- iOS appearance override handling for light/dark/system now applies consistently across app windows/scenes.
 
 ## [v0.4.6] - 2026-02-12
 

@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.5**  
+> Latest release: **v0.4.7**  
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -123,15 +123,15 @@ If macOS blocks first launch:
 
 ### v0.4.7 (summary)
 
-- TODO
-- TODO
-- TODO
+- Added indentation-based scope detection fallback for Python/YAML so scoped-region and guide visualization works even without strong bracket pairs.
+- Improved syntax highlight stability by canceling stale async highlight applications and only applying the newest pass.
+- Fixed settings/appearance behavior: native settings scene persistence path and consistent iOS light/dark/system override updates.
 
 ### v0.4.6 (summary)
 
-- TODO
-- TODO
-- TODO
+- Added self-hosted notarized release workflow and icon payload preflight checks for AppIcon assets.
+- Improved release tooling and Welcome Tour automation so release notes are generated from changelog sections during release prep.
+- Fixed support purchase test bypass visibility in distributed builds and restored AppIcon.icon mapping in release packaging.
 
 ### v0.4.5 (summary)
 
