@@ -105,11 +105,11 @@ jobs:
           fi
 
           xcrun --sdk macosx assetutil --info "$CAR" > icon-info.json
-          if ! rg -q '"RenditionName" : "AppIcon\.iconstack"' icon-info.json; then
+          if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' icon-info.json; then
             echo "Missing AppIcon iconstack rendition in Assets.car." >&2
             exit 1
           fi
-          if ! rg -q '"Name" : "AppIcon"' icon-info.json; then
+          if ! grep -Eq '"Name" : "AppIcon"' icon-info.json; then
             echo "Missing AppIcon image renditions in Assets.car." >&2
             exit 1
           fi
