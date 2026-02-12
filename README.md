@@ -123,11 +123,11 @@ If macOS blocks first launch:
 
 ### v0.4.5 (summary)
 
-- Added optional support purchase flow (StoreKit 2) with a dedicated Settings > Support tab.
-- Added a new cross-platform theme settings panel and iOS app icon asset catalog set.
-- Improved settings architecture and language detection/syntax highlighting stability.
-- Fixed iOS settings sheet state binding, Find panel focus/next behavior, and editor sanitization artifacts.
-- Fixed macOS line-number gutter redraw/background mismatches.
+- Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.
+- Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).
+- New cross-platform theme settings panel and iOS app icon asset catalog set.
+- Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions.
+- Language detection and syntax highlighting stability for newly opened tabs and ongoing edits.
 
 ### v0.4.4-beta (summary)
 
