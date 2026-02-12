@@ -77,6 +77,7 @@ struct NeonVisionEditorApp: App {
     @StateObject private var viewModel = EditorViewModel()
     @StateObject private var supportPurchaseManager = SupportPurchaseManager()
     @AppStorage("SettingsAppearance") private var appearance: String = "system"
+    @AppStorage("SettingsOpenInTabs") private var openInTabs: String = "system"
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var useAppleIntelligence: Bool = true
@@ -127,6 +128,26 @@ struct NeonVisionEditorApp: App {
             window.appearance = override
             window.invalidateShadow()
             window.displayIfNeeded()
+        }
+    }
+
+    private func applyOpenInTabsPreference() {
+        switch openInTabs {
+        case "always":
+            NSWindow.allowsAutomaticWindowTabbing = true
+            for window in NSApp.windows {
+                window.tabbingMode = .preferred
+            }
+        case "never":
+            NSWindow.allowsAutomaticWindowTabbing = false
+            for window in NSApp.windows {
+                window.tabbingMode = .disallowed
+            }
+        default:
+            NSWindow.allowsAutomaticWindowTabbing = true
+            for window in NSApp.windows {
+                window.tabbingMode = .automatic
+            }
         }
     }
 #endif
@@ -232,7 +253,9 @@ struct NeonVisionEditorApp: App {
                 .environmentObject(supportPurchaseManager)
                 .onAppear { appDelegate.viewModel = viewModel }
                 .onAppear { applyGlobalAppearanceOverride() }
+                .onAppear { applyOpenInTabsPreference() }
                 .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
+                .onChange(of: openInTabs) { _, _ in applyOpenInTabsPreference() }
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
                 .preferredColorScheme(preferredAppearance)
@@ -264,7 +287,9 @@ struct NeonVisionEditorApp: App {
                 grokErrorMessage: $grokErrorMessage
             )
             .onAppear { applyGlobalAppearanceOverride() }
+            .onAppear { applyOpenInTabsPreference() }
             .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
+            .onChange(of: openInTabs) { _, _ in applyOpenInTabsPreference() }
             .preferredColorScheme(preferredAppearance)
         }
         .defaultSize(width: 1000, height: 600)
@@ -274,7 +299,9 @@ struct NeonVisionEditorApp: App {
             NeonSettingsView()
                 .environmentObject(supportPurchaseManager)
                 .onAppear { applyGlobalAppearanceOverride() }
+                .onAppear { applyOpenInTabsPreference() }
                 .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
+                .onChange(of: openInTabs) { _, _ in applyOpenInTabsPreference() }
                 .preferredColorScheme(preferredAppearance)
         }
 
