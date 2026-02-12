@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.7:",
+            subtitle: "Major changes since v0.4.4-beta:",
             bullets: [
-                "Extended release automation coverage for the next tag cycle, including synchronized README/changelog/welcome-tour release content updates.",
-                "macOS settings parity with iOS by wiring the `Open in Tabs` preference into live window tabbing behavior.",
-                "Welcome Tour release highlights are now aligned with distribution content for current App Store/TestFlight-facing builds.",
-                "Release workflow environment compatibility by removing hard `rg` dependency from docs validation steps."
+                "Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.",
+                "Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).",
+                "New cross-platform theme settings panel and iOS app icon asset catalog set.",
+                "Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

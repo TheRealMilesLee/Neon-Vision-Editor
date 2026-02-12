@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.8**
+> Latest release: **v0.4.5**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.8**
+- Latest release: **v0.4.5**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
 
@@ -121,6 +121,14 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.5 (summary)
+
+- Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.
+- Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).
+- New cross-platform theme settings panel and iOS app icon asset catalog set.
+- Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions.
+- Language detection and syntax highlighting stability for newly opened tabs and ongoing edits.
+
 ### v0.4.8 (summary)
 
 - Extended release automation coverage for the next tag cycle, including synchronized README/changelog/welcome-tour release content updates.
@@ -142,14 +150,6 @@ If macOS blocks first launch:
 - Added self-hosted notarized release workflow and icon payload preflight checks for AppIcon assets.
 - Improved release tooling and Welcome Tour automation so release notes are generated from changelog sections during release prep.
 - Fixed support purchase test bypass visibility in distributed builds and restored AppIcon.icon mapping in release packaging.
-
-### v0.4.5 (summary)
-
-- Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.
-- Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).
-- New cross-platform theme settings panel and iOS app icon asset catalog set.
-- Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions.
-- Language detection and syntax highlighting stability for newly opened tabs and ongoing edits.
 
 ### v0.4.4-beta (summary)
 
@@ -201,12 +201,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.8`
+- Tag: `v0.4.5`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.8
+git rev-parse --verify v0.4.5
 ```
 
 - Verify downloaded artifact checksum locally:
