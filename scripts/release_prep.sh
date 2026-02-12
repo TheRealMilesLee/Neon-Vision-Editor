@@ -70,7 +70,11 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 echo "Preparing release docs for ${TAG}..."
-scripts/prepare_release_docs.py "$TAG" "${DATE_ARG[@]}"
+docs_cmd=(scripts/prepare_release_docs.py "$TAG")
+if [[ ${#DATE_ARG[@]} -gt 0 ]]; then
+  docs_cmd+=("${DATE_ARG[@]}")
+fi
+"${docs_cmd[@]}"
 
 git add README.md CHANGELOG.md
 
@@ -104,4 +108,3 @@ else
   echo "  git push origin main"
   echo "  git push origin ${TAG}"
 fi
-
