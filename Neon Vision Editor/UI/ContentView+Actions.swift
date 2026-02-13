@@ -10,9 +10,7 @@ extension ContentView {
     func openSettings(tab: String? = nil) {
         settingsActiveTab = ReleaseRuntimePolicy.settingsTab(from: tab)
 #if os(macOS)
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        openSettingsAction()
 #else
         showSettingsSheet = true
 #endif

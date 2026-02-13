@@ -253,15 +253,6 @@ extension ContentView {
         moreActionsControl
     }
 #endif
-    #if os(macOS)
-    private func openSettingsWindow() {
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
-    }
-
-#endif
-
     @ToolbarContentBuilder
     var editorToolbarContent: some ToolbarContent {
 #if os(iOS)

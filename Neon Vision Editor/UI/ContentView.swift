@@ -39,6 +39,7 @@ struct ContentView: View {
 #endif
 #if os(macOS)
     @Environment(\.openWindow) var openWindow
+    @Environment(\.openSettings) var openSettingsAction
 #endif
     @Environment(\.showGrokError) var showGrokError
     @Environment(\.grokErrorMessage) var grokErrorMessage
