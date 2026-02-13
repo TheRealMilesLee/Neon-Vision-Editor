@@ -88,7 +88,7 @@ struct NeonSettingsView: View {
 
     private let templateLanguages: [String] = [
         "swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust",
-        "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp",
+        "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "expressionengine", "css", "c", "cpp",
         "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb",
         "markdown", "bash", "zsh", "powershell", "standard", "plain"
     ]
@@ -810,6 +810,7 @@ struct NeonSettingsView: View {
         case "log": return "Log"
         case "ipynb": return "Jupyter Notebook"
         case "html": return "HTML"
+        case "expressionengine": return "ExpressionEngine"
         case "css": return "CSS"
         case "standard": return "Standard"
         default: return lang.capitalized
@@ -859,6 +860,8 @@ struct NeonSettingsView: View {
             return "<?php\n\nfunction main() {\n    // TODO: Add code here\n}\n\nmain();\n"
         case "html":
             return "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\" />\n  <title>Document</title>\n</head>\n<body>\n\n</body>\n</html>\n"
+        case "expressionengine":
+            return "{exp:channel:entries channel=\"news\" limit=\"10\"}\n  <article>\n    <h2>{title}</h2>\n    <p>{summary}</p>\n  </article>\n{/exp:channel:entries}\n"
         case "css":
             return "body {\n  margin: 0;\n  font-family: system-ui, sans-serif;\n}\n"
         case "json":

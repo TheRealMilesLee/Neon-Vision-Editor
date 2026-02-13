@@ -363,7 +363,7 @@ struct NeonVisionEditorApp: App {
             }
 
             CommandMenu("Language") {
-                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "css", "c", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
+                ForEach(["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "expressionengine", "css", "c", "cpp", "csharp", "objective-c", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"], id: \.self) { lang in
                     let label: String = {
                         switch lang {
                         case "php": return "PHP"
@@ -388,6 +388,7 @@ struct NeonVisionEditorApp: App {
                         case "log": return "Log"
                         case "ipynb": return "Jupyter Notebook"
                         case "html": return "HTML"
+                        case "expressionengine": return "ExpressionEngine"
                         case "css": return "CSS"
                         case "standard": return "Standard"
                         default: return lang.capitalized

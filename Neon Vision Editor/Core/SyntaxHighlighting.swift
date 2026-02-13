@@ -64,6 +64,8 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
         canonical = "javascript"
     case "ts", "tsx":
         canonical = "typescript"
+    case "ee", "expression-engine", "expression_engine":
+        canonical = "expressionengine"
     default:
         canonical = normalized
     }
@@ -154,6 +156,16 @@ func getSyntaxPatterns(for language: String, colors: SyntaxColors) -> [String: C
             #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number,
             #"//.*|#.*|/\*([^*]|(\*+[^*/]))*\*+/"#: colors.comment,
             #"<\?php|\?>"#: colors.meta
+        ]
+    case "expressionengine":
+        return [
+            #"\{!--[\s\S]*?--\}"#: colors.comment,
+            #"\{/?exp:[A-Za-z0-9_:-]+[^}]*\}"#: colors.tag,
+            #"\{if(?::elseif)?\b[^}]*\}|\{\/if\}|\{:else\}"#: colors.keyword,
+            #"\{[A-Za-z_][A-Za-z0-9_:-]*\}"#: colors.variable,
+            #"[A-Za-z_][A-Za-z0-9_:-]*\s*="#: colors.property,
+            #"\"[^\"]*\"|'[^']*'"#: colors.string,
+            #"\b([0-9]+(\.[0-9]+)?)\b"#: colors.number
         ]
     case "html":
         return [
