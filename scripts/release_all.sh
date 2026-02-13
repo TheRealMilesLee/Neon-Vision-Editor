@@ -6,12 +6,13 @@ usage() {
 Run end-to-end release flow in one command.
 
 Usage:
-  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--skip-notarized] [--self-hosted] [--github-hosted] [--dry-run]
+  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--skip-notarized] [--self-hosted] [--github-hosted] [--enterprise-selfhosted] [--dry-run]
 
 Examples:
   scripts/release_all.sh v0.4.9
   scripts/release_all.sh 0.4.9 --date 2026-02-12
   scripts/release_all.sh v0.4.9 --self-hosted
+  scripts/release_all.sh v0.4.9 --enterprise-selfhosted
   scripts/release_all.sh v0.4.9 --github-hosted
   scripts/release_all.sh v0.4.9 --dry-run
 
@@ -23,6 +24,11 @@ What it does:
   5) Push main and tag to origin
   6) Trigger notarized release workflow (GitHub-hosted by default)
   7) Wait for notarized workflow and verify uploaded release asset payload
+
+If required workflows are missing, install templates with:
+  scripts/setup_release_workflows.sh --target . --commit --push
+Or for GitHub Enterprise + self-hosted:
+  scripts/setup_release_workflows.sh --target . --enterprise-selfhosted --commit --push
 EOF
 }
 
@@ -42,6 +48,7 @@ fi
 DATE_ARG=()
 TRIGGER_NOTARIZED=1
 USE_SELF_HOSTED=0
+ENTERPRISE_SELF_HOSTED=0
 DRY_RUN=0
 
 while [[ "${1:-}" != "" ]]; do
@@ -63,6 +70,10 @@ while [[ "${1:-}" != "" ]]; do
     --github-hosted)
       USE_SELF_HOSTED=0
       ;;
+    --enterprise-selfhosted)
+      ENTERPRISE_SELF_HOSTED=1
+      USE_SELF_HOSTED=1
+      ;;
     --dry-run)
       DRY_RUN=1
       ;;
@@ -79,6 +90,53 @@ if ! command -v gh >/dev/null 2>&1; then
   echo "gh CLI is required." >&2
   exit 1
 fi
+
+require_release_workflows() {
+  local required=()
+
+  if [[ "$TRIGGER_NOTARIZED" -eq 1 ]]; then
+    required+=(pre-release-ci.yml)
+    if [[ "$USE_SELF_HOSTED" -eq 1 ]]; then
+      required+=(release-notarized-selfhosted.yml)
+    else
+      required+=(release-notarized.yml)
+    fi
+  fi
+
+  if [[ ${#required[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  local local_missing=()
+  for wf in "${required[@]}"; do
+    if [[ ! -f ".github/workflows/${wf}" ]]; then
+      local_missing+=("$wf")
+    fi
+  done
+
+  if [[ ${#local_missing[@]} -gt 0 ]]; then
+    echo "Missing local workflow files required for this release mode:" >&2
+    printf '  - %s\n' "${local_missing[@]}" >&2
+    echo "Install workflow templates first:" >&2
+    echo "  scripts/setup_release_workflows.sh --target . --commit --push" >&2
+    exit 1
+  fi
+
+  local remote_missing=()
+  for wf in "${required[@]}"; do
+    if ! gh workflow view "$wf" >/dev/null 2>&1; then
+      remote_missing+=("$wf")
+    fi
+  done
+
+  if [[ ${#remote_missing[@]} -gt 0 ]]; then
+    echo "Missing GitHub workflows in the remote repository:" >&2
+    printf '  - %s\n' "${remote_missing[@]}" >&2
+    echo "Commit and push workflow templates, then rerun:" >&2
+    echo "  scripts/setup_release_workflows.sh --target . --commit --push" >&2
+    exit 1
+  fi
+}
 
 wait_for_pre_release_ci() {
   local sha="$1"
@@ -122,6 +180,8 @@ wait_for_pre_release_ci() {
   return 1
 }
 
+require_release_workflows
+
 echo "Running release preflight for ${TAG}..."
 scripts/ci/release_preflight.sh "$TAG"
 
@@ -145,6 +205,9 @@ if [[ "$TRIGGER_NOTARIZED" -eq 1 ]]; then
   wait_for_pre_release_ci "$RELEASE_SHA"
 
   echo "Triggering notarized workflow for ${TAG}..."
+  if [[ "$ENTERPRISE_SELF_HOSTED" -eq 1 ]]; then
+    echo "Enterprise self-hosted mode enabled (expects self-hosted runner labels and GH_HOST if required)."
+  fi
   if [[ "$USE_SELF_HOSTED" -eq 1 ]]; then
     gh workflow run release-notarized-selfhosted.yml -f tag="$TAG" -f use_self_hosted=true
     WORKFLOW_NAME="release-notarized-selfhosted.yml"

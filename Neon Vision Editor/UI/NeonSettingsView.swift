@@ -278,6 +278,25 @@ struct NeonSettingsView: View {
                     }
                 }
                 .padding(UI.groupPadding)
+                .onChange(of: selectedFontValue) { _, _ in
+                    useSystemFont = (selectedFontValue == systemFontSentinel)
+                    if !useSystemFont && !selectedFontValue.isEmpty {
+                        editorFontName = selectedFontValue
+                    }
+                }
+                .onChange(of: useSystemFont) { _, isSystem in
+                    if isSystem {
+                        selectedFontValue = systemFontSentinel
+                    } else if !editorFontName.isEmpty {
+                        selectedFontValue = editorFontName
+                    }
+                }
+                .onChange(of: editorFontName) { _, newValue in
+                    guard !useSystemFont else { return }
+                    if !newValue.isEmpty {
+                        selectedFontValue = newValue
+                    }
+                }
             }
 
             GroupBox("Editor Font") {
@@ -288,41 +307,35 @@ struct NeonSettingsView: View {
                     HStack(alignment: .center, spacing: UI.space12) {
                         Text("Font")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
-                        Picker("", selection: selectedFontBinding) {
-                            Text("System").tag(systemFontSentinel)
-                            ForEach(availableEditorFonts, id: \.self) { fontName in
-                                Text(fontName).tag(fontName)
+                        VStack(alignment: .leading, spacing: UI.space8) {
+                            HStack(spacing: UI.space8) {
+                                Text(useSystemFont ? "System" : (editorFontName.isEmpty ? "System" : editorFontName))
+                                    .font(Typography.footnote)
+                                    .foregroundStyle(.secondary)
+                                Button(showFontList ? "Hide Font List" : "Show Font List") {
+                                    showFontList.toggle()
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            if showFontList {
+                                Picker("", selection: selectedFontBinding) {
+                                    Text("System").tag(systemFontSentinel)
+                                    ForEach(availableEditorFonts, id: \.self) { fontName in
+                                        Text(fontName).tag(fontName)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .padding(.vertical, UI.space6)
+                                .padding(.horizontal, UI.space8)
+                                .background(inputFieldBackground)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: UI.fieldCorner)
+                                        .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                                )
+                                .cornerRadius(UI.fieldCorner)
                             }
                         }
-                        .pickerStyle(.menu)
-                        .padding(.vertical, UI.space6)
-                        .padding(.horizontal, UI.space8)
-                        .background(inputFieldBackground)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: UI.fieldCorner)
-                                .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
-                        )
-                        .cornerRadius(UI.fieldCorner)
                         .frame(maxWidth: isCompactSettingsLayout ? .infinity : 240, alignment: .leading)
-                        .onChange(of: selectedFontValue) { _, _ in
-                            useSystemFont = (selectedFontValue == systemFontSentinel)
-                            if !useSystemFont && !selectedFontValue.isEmpty {
-                                editorFontName = selectedFontValue
-                            }
-                        }
-                        .onChange(of: useSystemFont) { _, isSystem in
-                            if isSystem {
-                                selectedFontValue = systemFontSentinel
-                            } else if !editorFontName.isEmpty {
-                                selectedFontValue = editorFontName
-                            }
-                        }
-                        .onChange(of: editorFontName) { _, newValue in
-                            guard !useSystemFont else { return }
-                            if !newValue.isEmpty {
-                                selectedFontValue = newValue
-                            }
-                        }
 #if os(macOS)
                         Button("Choose…") {
                             useSystemFont = false
@@ -384,6 +397,13 @@ struct NeonSettingsView: View {
 
     private let systemFontSentinel = "__system__"
     @State private var selectedFontValue: String = "__system__"
+    @State private var showFontList: Bool = {
+#if os(macOS)
+        false
+#else
+        true
+#endif
+    }()
 
     private var selectedFontBinding: Binding<String> {
         Binding(
