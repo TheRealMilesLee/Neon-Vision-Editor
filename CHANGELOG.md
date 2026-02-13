@@ -4,6 +4,22 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.9] - 2026-02-13
+
+### Added
+- Pre-release CI workflow on `main`/PR with critical runtime checks, docs validation, and icon payload verification.
+- Release dry-run workflow and local `scripts/release_dry_run.sh` command for pre-tag validation.
+- Release runtime policy test suite (`ReleaseRuntimePolicyTests`) covering settings-tab routing, theme mapping, find-next cursor behavior, and subscription button state logic.
+
+### Improved
+- Unified release automation in `scripts/release_all.sh` to run preflight checks before tagging and to verify uploaded release assets after notarized publish.
+- README changelog summary automation now keeps release summaries version-sorted and limited to the latest three entries.
+- Notarized workflows now include compatibility fallbacks so older tags without `scripts/ci/*` can still be rebuilt and published.
+
+### Fixed
+- Fixed macOS toolbar Settings (gear) button path to open the Settings scene reliably via SwiftUI `openSettings`.
+- Hardened release workflows with post-publish verification and rollback behavior (delete bad asset and mark release draft on verification failure).
+
 ## [v0.4.8] - 2026-02-12
 
 ### Added

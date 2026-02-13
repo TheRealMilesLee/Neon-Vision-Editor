@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.8**
+> Latest release: **v0.4.9**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.8**
+- Latest release: **v0.4.9**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
 
@@ -121,6 +121,14 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.9 (summary)
+
+- Pre-release CI workflow on `main`/PR with critical runtime checks, docs validation, and icon payload verification.
+- Release dry-run workflow and local `scripts/release_dry_run.sh` command for pre-tag validation.
+- Release runtime policy test suite (`ReleaseRuntimePolicyTests`) covering settings-tab routing, theme mapping, find-next cursor behavior, and subscription button state logic.
+- Unified release automation in `scripts/release_all.sh` to run preflight checks before tagging and to verify uploaded release assets after notarized publish.
+- README changelog summary automation now keeps release summaries version-sorted and limited to the latest three entries.
+
 ### v0.4.8 (summary)
 
 - Extended release automation coverage for the next tag cycle, including synchronized README/changelog/welcome-tour release content updates.
@@ -136,14 +144,6 @@ If macOS blocks first launch:
 - Scope/bracket highlighting stability by dropping stale asynchronous highlight passes and applying only the latest generation.
 - Visibility of matched bracket tokens and scope guide markers for easier detection on iOS and macOS.
 - Settings window opening/persistence path now uses the native Settings scene behavior, avoiding custom frame persistence conflicts.
-
-### v0.4.6 (summary)
-
-- Self-hosted notarized release workflow for macOS (`release-notarized-selfhosted.yml`) targeting macOS runners with Xcode 17+.
-- Automated icon payload preflight in notarized release pipelines to block publishing assets with missing AppIcon renditions.
-- Release automation wiring so `scripts/release_all.sh --notarized` triggers the self-hosted notarized workflow.
-- Release tooling robustness in `release_all.sh` / `release_prep.sh` for optional arguments and end-to-end docs flow.
-- Welcome Tour release page automation now derives the first card from the selected changelog section during release prep.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -164,12 +164,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.8`
+- Tag: `v0.4.9`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.8
+git rev-parse --verify v0.4.9
 ```
 
 - Verify downloaded artifact checksum locally:

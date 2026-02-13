@@ -27,21 +27,35 @@ grep -nE "^### ${TAG} \\(summary\\)$" README.md >/dev/null
 
 SAFE_TAG="$(echo "$TAG" | tr -c 'A-Za-z0-9_' '_')"
 WORK_DIR="/tmp/nve_release_preflight_${SAFE_TAG}"
-DERIVED="${WORK_DIR}/DerivedData"
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 
 echo "Running critical runtime tests..."
-xcodebuild \
-  -project "Neon Vision Editor.xcodeproj" \
-  -scheme "Neon Vision Editor" \
-  -destination "platform=macOS" \
-  -derivedDataPath "$DERIVED" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY="" \
-  -only-testing:"Neon Vision EditorTests/ReleaseRuntimePolicyTests" \
-  test >"${WORK_DIR}/test.log"
+run_critical_tests() {
+  local derived_path="$1"
+  xcodebuild \
+    -project "Neon Vision Editor.xcodeproj" \
+    -scheme "Neon Vision Editor" \
+    -destination "platform=macOS" \
+    -derivedDataPath "$derived_path" \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" \
+    -only-testing:"Neon Vision EditorTests/ReleaseRuntimePolicyTests" \
+    test >"${WORK_DIR}/test.log" 2>&1
+}
+
+DERIVED_PRIMARY="${WORK_DIR}/DerivedData"
+DERIVED_FALLBACK="/tmp/nve_ci_critical_test2"
+
+if ! run_critical_tests "$DERIVED_PRIMARY"; then
+  echo "Primary test pass failed in this environment; retrying with fallback DerivedData path..."
+  rm -rf "$DERIVED_FALLBACK"
+  run_critical_tests "$DERIVED_FALLBACK"
+  DERIVED="$DERIVED_FALLBACK"
+else
+  DERIVED="$DERIVED_PRIMARY"
+fi
 
 APP="$DERIVED/Build/Products/Debug/Neon Vision Editor.app"
 scripts/ci/verify_icon_payload.sh "$APP"

@@ -4,6 +4,7 @@ import AppKit
 #endif
 
 struct NeonSettingsView: View {
+    private static var cachedEditorFonts: [String] = []
     let supportsOpenInTabs: Bool
     let supportsTranslucency: Bool
     @EnvironmentObject private var supportPurchaseManager: SupportPurchaseManager
@@ -135,7 +136,7 @@ struct NeonSettingsView: View {
         .preferredColorScheme(preferredColorSchemeOverride)
         .onAppear {
             settingsActiveTab = "general"
-            refreshAvailableEditorFonts()
+            loadAvailableEditorFontsIfNeeded()
             if supportPurchaseManager.supportProduct == nil {
                 Task { await supportPurchaseManager.refreshStoreState() }
             }
@@ -211,7 +212,6 @@ struct NeonSettingsView: View {
         NSApp.appearance = target
         for window in NSApp.windows {
             window.appearance = target
-            window.displayIfNeeded()
         }
     }
 #endif
@@ -368,7 +368,23 @@ struct NeonSettingsView: View {
         )
     }
 
-    private func refreshAvailableEditorFonts() {
+    private func loadAvailableEditorFontsIfNeeded() {
+        if !availableEditorFonts.isEmpty {
+            selectedFontValue = useSystemFont ? systemFontSentinel : (editorFontName.isEmpty ? systemFontSentinel : editorFontName)
+            return
+        }
+        if !Self.cachedEditorFonts.isEmpty {
+            availableEditorFonts = Self.cachedEditorFonts
+            selectedFontValue = useSystemFont ? systemFontSentinel : (editorFontName.isEmpty ? systemFontSentinel : editorFontName)
+            return
+        }
+        // Defer font discovery until after the initial settings view appears.
+        DispatchQueue.main.async {
+            populateEditorFonts()
+        }
+    }
+
+    private func populateEditorFonts() {
 #if os(macOS)
         let names = NSFontManager.shared.availableFonts
 #else
@@ -380,6 +396,7 @@ struct NeonSettingsView: View {
         if !editorFontName.isEmpty && !merged.contains(editorFontName) {
             merged.insert(editorFontName, at: 0)
         }
+        Self.cachedEditorFonts = merged
         availableEditorFonts = merged
         selectedFontValue = useSystemFont ? systemFontSentinel : (editorFontName.isEmpty ? systemFontSentinel : editorFontName)
     }
