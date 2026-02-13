@@ -33,11 +33,13 @@ jobs:
           git checkout FETCH_HEAD
 
       - name: Select/verify Xcode 17+
+        id: xcode_select
         run: |
           set -euo pipefail
           if [[ -x scripts/ci/select_xcode17.sh ]]; then
             if scripts/ci/select_xcode17.sh; then
               echo "Using Xcode 17+ from selector script."
+              echo "legacy_icon_mode=false" >> "$GITHUB_OUTPUT"
             else
               echo "Xcode 17+ not available on hosted runner; attempting Xcode 16+ fallback."
               xcodebuild -version
@@ -46,6 +48,7 @@ jobs:
                 echo "Xcode 16+ required for hosted fallback path." >&2
                 exit 1
               fi
+              echo "legacy_icon_mode=true" >> "$GITHUB_OUTPUT"
             fi
           else
             xcodebuild -version
@@ -55,7 +58,20 @@ jobs:
               exit 1
             fi
             echo "Legacy tag checkout detected (missing scripts/ci/select_xcode17.sh); using Xcode ${XCODE_MAJOR} fallback."
+            echo "legacy_icon_mode=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Prepare legacy app icon for Xcode 16 fallback
+        if: ${{ steps.xcode_select.outputs.legacy_icon_mode == 'true' }}
+        run: |
+          set -euo pipefail
+          ICON_DIR="Neon Vision Editor/Resources"
+          if [[ -d "${ICON_DIR}/AppIcon.icon" ]]; then
+            mv "${ICON_DIR}/AppIcon.icon" "${ICON_DIR}/AppIcon.icon.disabled"
+          fi
+          rm -rf "${ICON_DIR}/Assets.xcassets/AppIcon.appiconset"
+          cp -R "${ICON_DIR}/Assets.xcassets/AppIcon-iOS.appiconset" "${ICON_DIR}/Assets.xcassets/AppIcon.appiconset"
+          echo "Prepared AppIcon.appiconset fallback for Xcode 16 hosted runner."
 
       - name: Import signing certificate
         env:
