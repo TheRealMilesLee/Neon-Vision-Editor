@@ -36,7 +36,17 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -x scripts/ci/select_xcode17.sh ]]; then
-            scripts/ci/select_xcode17.sh
+            if scripts/ci/select_xcode17.sh; then
+              echo "Using Xcode 17+ from selector script."
+            else
+              echo "Xcode 17+ not available on hosted runner; attempting Xcode 16+ fallback."
+              xcodebuild -version
+              XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
+              if [[ "${XCODE_MAJOR:-0}" -lt 16 ]]; then
+                echo "Xcode 16+ required for hosted fallback path." >&2
+                exit 1
+              fi
+            fi
           else
             xcodebuild -version
             XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
