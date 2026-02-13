@@ -101,6 +101,28 @@ struct NeonSettingsView: View {
 #endif
     }
 
+    private enum UI {
+        static let space6: CGFloat = 6
+        static let space8: CGFloat = 8
+        static let space10: CGFloat = 10
+        static let space12: CGFloat = 12
+        static let space16: CGFloat = 16
+        static let space20: CGFloat = 20
+        static let fieldCorner: CGFloat = 6
+        static let groupPadding: CGFloat = 14
+        static let sidePaddingCompact: CGFloat = 12
+        static let sidePaddingRegular: CGFloat = 28
+        static let topPadding: CGFloat = 18
+        static let bottomPadding: CGFloat = 24
+    }
+
+    private enum Typography {
+        static let sectionHeadline = Font.headline
+        static let sectionSubheadline = Font.subheadline
+        static let footnote = Font.footnote
+        static let monoBody = Font.system(size: 13, weight: .regular, design: .monospaced)
+    }
+
     init(
         supportsOpenInTabs: Bool = true,
         supportsTranslucency: Bool = true
@@ -131,7 +153,13 @@ struct NeonSettingsView: View {
                 .tag("support")
         }
 #if os(macOS)
-        .frame(minWidth: 860, minHeight: 620)
+        .frame(minWidth: 900, idealWidth: 980, minHeight: 820, idealHeight: 880)
+        .background(
+            SettingsWindowConfigurator(
+                minSize: NSSize(width: 900, height: 820),
+                idealSize: NSSize(width: 980, height: 880)
+            )
+        )
 #endif
         .preferredColorScheme(preferredColorSchemeOverride)
         .onAppear {
@@ -219,9 +247,9 @@ struct NeonSettingsView: View {
     private var generalTab: some View {
         settingsContainer {
             GroupBox("Window") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
                     if supportsOpenInTabs {
-                        HStack(alignment: .center, spacing: 12) {
+                        HStack(alignment: .center, spacing: UI.space12) {
                             Text("Open in Tabs")
                                 .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                             Picker("", selection: $openInTabs) {
@@ -233,7 +261,7 @@ struct NeonSettingsView: View {
                         }
                     }
 
-                    HStack(alignment: .center, spacing: 12) {
+                    HStack(alignment: .center, spacing: UI.space12) {
                         Text("Appearance")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Picker("", selection: $appearance) {
@@ -249,15 +277,15 @@ struct NeonSettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
 
             GroupBox("Editor Font") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
                     Toggle("Use System Font", isOn: $useSystemFont)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HStack(alignment: .center, spacing: 12) {
+                    HStack(alignment: .center, spacing: UI.space12) {
                         Text("Font")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Picker("", selection: selectedFontBinding) {
@@ -267,14 +295,14 @@ struct NeonSettingsView: View {
                             }
                         }
                         .pickerStyle(.menu)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 8)
+                        .padding(.vertical, UI.space6)
+                        .padding(.horizontal, UI.space8)
                         .background(inputFieldBackground)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: UI.fieldCorner)
                                 .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
                         )
-                        .cornerRadius(6)
+                        .cornerRadius(UI.fieldCorner)
                         .frame(maxWidth: isCompactSettingsLayout ? .infinity : 240, alignment: .leading)
                         .onChange(of: selectedFontValue) { _, _ in
                             useSystemFont = (selectedFontValue == systemFontSentinel)
@@ -304,7 +332,7 @@ struct NeonSettingsView: View {
 #endif
                     }
 
-                    HStack(alignment: .center, spacing: 12) {
+                    HStack(alignment: .center, spacing: UI.space12) {
                         Text("Font Size")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Stepper(value: $editorFontSize, in: 10...28, step: 1) {
@@ -313,7 +341,7 @@ struct NeonSettingsView: View {
                         .frame(maxWidth: isCompactSettingsLayout ? .infinity : 220, alignment: .leading)
                     }
 
-                    HStack(alignment: .center, spacing: 12) {
+                    HStack(alignment: .center, spacing: UI.space12) {
                         Text("Line Height")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Slider(value: $lineHeight, in: 1.0...1.8, step: 0.05)
@@ -322,15 +350,15 @@ struct NeonSettingsView: View {
                             .frame(width: 54, alignment: .trailing)
                     }
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
 
             GroupBox("Startup") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
                     Toggle("Open with Blank Document", isOn: $openWithBlankDocument)
                     Toggle("Reopen Last Session", isOn: $reopenLastSession)
                         .disabled(openWithBlankDocument)
-                    HStack(alignment: .center, spacing: 12) {
+                    HStack(alignment: .center, spacing: UI.space12) {
                         Text("Default New File Language")
                             .frame(width: isCompactSettingsLayout ? nil : 180, alignment: .leading)
                         Picker("", selection: $defaultNewFileLanguage) {
@@ -341,15 +369,15 @@ struct NeonSettingsView: View {
                         .pickerStyle(.menu)
                     }
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
 
             GroupBox("Confirmations") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
                     Toggle("Confirm Before Closing Dirty Tab", isOn: $confirmCloseDirtyTab)
                     Toggle("Confirm Before Clearing Editor", isOn: $confirmClearEditor)
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
         }
     }
@@ -405,9 +433,9 @@ struct NeonSettingsView: View {
         settingsContainer(maxWidth: 760) {
             GroupBox("Editor") {
                 VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: UI.space10) {
                         Text("Display")
-                            .font(.headline)
+                            .font(Typography.sectionHeadline)
                         Toggle("Show Line Numbers", isOn: $showLineNumbers)
                         Toggle("Highlight Current Line", isOn: $highlightCurrentLine)
                         Toggle("Highlight Matching Brackets", isOn: $highlightMatchingBrackets)
@@ -415,21 +443,21 @@ struct NeonSettingsView: View {
                         Toggle("Highlight Scoped Region", isOn: $highlightScopeBackground)
                         Toggle("Line Wrap", isOn: $lineWrapEnabled)
                         Text("When Line Wrap is enabled, scope guides/scoped region are turned off to avoid layout conflicts.")
-                            .font(.footnote)
+                            .font(Typography.footnote)
                             .foregroundStyle(.secondary)
                         Text("Scope guides are intended for non-Swift languages. Swift favors matching-token highlight.")
-                            .font(.footnote)
+                            .font(Typography.footnote)
                             .foregroundStyle(.secondary)
                         Text("Invisible character markers are disabled to avoid whitespace glyph artifacts.")
-                            .font(.footnote)
+                            .font(Typography.footnote)
                             .foregroundStyle(.secondary)
                     }
 
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: UI.space10) {
                         Text("Indentation")
-                            .font(.headline)
+                            .font(Typography.sectionHeadline)
                         Picker("Indent Style", selection: $indentStyle) {
                             Text("Spaces").tag("spaces")
                             Text("Tabs").tag("tabs")
@@ -443,9 +471,9 @@ struct NeonSettingsView: View {
 
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: UI.space10) {
                         Text("Editing")
-                            .font(.headline)
+                            .font(Typography.sectionHeadline)
                         Toggle("Auto Indent", isOn: $autoIndent)
                         Toggle("Auto Close Brackets", isOn: $autoCloseBrackets)
                         Toggle("Trim Trailing Whitespace", isOn: $trimTrailingWhitespace)
@@ -454,15 +482,15 @@ struct NeonSettingsView: View {
 
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: UI.space10) {
                         Text("Completion")
-                            .font(.headline)
+                            .font(Typography.sectionHeadline)
                         Toggle("Enable Completion", isOn: $completionEnabled)
                         Toggle("Include Words in Document", isOn: $completionFromDocument)
                         Toggle("Include Syntax Keywords", isOn: $completionFromSyntax)
                     }
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
         }
     }
@@ -470,8 +498,8 @@ struct NeonSettingsView: View {
     private var templateTab: some View {
         settingsContainer(maxWidth: 640) {
             GroupBox("Completion Template") {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
+                    HStack(alignment: .center, spacing: UI.space12) {
                         Text("Language")
                             .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
                         Picker("", selection: $settingsTemplateLanguage) {
@@ -481,8 +509,8 @@ struct NeonSettingsView: View {
                         }
                         .frame(maxWidth: isCompactSettingsLayout ? .infinity : 220, alignment: .leading)
                         .pickerStyle(.menu)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 8)
+                        .padding(.vertical, UI.space6)
+                        .padding(.horizontal, UI.space8)
                         .background(Color.clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -492,7 +520,7 @@ struct NeonSettingsView: View {
                     }
 
                     TextEditor(text: templateBinding(for: settingsTemplateLanguage))
-                        .font(.system(size: 13, weight: .regular, design: .monospaced))
+                        .font(Typography.monoBody)
                         .frame(minHeight: 200, maxHeight: 320)
                         .scrollContentBackground(.hidden)
                         .background(Color.clear)
@@ -501,7 +529,7 @@ struct NeonSettingsView: View {
                                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                         )
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: UI.space12) {
                         Button("Reset to Default") {
                             UserDefaults.standard.removeObject(forKey: templateOverrideKey(for: settingsTemplateLanguage))
                         }
@@ -513,7 +541,7 @@ struct NeonSettingsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
         }
     }
@@ -522,7 +550,7 @@ struct NeonSettingsView: View {
         let isCustom = selectedTheme == "Custom"
         let palette = themePaletteColors(for: selectedTheme)
         return settingsContainer(maxWidth: 760) {
-            HStack(spacing: 16) {
+            HStack(spacing: UI.space16) {
 #if os(macOS)
                 let listView = List(themes, id: \.self, selection: $selectedTheme) { theme in
                     Text(theme)
@@ -564,9 +592,9 @@ struct NeonSettingsView: View {
                 }
 #endif
 
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: UI.space16) {
                     Text("Theme Colors")
-                        .font(.headline)
+                        .font(Typography.sectionHeadline)
                     Spacer(minLength: 6)
 
                     colorRow(title: "Text", color: isCustom ? hexBinding($themeTextHex, fallback: .white) : .constant(palette.text))
@@ -581,7 +609,7 @@ struct NeonSettingsView: View {
                     Divider()
 
                     Text("Syntax")
-                        .font(.subheadline)
+                        .font(Typography.sectionSubheadline)
                         .foregroundStyle(.secondary)
 
                     colorRow(title: "Keywords", color: isCustom ? hexBinding($themeKeywordHex, fallback: .yellow) : .constant(palette.keyword))
@@ -599,7 +627,7 @@ struct NeonSettingsView: View {
 
                     Spacer()
                     Text(isCustom ? "Custom theme applies immediately." : "Select Custom to edit colors.")
-                        .font(.footnote)
+                        .font(Typography.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -613,7 +641,7 @@ struct NeonSettingsView: View {
     private var aiTab: some View {
         settingsContainer(maxWidth: 520) {
             GroupBox("AI Model") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
                     Picker("Model", selection: selectedAIModelBinding) {
                         Text("Apple Intelligence").tag(AIModel.appleIntelligence)
                         Text("Grok").tag(AIModel.grok)
@@ -624,23 +652,23 @@ struct NeonSettingsView: View {
                     .pickerStyle(.menu)
 
                     Text("Choose the default model used by editor AI actions.")
-                        .font(.footnote)
+                        .font(Typography.footnote)
                         .foregroundStyle(.secondary)
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
             .frame(maxWidth: 420)
             .frame(maxWidth: .infinity, alignment: .center)
 
             GroupBox("AI Provider API Keys") {
-                VStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .center, spacing: UI.space12) {
                     aiKeyRow(title: "Grok", placeholder: "sk-…", value: $grokAPIToken, provider: .grok)
                     aiKeyRow(title: "OpenAI", placeholder: "sk-…", value: $openAIAPIToken, provider: .openAI)
                     aiKeyRow(title: "Gemini", placeholder: "AIza…", value: $geminiAPIToken, provider: .gemini)
                     aiKeyRow(title: "Anthropic", placeholder: "sk-ant-…", value: $anthropicAPIToken, provider: .anthropic)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(12)
+                .padding(UI.groupPadding)
             }
             .frame(maxWidth: 420)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -657,20 +685,20 @@ struct NeonSettingsView: View {
     private var supportTab: some View {
         settingsContainer(maxWidth: 520) {
             GroupBox("Support Development") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UI.space12) {
                     Text("In-App Purchase is optional and only used to support the app.")
                         .foregroundStyle(.secondary)
                     Text("One-time, non-consumable purchase. No subscription and no auto-renewal.")
-                        .font(.footnote)
+                        .font(Typography.footnote)
                         .foregroundStyle(.secondary)
                     if supportPurchaseManager.canUseInAppPurchases {
                         Text("Price: \(supportPurchaseManager.supportPriceLabel)")
-                            .font(.headline)
+                            .font(Typography.sectionHeadline)
                         if supportPurchaseManager.hasSupported {
                             Label("Thank you for your support.", systemImage: "checkmark.seal.fill")
                                 .foregroundStyle(.green)
                         }
-                        HStack(spacing: 12) {
+                        HStack(spacing: UI.space12) {
                             Button(supportPurchaseManager.isPurchasing ? "Purchasing…" : "Support the App") {
                                 showSupportPurchaseDialog = true
                             }
@@ -688,10 +716,10 @@ struct NeonSettingsView: View {
                         }
                     } else {
                         Text("Direct notarized builds are unaffected: all editor features stay fully available without any purchase.")
-                            .font(.footnote)
+                            .font(Typography.footnote)
                             .foregroundStyle(.secondary)
                         Text("Support purchase is available only in App Store/TestFlight builds.")
-                            .font(.footnote)
+                            .font(Typography.footnote)
                             .foregroundStyle(.secondary)
                     }
 
@@ -703,9 +731,9 @@ struct NeonSettingsView: View {
                     if supportPurchaseManager.canBypassInCurrentBuild {
                         Divider()
                         Text("TestFlight/Sandbox: You can bypass purchase for testing.")
-                            .font(.footnote)
+                            .font(Typography.footnote)
                             .foregroundStyle(.secondary)
-                        HStack(spacing: 12) {
+                        HStack(spacing: UI.space12) {
                             Button("Bypass Purchase (Testing)") {
                                 supportPurchaseManager.bypassForTesting()
                             }
@@ -715,20 +743,21 @@ struct NeonSettingsView: View {
                         }
                     }
                 }
-                .padding(12)
+                .padding(UI.groupPadding)
             }
         }
     }
 
     private func settingsContainer<Content: View>(maxWidth: CGFloat = 560, @ViewBuilder _ content: () -> Content) -> some View {
         ScrollView {
-            VStack(alignment: isCompactSettingsLayout ? .leading : .center, spacing: 20) {
+            VStack(alignment: isCompactSettingsLayout ? .leading : .center, spacing: UI.space20) {
                 content()
             }
             .frame(maxWidth: maxWidth, alignment: .center)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isCompactSettingsLayout ? .topLeading : .top)
-            .padding(.top, 16)
-            .padding(.horizontal, isCompactSettingsLayout ? 12 : 24)
+            .padding(.top, UI.topPadding)
+            .padding(.bottom, UI.bottomPadding)
+            .padding(.horizontal, isCompactSettingsLayout ? UI.sidePaddingCompact : UI.sidePaddingRegular)
         }
         .background(.ultraThinMaterial)
     }
@@ -746,36 +775,36 @@ struct NeonSettingsView: View {
     private func aiKeyRow(title: String, placeholder: String, value: Binding<String>, provider: APITokenKey) -> some View {
         Group {
             if isCompactSettingsLayout {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: UI.space8) {
                     Text(title)
                     SecureField(placeholder, text: value)
                         .textFieldStyle(.plain)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 8)
+                        .padding(.vertical, UI.space6)
+                        .padding(.horizontal, UI.space8)
                         .background(inputFieldBackground)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: UI.fieldCorner)
                                 .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
                         )
-                        .cornerRadius(6)
+                        .cornerRadius(UI.fieldCorner)
                         .onChange(of: value.wrappedValue) { _, new in
                             SecureTokenStore.setToken(new, for: provider)
                         }
                 }
             } else {
-                HStack(spacing: 12) {
+                HStack(spacing: UI.space12) {
                     Text(title)
                         .frame(width: 120, alignment: .leading)
                     SecureField(placeholder, text: value)
                         .textFieldStyle(.plain)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 8)
+                        .padding(.vertical, UI.space6)
+                        .padding(.horizontal, UI.space8)
                         .background(inputFieldBackground)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: UI.fieldCorner)
                                 .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
                         )
-                        .cornerRadius(6)
+                        .cornerRadius(UI.fieldCorner)
                         .frame(width: 200)
                         .onChange(of: value.wrappedValue) { _, new in
                             SecureTokenStore.setToken(new, for: provider)
@@ -911,6 +940,38 @@ final class FontPickerController: NSObject, NSFontChanging {
         let converted = manager.convert(currentFont)
         currentFont = converted
         onChange?(converted)
+    }
+}
+
+struct SettingsWindowConfigurator: NSViewRepresentable {
+    let minSize: NSSize
+    let idealSize: NSSize
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(to: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(to: nsView.window)
+        }
+    }
+
+    private func apply(to window: NSWindow?) {
+        guard let window else { return }
+        window.minSize = NSSize(
+            width: max(window.minSize.width, minSize.width),
+            height: max(window.minSize.height, minSize.height)
+        )
+        let targetWidth = max(window.frame.size.width, idealSize.width)
+        let targetHeight = max(window.frame.size.height, idealSize.height)
+        if targetWidth != window.frame.size.width || targetHeight != window.frame.size.height {
+            window.setContentSize(NSSize(width: targetWidth, height: targetHeight))
+        }
     }
 }
 #endif
