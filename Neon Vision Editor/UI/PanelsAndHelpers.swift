@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.8:",
+            subtitle: "Major changes since v0.4.9:",
             bullets: [
-                "Pre-release CI workflow on `main`/PR with critical runtime checks, docs validation, and icon payload verification.",
-                "Release dry-run workflow and local `scripts/release_dry_run.sh` command for pre-tag validation.",
-                "Release runtime policy test suite (`ReleaseRuntimePolicyTests`) covering settings-tab routing, theme mapping, find-next cursor behavior, and subscription button state logic.",
-                "Unified release automation in `scripts/release_all.sh` to run preflight checks before tagging and to verify uploaded release assets after notarized publish."
+                "Release gate in `scripts/release_all.sh` now waits for a successful `Pre-release CI` run on the pushed commit before triggering notarization.",
+                "Hosted notarized workflow now allows an explicit Xcode 16+ fallback path when Xcode 17 is unavailable on GitHub-hosted runners.",
+                "Settings window responsiveness on macOS by deferring/caching editor font list loading.",
+                "Reduced settings-open latency by removing forced full-window redraw calls during appearance application."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

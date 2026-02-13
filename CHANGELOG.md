@@ -4,6 +4,18 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.10] - 2026-02-13
+
+### Added
+- Release gate in `scripts/release_all.sh` now waits for a successful `Pre-release CI` run on the pushed commit before triggering notarization.
+
+### Improved
+- Hosted notarized workflow now allows an explicit Xcode 16+ fallback path when Xcode 17 is unavailable on GitHub-hosted runners.
+- Settings window responsiveness on macOS by deferring/caching editor font list loading.
+
+### Fixed
+- Reduced settings-open latency by removing forced full-window redraw calls during appearance application.
+
 ## [v0.4.9] - 2026-02-13
 
 ### Added

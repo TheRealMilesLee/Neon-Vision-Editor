@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.9**
+> Latest release: **v0.4.10**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.9**
+- Latest release: **v0.4.10**
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
 
@@ -121,6 +121,13 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.10 (summary)
+
+- Release gate in `scripts/release_all.sh` now waits for a successful `Pre-release CI` run on the pushed commit before triggering notarization.
+- Hosted notarized workflow now allows an explicit Xcode 16+ fallback path when Xcode 17 is unavailable on GitHub-hosted runners.
+- Settings window responsiveness on macOS by deferring/caching editor font list loading.
+- Reduced settings-open latency by removing forced full-window redraw calls during appearance application.
+
 ### v0.4.9 (summary)
 
 - Pre-release CI workflow on `main`/PR with critical runtime checks, docs validation, and icon payload verification.
@@ -136,14 +143,6 @@ If macOS blocks first launch:
 - Welcome Tour release highlights are now aligned with distribution content for current App Store/TestFlight-facing builds.
 - Release workflow environment compatibility by removing hard `rg` dependency from docs validation steps.
 - Release pipeline guard failures caused by placeholder release notes (`TODO`) in the tag section.
-
-### v0.4.7 (summary)
-
-- Indentation-based scope detection fallback for Python/YAML to render scoped-region and guide markers when bracket-only matching is not sufficient.
-- Release workflow compatibility fallback for doc validation (`grep`-based checks), so release jobs no longer depend on `rg` being preinstalled on runners.
-- Scope/bracket highlighting stability by dropping stale asynchronous highlight passes and applying only the latest generation.
-- Visibility of matched bracket tokens and scope guide markers for easier detection on iOS and macOS.
-- Settings window opening/persistence path now uses the native Settings scene behavior, avoiding custom frame persistence conflicts.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -164,12 +163,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.9`
+- Tag: `v0.4.10`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.9
+git rev-parse --verify v0.4.10
 ```
 
 - Verify downloaded artifact checksum locally:
