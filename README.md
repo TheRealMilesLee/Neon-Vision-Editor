@@ -129,14 +129,6 @@ If macOS blocks first launch:
 - Release workflow environment compatibility by removing hard `rg` dependency from docs validation steps.
 - Release pipeline guard failures caused by placeholder release notes (`TODO`) in the tag section.
 
-### v0.4.5 (summary)
-
-- Optional support purchase flow (StoreKit 2) with a dedicated Settings -> Support tab.
-- Local StoreKit testing file (`SupportOptional.storekit`) and App Store review notes (`docs/AppStoreReviewNotes.md`).
-- New cross-platform theme settings panel and iOS app icon asset catalog set.
-- Settings architecture cleanup: editor options consolidated into Settings dialog/sheet and aligned with toolbar actions.
-- Language detection and syntax highlighting stability for newly opened tabs and ongoing edits.
-
 ### v0.4.7 (summary)
 
 - Indentation-based scope detection fallback for Python/YAML to render scoped-region and guide markers when bracket-only matching is not sufficient.
@@ -147,40 +139,11 @@ If macOS blocks first launch:
 
 ### v0.4.6 (summary)
 
-- Added self-hosted notarized release workflow and icon payload preflight checks for AppIcon assets.
-- Improved release tooling and Welcome Tour automation so release notes are generated from changelog sections during release prep.
-- Fixed support purchase test bypass visibility in distributed builds and restored AppIcon.icon mapping in release packaging.
-
-### v0.4.4-beta (summary)
-
-- Added inline code completion ghost text with Tab-to-accept behavior.
-- Added starter templates for all languages and a toolbar insert button.
-- Improved language detection and mapping, including C and C# recognition.
-- Updated welcome tour with release highlights and a full toolbar/shortcut guide.
-- Added language detection tests and a standalone test target.
-
-### v0.4.3-beta (summary)
-
-- Added syntax highlighting for **COBOL**, **Dotenv**, **Proto**, **GraphQL**, **reStructuredText**, and **Nginx**.
-- Added extension and dotfile mapping for `.cob`, `.cbl`, `.cobol`, `.env*`, `.proto`, `.graphql`, `.gql`, `.rst`, and `.conf`.
-- Added language picker entries for the new languages across toolbar and command menus.
-- Added sample fixtures for manual verification of new language detection and highlighting.
-- Finder/Open With now opens files in the active window when available.
-- Added macOS document-type registration for supported extensions.
-
-### v0.4.2-beta (summary)
-
-- Fixed toolbar/menu actions to target the active window only.
-- Fixed multi-window command routing to use the focused window model.
-- Unified persistence behavior for Brain Dump and translucent window toggles.
-- Removed duplicate `Cmd+F` binding conflict in toolbar wiring.
-- Added syntax highlighting support for `vim`, `log`, and `ipynb`.
-- Added extension-based auto-detection for `.vim`, `.log`, `.ipynb`, and `.vimrc`.
-
-### v0.4.1-beta (summary)
-
-- App Store security and distribution readiness updates.
-- Added release/distribution documentation and checklist updates.
+- Self-hosted notarized release workflow for macOS (`release-notarized-selfhosted.yml`) targeting macOS runners with Xcode 17+.
+- Automated icon payload preflight in notarized release pipelines to block publishing assets with missing AppIcon renditions.
+- Release automation wiring so `scripts/release_all.sh --notarized` triggers the self-hosted notarized workflow.
+- Release tooling robustness in `release_all.sh` / `release_prep.sh` for optional arguments and end-to-end docs flow.
+- Welcome Tour release page automation now derives the first card from the selected changelog section during release prep.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 

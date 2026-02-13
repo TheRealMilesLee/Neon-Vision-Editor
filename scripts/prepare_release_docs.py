@@ -170,6 +170,63 @@ def upsert_readme_summary(readme: str, tag: str, bullets: list[str]) -> str:
     return readme[:insert_at] + block + readme[insert_at:]
 
 
+def parse_version_key(tag: str) -> tuple[int, int, int, int, str]:
+    """
+    Sort key for tags like v1.2.3 and v1.2.3-beta.
+    Stable releases sort above prereleases of the same numeric version.
+    """
+    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?", tag)
+    if not match:
+        return (0, 0, 0, 0, tag)
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    patch = int(match.group(3))
+    prerelease = match.group(4)
+    stability_rank = 1 if prerelease is None else 0
+    prerelease_text = prerelease or ""
+    return (major, minor, patch, stability_rank, prerelease_text)
+
+
+def sorted_latest_tags(tags: list[str], limit: int, ensure_tag: str | None = None) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        if tag in seen:
+            continue
+        seen.add(tag)
+        unique.append(tag)
+    ordered = sorted(unique, key=parse_version_key, reverse=True)
+    top = ordered[:limit]
+    if ensure_tag and ensure_tag not in top:
+        top = [ensure_tag] + top[: max(0, limit - 1)]
+    return top
+
+
+def rebuild_readme_changelog_summaries(readme: str, changelog: str, current_tag: str, limit: int = 3) -> str:
+    header = "## Changelog\n\n"
+    if header not in readme:
+        raise ValueError("README missing '## Changelog' section")
+
+    marker = "Full release history:"
+    if marker not in readme:
+        raise ValueError("README missing 'Full release history' marker")
+
+    tags = extract_release_headings(changelog)
+    top_tags = sorted_latest_tags(tags, limit=limit, ensure_tag=current_tag)
+
+    blocks: list[str] = []
+    for tag in top_tags:
+        section = extract_changelog_section(changelog, tag)
+        bullets = summarize_section(section, limit=5)
+        blocks.append("### {} (summary)\n\n{}\n".format(tag, "\n".join(bullets)))
+
+    new_summary_chunk = "\n".join(blocks) + "\n"
+
+    changelog_start = readme.index(header) + len(header)
+    marker_start = readme.index(marker, changelog_start)
+    return readme[:changelog_start] + new_summary_chunk + readme[marker_start:]
+
+
 def update_readme_release_refs(readme: str, tag: str) -> str:
     readme = re.sub(
         r"(?m)^> Latest release: \*\*.*\*\*$",
@@ -224,8 +281,9 @@ def main() -> int:
     readme = read_text(README)
     readme = update_readme_release_refs(readme, tag)
     readme = upsert_readme_summary(readme, tag, bullets)
+    readme = rebuild_readme_changelog_summaries(readme, changelog, tag, limit=3)
     write_text(README, readme)
-    print(f"Updated README release references and {tag} summary.")
+    print(f"Updated README release references and top 3 sorted summaries.")
 
     welcome_src = read_text(WELCOME_TOUR_SWIFT)
     prev_tag = previous_release_tag(changelog, tag)
