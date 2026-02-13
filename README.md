@@ -26,6 +26,7 @@
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
 - Latest release: **v0.4.10**
+- TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
 
