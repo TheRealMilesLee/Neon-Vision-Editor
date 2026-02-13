@@ -25,10 +25,20 @@ jobs:
           git fetch --depth=1 origin "$REF"
           git checkout FETCH_HEAD
 
-      - name: Select/verify Xcode 17+
+      - name: Select/verify Xcode (17 preferred, 16+ fallback)
         run: |
           set -euo pipefail
-          scripts/ci/select_xcode17.sh
+          if scripts/ci/select_xcode17.sh; then
+            echo "Using Xcode 17+ for pre-release CI."
+          else
+            echo "Xcode 17+ unavailable on hosted runner; falling back to Xcode 16+."
+            xcodebuild -version
+            XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
+            if [[ "${XCODE_MAJOR:-0}" -lt 16 ]]; then
+              echo "Xcode 16+ is required for pre-release CI fallback." >&2
+              exit 1
+            fi
+          fi
 
       - name: Validate basic release docs format
         run: |
