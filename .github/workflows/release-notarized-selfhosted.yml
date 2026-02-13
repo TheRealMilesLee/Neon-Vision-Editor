@@ -68,10 +68,11 @@ jobs:
           else
             xcodebuild -version
             XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
-            if [[ "${XCODE_MAJOR:-0}" -lt 17 ]]; then
-              echo "Xcode 17+ required for AppIcon.icon builds." >&2
+            if [[ "${XCODE_MAJOR:-0}" -lt 16 ]]; then
+              echo "Xcode 16+ required for legacy-tag notarized rebuilds." >&2
               exit 1
             fi
+            echo "Legacy tag checkout detected (missing scripts/ci/select_xcode17.sh); using Xcode ${XCODE_MAJOR} fallback."
           fi
 
       - name: Import signing certificate
