@@ -46,6 +46,25 @@ jobs:
           fi
           xcodebuild -version
 
+      - name: Prepare AppIcon fallback for hosted Xcode 16
+        run: |
+          set -euo pipefail
+          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2,v,"."); print v[1]}' | head -n1)"
+          if [[ -z "${XCODE_MAJOR}" ]]; then
+            echo "Could not determine Xcode major version." >&2
+            exit 1
+          fi
+
+          APPICONSET_DIR="Neon Vision Editor/Resources/Assets.xcassets/AppIcon.appiconset"
+          IOS_ICONSET_DIR="Neon Vision Editor/Resources/Assets.xcassets/AppIcon-iOS.appiconset"
+
+          if (( XCODE_MAJOR < 17 )); then
+            if [[ ! -d "$APPICONSET_DIR" && -d "$IOS_ICONSET_DIR" ]]; then
+              echo "Xcode ${XCODE_MAJOR} detected. Creating AppIcon fallback from AppIcon-iOS.appiconset."
+              cp -R "$IOS_ICONSET_DIR" "$APPICONSET_DIR"
+            fi
+          fi
+
       - name: Import signing certificate
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
