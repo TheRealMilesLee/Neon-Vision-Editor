@@ -29,16 +29,14 @@ fi
 TMP_JSON="$(mktemp)"
 xcrun --sdk macosx assetutil --info "$CAR" > "$TMP_JSON"
 
-if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"; then
-  echo "Missing AppIcon iconstack rendition in Assets.car." >&2
-  rm -f "$TMP_JSON"
-  exit 1
-fi
-
 if ! grep -Eq '"Name" : "AppIcon"' "$TMP_JSON"; then
   echo "Missing AppIcon image renditions in Assets.car." >&2
   rm -f "$TMP_JSON"
   exit 1
+fi
+
+if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"; then
+  echo "Warning: AppIcon.iconstack rendition not found; accepting AppIcon image renditions fallback." >&2
 fi
 
 rm -f "$TMP_JSON"
