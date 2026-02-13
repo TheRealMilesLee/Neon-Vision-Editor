@@ -76,6 +76,48 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
+wait_for_pre_release_ci() {
+  local sha="$1"
+  local timeout_seconds=1800
+  local interval_seconds=15
+  local elapsed=0
+
+  echo "Waiting for Pre-release CI on ${sha}..."
+  while (( elapsed <= timeout_seconds )); do
+    local run_line
+    run_line="$(gh run list \
+      --workflow pre-release-ci.yml \
+      --limit 50 \
+      --json databaseId,status,conclusion,headSha,event,createdAt \
+      --jq ".[] | select(.headSha == \"${sha}\" and .event == \"push\") | \"\(.databaseId)\t\(.status)\t\(.conclusion // \"\")\"" | head -n1)"
+
+    if [[ -n "$run_line" ]]; then
+      local run_id run_status run_conclusion
+      run_id="$(echo "$run_line" | awk -F '\t' '{print $1}')"
+      run_status="$(echo "$run_line" | awk -F '\t' '{print $2}')"
+      run_conclusion="$(echo "$run_line" | awk -F '\t' '{print $3}')"
+
+      echo "Pre-release CI run ${run_id}: status=${run_status} conclusion=${run_conclusion:-pending}"
+      if [[ "$run_status" == "completed" ]]; then
+        if [[ "$run_conclusion" == "success" ]]; then
+          echo "Pre-release CI passed."
+          return 0
+        fi
+        echo "Pre-release CI failed for ${sha}. Not starting notarized release." >&2
+        return 1
+      fi
+    else
+      echo "Pre-release CI run for ${sha} not visible yet; retrying..."
+    fi
+
+    sleep "$interval_seconds"
+    elapsed=$((elapsed + interval_seconds))
+  done
+
+  echo "Timed out waiting for Pre-release CI on ${sha}. Not starting notarized release." >&2
+  return 1
+}
+
 echo "Running release preflight for ${TAG}..."
 scripts/ci/release_preflight.sh "$TAG"
 
@@ -95,6 +137,9 @@ prep_cmd+=(--push)
 echo "Tag push completed."
 
 if [[ "$TRIGGER_NOTARIZED" -eq 1 ]]; then
+  RELEASE_SHA="$(git rev-parse HEAD)"
+  wait_for_pre_release_ci "$RELEASE_SHA"
+
   echo "Triggering notarized workflow for ${TAG}..."
   if [[ "$USE_SELF_HOSTED" -eq 1 ]]; then
     gh workflow run release-notarized-selfhosted.yml -f tag="$TAG" -f use_self_hosted=true
