@@ -444,10 +444,12 @@ final class AcceptingTextView: NSTextView {
 
     // MARK: - Drag & Drop: insert file contents instead of file path
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let canRead = sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [
+        let pb = sender.draggingPasteboard
+        let canReadFileURL = pb.canReadObject(forClasses: [NSURL.self], options: [
             .urlReadingFileURLsOnly: true
         ])
-        return canRead ? .copy : []
+        let canReadPlainText = pasteboardPlainString(from: pb)?.isEmpty == false
+        return (canReadFileURL || canReadPlainText) ? .copy : []
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -463,7 +465,40 @@ final class AcceptingTextView: NSTextView {
             // Do not insert content; let higher-level controller open a new tab.
             return true
         }
+        if let droppedString = pasteboardPlainString(from: pb), !droppedString.isEmpty {
+            let sanitized = sanitizedPlainText(droppedString)
+            let dropRange = insertionRangeForDrop(sender)
+            isApplyingPaste = true
+            if let storage = textStorage {
+                storage.beginEditing()
+                replaceCharacters(in: dropRange, with: sanitized)
+                storage.endEditing()
+            } else {
+                let current = string as NSString
+                if dropRange.location <= current.length &&
+                    dropRange.location + dropRange.length <= current.length {
+                    string = current.replacingCharacters(in: dropRange, with: sanitized)
+                } else {
+                    isApplyingPaste = false
+                    return false
+                }
+            }
+            isApplyingPaste = false
+
+            NotificationCenter.default.post(name: .pastedText, object: sanitized)
+            didChangeText()
+            return true
+        }
         return false
+    }
+
+    private func insertionRangeForDrop(_ sender: NSDraggingInfo) -> NSRange {
+        let windowPoint = sender.draggingLocation
+        let viewPoint = convert(windowPoint, from: nil)
+        let insertionIndex = characterIndexForInsertion(at: viewPoint)
+        let clamped = clampedRange(NSRange(location: insertionIndex, length: 0), forTextLength: (string as NSString).length)
+        setSelectedRange(clamped)
+        return clamped
     }
 
     private func applyDroppedContentInChunks(
