@@ -60,6 +60,7 @@ jobs:
             -scheme "Neon Vision Editor" \
             -destination "platform=macOS" \
             -derivedDataPath "$DERIVED_DATA" \
+            MACOSX_DEPLOYMENT_TARGET=15.5 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
