@@ -61,10 +61,23 @@ jobs:
           git checkout FETCH_HEAD
 
       - name: Select/verify Xcode 17+
+        id: xcode_select
         run: |
           set -euo pipefail
           if [[ -x scripts/ci/select_xcode17.sh ]]; then
-            scripts/ci/select_xcode17.sh
+            if scripts/ci/select_xcode17.sh; then
+              echo "Using Xcode 17+ from selector script."
+              echo "legacy_icon_mode=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "Xcode 17+ not available on this runner; attempting Xcode 16+ fallback."
+              xcodebuild -version
+              XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
+              if [[ "${XCODE_MAJOR:-0}" -lt 16 ]]; then
+                echo "Xcode 16+ required for fallback path." >&2
+                exit 1
+              fi
+              echo "legacy_icon_mode=true" >> "$GITHUB_OUTPUT"
+            fi
           else
             xcodebuild -version
             XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2, v, "."); print v[1]}')"
@@ -73,7 +86,20 @@ jobs:
               exit 1
             fi
             echo "Legacy tag checkout detected (missing scripts/ci/select_xcode17.sh); using Xcode ${XCODE_MAJOR} fallback."
+            echo "legacy_icon_mode=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Prepare legacy app icon for Xcode 16 fallback
+        if: ${{ steps.xcode_select.outputs.legacy_icon_mode == 'true' }}
+        run: |
+          set -euo pipefail
+          ICON_DIR="Neon Vision Editor/Resources"
+          if [[ -d "${ICON_DIR}/AppIcon.icon" ]]; then
+            mv "${ICON_DIR}/AppIcon.icon" "${ICON_DIR}/AppIcon.icon.disabled"
+          fi
+          rm -rf "${ICON_DIR}/Assets.xcassets/AppIcon.appiconset"
+          cp -R "${ICON_DIR}/Assets.xcassets/AppIcon-iOS.appiconset" "${ICON_DIR}/Assets.xcassets/AppIcon.appiconset"
+          echo "Prepared AppIcon.appiconset fallback for Xcode 16 runner."
 
       - name: Import signing certificate
         env:
@@ -138,22 +164,24 @@ jobs:
         run: |
           set -euo pipefail
           APP="$EXPORT_PATH/Neon Vision Editor.app"
-          if [[ -x scripts/ci/verify_icon_payload.sh ]]; then
-            scripts/ci/verify_icon_payload.sh "$APP"
-          else
-            INFO="$APP/Contents/Info.plist"
-            CAR="$APP/Contents/Resources/Assets.car"
-            ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
-            if [[ "$ICON_NAME" != "AppIcon" ]]; then
-              echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
-              exit 1
-            fi
-            TMP_JSON="$(mktemp)"
-            xcrun --sdk macosx assetutil --info "$CAR" > "$TMP_JSON"
-            grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"
-            grep -Eq '"Name" : "AppIcon"' "$TMP_JSON"
-            rm -f "$TMP_JSON"
+          INFO="$APP/Contents/Info.plist"
+          CAR="$APP/Contents/Resources/Assets.car"
+          ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
+          if [[ "$ICON_NAME" != "AppIcon" ]]; then
+            echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
+            exit 1
           fi
+          TMP_JSON="$(mktemp)"
+          xcrun --sdk macosx assetutil --info "$CAR" > "$TMP_JSON"
+          if ! grep -Eq '"Name" : "AppIcon"' "$TMP_JSON"; then
+            echo "Missing AppIcon image renditions in Assets.car." >&2
+            rm -f "$TMP_JSON"
+            exit 1
+          fi
+          if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"; then
+            echo "Warning: AppIcon.iconstack not present; using AppIcon rendition fallback."
+          fi
+          rm -f "$TMP_JSON"
 
       - name: Notarize
         env:
@@ -225,26 +253,29 @@ jobs:
           TAG_NAME: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if [[ -x scripts/ci/verify_release_asset.sh ]]; then
-            scripts/ci/verify_release_asset.sh "$TAG_NAME"
-          else
-            WORK_DIR="$(mktemp -d)"
-            gh release download "$TAG_NAME" -p Neon.Vision.Editor.app.zip -D "$WORK_DIR"
-            ditto -x -k "$WORK_DIR/Neon.Vision.Editor.app.zip" "$WORK_DIR/extracted"
-            APP="$WORK_DIR/extracted/Neon Vision Editor.app"
-            INFO="$APP/Contents/Info.plist"
-            CAR="$APP/Contents/Resources/Assets.car"
-            ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
-            if [[ "$ICON_NAME" != "AppIcon" ]]; then
-              echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
-              exit 1
-            fi
-            TMP_JSON="$(mktemp)"
-            xcrun --sdk macosx assetutil --info "$CAR" > "$TMP_JSON"
-            grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"
-            grep -Eq '"Name" : "AppIcon"' "$TMP_JSON"
-            rm -rf "$WORK_DIR" "$TMP_JSON"
+          WORK_DIR="$(mktemp -d)"
+          gh release download "$TAG_NAME" -p Neon.Vision.Editor.app.zip -D "$WORK_DIR"
+          ditto -x -k "$WORK_DIR/Neon.Vision.Editor.app.zip" "$WORK_DIR/extracted"
+          APP="$WORK_DIR/extracted/Neon Vision Editor.app"
+          INFO="$APP/Contents/Info.plist"
+          CAR="$APP/Contents/Resources/Assets.car"
+          ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$INFO" 2>/dev/null || true)"
+          if [[ "$ICON_NAME" != "AppIcon" ]]; then
+            echo "Unexpected CFBundleIconName: '$ICON_NAME' (expected 'AppIcon')." >&2
+            rm -rf "$WORK_DIR"
+            exit 1
           fi
+          TMP_JSON="$(mktemp)"
+          xcrun --sdk macosx assetutil --info "$CAR" > "$TMP_JSON"
+          if ! grep -Eq '"Name" : "AppIcon"' "$TMP_JSON"; then
+            echo "Missing AppIcon image renditions in Assets.car." >&2
+            rm -rf "$WORK_DIR" "$TMP_JSON"
+            exit 1
+          fi
+          if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"; then
+            echo "Warning: AppIcon.iconstack not present in released asset; using AppIcon rendition fallback."
+          fi
+          rm -rf "$WORK_DIR" "$TMP_JSON"
 
       - name: Roll back broken published release asset
         if: ${{ failure() && steps.publish_release.outcome == 'success' }}
