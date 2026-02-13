@@ -33,6 +33,7 @@ jobs:
           git checkout FETCH_HEAD
 
       - name: Select Xcode (prefer 17+, fallback to hosted default)
+        id: xcode_mode
         run: |
           set -euo pipefail
           if [[ -x scripts/ci/select_xcode17.sh ]]; then
@@ -45,6 +46,16 @@ jobs:
             echo "No Xcode selector script in tag; continuing with hosted default toolchain."
           fi
           xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2,v,"."); print v[1]}' | head -n1)"
+          if [[ -z "${XCODE_MAJOR}" ]]; then
+            echo "Could not determine Xcode major version." >&2
+            exit 1
+          fi
+          if (( XCODE_MAJOR >= 17 )); then
+            echo "require_iconstack=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "require_iconstack=0" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Prepare AppIcon fallback for hosted Xcode 16
         run: |
@@ -125,7 +136,7 @@ jobs:
       - name: Verify app icon payload
         env:
           EXPORT_PATH: ${{ runner.temp }}/export
-          REQUIRE_ICONSTACK: "1"
+          REQUIRE_ICONSTACK: ${{ steps.xcode_mode.outputs.require_iconstack }}
         run: |
           set -euo pipefail
           APP="$EXPORT_PATH/Neon Vision Editor.app"
@@ -199,7 +210,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ inputs.tag }}
-          REQUIRE_ICONSTACK: "1"
+          REQUIRE_ICONSTACK: ${{ steps.xcode_mode.outputs.require_iconstack }}
         run: |
           set -euo pipefail
           WORK_DIR="$(mktemp -d)"
