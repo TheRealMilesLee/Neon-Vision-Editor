@@ -6,11 +6,12 @@ usage() {
 Run end-to-end release flow in one command.
 
 Usage:
-  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--skip-notarized] [--github-hosted] [--dry-run]
+  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--skip-notarized] [--self-hosted] [--github-hosted] [--dry-run]
 
 Examples:
   scripts/release_all.sh v0.4.9
   scripts/release_all.sh 0.4.9 --date 2026-02-12
+  scripts/release_all.sh v0.4.9 --self-hosted
   scripts/release_all.sh v0.4.9 --github-hosted
   scripts/release_all.sh v0.4.9 --dry-run
 
@@ -20,7 +21,7 @@ What it does:
   3) Commit docs changes
   4) Create annotated tag
   5) Push main and tag to origin
-  6) Trigger notarized release workflow (self-hosted by default)
+  6) Trigger notarized release workflow (GitHub-hosted by default)
   7) Wait for notarized workflow and verify uploaded release asset payload
 EOF
 }
@@ -40,7 +41,7 @@ fi
 
 DATE_ARG=()
 TRIGGER_NOTARIZED=1
-USE_SELF_HOSTED=1
+USE_SELF_HOSTED=0
 DRY_RUN=0
 
 while [[ "${1:-}" != "" ]]; do
@@ -55,6 +56,9 @@ while [[ "${1:-}" != "" ]]; do
       ;;
     --skip-notarized)
       TRIGGER_NOTARIZED=0
+      ;;
+    --self-hosted)
+      USE_SELF_HOSTED=1
       ;;
     --github-hosted)
       USE_SELF_HOSTED=0

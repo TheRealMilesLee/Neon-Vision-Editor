@@ -32,14 +32,19 @@ jobs:
           git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
           git checkout FETCH_HEAD
 
-      - name: Select/verify Xcode 17+
+      - name: Select Xcode (prefer 17+, fallback to hosted default)
         run: |
           set -euo pipefail
-          if [[ ! -x scripts/ci/select_xcode17.sh ]]; then
-            echo "Missing scripts/ci/select_xcode17.sh in checked-out tag. Production notarized release requires Xcode 17+ selection." >&2
-            exit 1
+          if [[ -x scripts/ci/select_xcode17.sh ]]; then
+            if scripts/ci/select_xcode17.sh; then
+              echo "Using Xcode 17+."
+            else
+              echo "Xcode 17+ is unavailable on this GitHub-hosted runner; continuing with hosted default toolchain." >&2
+            fi
+          else
+            echo "No Xcode selector script in tag; continuing with hosted default toolchain."
           fi
-          scripts/ci/select_xcode17.sh
+          xcodebuild -version
 
       - name: Import signing certificate
         env:
