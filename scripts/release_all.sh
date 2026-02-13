@@ -25,10 +25,6 @@ What it does:
   6) Trigger notarized release workflow (GitHub-hosted by default)
   7) Wait for notarized workflow and verify uploaded release asset payload
 
-If required workflows are missing, install templates with:
-  scripts/setup_release_workflows.sh --target . --commit --push
-Or for GitHub Enterprise + self-hosted:
-  scripts/setup_release_workflows.sh --target . --enterprise-selfhosted --commit --push
 EOF
 }
 
@@ -91,53 +87,6 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-require_release_workflows() {
-  local required=()
-
-  if [[ "$TRIGGER_NOTARIZED" -eq 1 ]]; then
-    required+=(pre-release-ci.yml)
-    if [[ "$USE_SELF_HOSTED" -eq 1 ]]; then
-      required+=(release-notarized-selfhosted.yml)
-    else
-      required+=(release-notarized.yml)
-    fi
-  fi
-
-  if [[ ${#required[@]} -eq 0 ]]; then
-    return 0
-  fi
-
-  local local_missing=()
-  for wf in "${required[@]}"; do
-    if [[ ! -f ".github/workflows/${wf}" ]]; then
-      local_missing+=("$wf")
-    fi
-  done
-
-  if [[ ${#local_missing[@]} -gt 0 ]]; then
-    echo "Missing local workflow files required for this release mode:" >&2
-    printf '  - %s\n' "${local_missing[@]}" >&2
-    echo "Install workflow templates first:" >&2
-    echo "  scripts/setup_release_workflows.sh --target . --commit --push" >&2
-    exit 1
-  fi
-
-  local remote_missing=()
-  for wf in "${required[@]}"; do
-    if ! gh workflow view "$wf" >/dev/null 2>&1; then
-      remote_missing+=("$wf")
-    fi
-  done
-
-  if [[ ${#remote_missing[@]} -gt 0 ]]; then
-    echo "Missing GitHub workflows in the remote repository:" >&2
-    printf '  - %s\n' "${remote_missing[@]}" >&2
-    echo "Commit and push workflow templates, then rerun:" >&2
-    echo "  scripts/setup_release_workflows.sh --target . --commit --push" >&2
-    exit 1
-  fi
-}
-
 wait_for_pre_release_ci() {
   local sha="$1"
   local timeout_seconds=1800
@@ -179,8 +128,6 @@ wait_for_pre_release_ci() {
   echo "Timed out waiting for Pre-release CI on ${sha}. Not starting notarized release." >&2
   return 1
 }
-
-require_release_workflows
 
 echo "Running release preflight for ${TAG}..."
 scripts/ci/release_preflight.sh "$TAG"
