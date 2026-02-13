@@ -26,6 +26,7 @@ if [[ "$ICON_NAME" != "AppIcon" ]]; then
   exit 1
 fi
 
+REQUIRE_ICONSTACK="${REQUIRE_ICONSTACK:-0}"
 TMP_JSON="$(mktemp)"
 xcrun --sdk macosx assetutil --info "$CAR" > "$TMP_JSON"
 
@@ -36,6 +37,11 @@ if ! grep -Eq '"Name" : "AppIcon"' "$TMP_JSON"; then
 fi
 
 if ! grep -Eq '"RenditionName" : "AppIcon\.iconstack"' "$TMP_JSON"; then
+  if [[ "$REQUIRE_ICONSTACK" == "1" ]]; then
+    echo "Missing AppIcon.iconstack rendition in Assets.car (strict mode)." >&2
+    rm -f "$TMP_JSON"
+    exit 1
+  fi
   echo "Warning: AppIcon.iconstack rendition not found; accepting AppIcon image renditions fallback." >&2
 fi
 
