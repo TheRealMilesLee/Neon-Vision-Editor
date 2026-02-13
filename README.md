@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.10**
+> Latest release: **v0.4.11**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.10**
+- Latest release: **v0.4.11**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,14 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.11 (summary)
+
+- ExpressionEngine language support in the editor language set.
+- Plain text drag-and-drop support so dropped string content opens correctly in the editor.
+- Release/docs metadata with TestFlight beta link surfaced in project documentation and download guidance.
+- Release pipeline compatibility for hosted environments with Xcode 16 fallback handling.
+- Notarized release publishing now hard-fails when icon payload validation fails, preventing bad assets from being published.
+
 ### v0.4.10 (summary)
 
 - Release gate in `scripts/release_all.sh` now waits for a successful `Pre-release CI` run on the pushed commit before triggering notarization.
@@ -136,14 +144,6 @@ If macOS blocks first launch:
 - Release runtime policy test suite (`ReleaseRuntimePolicyTests`) covering settings-tab routing, theme mapping, find-next cursor behavior, and subscription button state logic.
 - Unified release automation in `scripts/release_all.sh` to run preflight checks before tagging and to verify uploaded release assets after notarized publish.
 - README changelog summary automation now keeps release summaries version-sorted and limited to the latest three entries.
-
-### v0.4.8 (summary)
-
-- Extended release automation coverage for the next tag cycle, including synchronized README/changelog/welcome-tour release content updates.
-- macOS settings parity with iOS by wiring the `Open in Tabs` preference into live window tabbing behavior.
-- Welcome Tour release highlights are now aligned with distribution content for current App Store/TestFlight-facing builds.
-- Release workflow environment compatibility by removing hard `rg` dependency from docs validation steps.
-- Release pipeline guard failures caused by placeholder release notes (`TODO`) in the tag section.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -164,12 +164,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.10`
+- Tag: `v0.4.11`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.10
+git rev-parse --verify v0.4.11
 ```
 
 - Verify downloaded artifact checksum locally:

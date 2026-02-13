@@ -4,6 +4,20 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.11] - 2026-02-13
+
+### Added
+- ExpressionEngine language support in the editor language set.
+- Plain text drag-and-drop support so dropped string content opens correctly in the editor.
+
+### Improved
+- Release/docs metadata with TestFlight beta link surfaced in project documentation and download guidance.
+- Release pipeline compatibility for hosted environments with Xcode 16 fallback handling.
+
+### Fixed
+- Notarized release publishing now hard-fails when icon payload validation fails, preventing bad assets from being published.
+- macOS Settings sizing now enforces a taller default window to avoid clipped controls.
+
 ## [v0.4.10] - 2026-02-13
 
 ### Added
