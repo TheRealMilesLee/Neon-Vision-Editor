@@ -119,8 +119,15 @@ struct AppUpdaterDialog: View {
                     .foregroundStyle(.secondary)
 
                 if appUpdateManager.isInstalling {
-                    ProgressView("Installing update…")
-                        .font(.caption)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView(value: appUpdateManager.installProgress, total: 1.0) {
+                            Text(appUpdateManager.installPhase.isEmpty ? "Installing update…" : appUpdateManager.installPhase)
+                                .font(.caption)
+                        }
+                        Text("\(Int((appUpdateManager.installProgress * 100).rounded()))%")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if let installMessage = appUpdateManager.installMessage {
@@ -140,31 +147,43 @@ struct AppUpdaterDialog: View {
         HStack {
             switch appUpdateManager.status {
             case .updateAvailable:
-                Button("Skip This Version") {
-                    appUpdateManager.skipCurrentVersion()
-                    isPresented = false
-                }
+                if appUpdateManager.awaitingInstallCompletionAction {
+                    Spacer()
 
-                Button("Remind Me Tomorrow") {
-                    appUpdateManager.remindMeTomorrow()
-                    isPresented = false
-                }
-
-                Spacer()
-
-                Button("Download Update") {
-                    appUpdateManager.openDownloadPage()
-                    isPresented = false
-                }
-
-                Button("Install Now") {
-                    Task {
-                        await appUpdateManager.installUpdateNow()
+                    Button("Install & Close App") {
+                        appUpdateManager.completeInstalledUpdate(restart: false)
                     }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(appUpdateManager.isInstalling)
 
+                    Button("Restart App") {
+                        appUpdateManager.completeInstalledUpdate(restart: true)
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Skip This Version") {
+                        appUpdateManager.skipCurrentVersion()
+                        isPresented = false
+                    }
+
+                    Button("Remind Me Tomorrow") {
+                        appUpdateManager.remindMeTomorrow()
+                        isPresented = false
+                    }
+
+                    Spacer()
+
+                    Button("Download Update") {
+                        appUpdateManager.openDownloadPage()
+                        isPresented = false
+                    }
+
+                    Button("Install Now") {
+                        Task {
+                            await appUpdateManager.installUpdateNow()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(appUpdateManager.isInstalling)
+                }
             case .failed:
                 Button("Close") {
                     isPresented = false

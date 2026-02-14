@@ -1845,6 +1845,9 @@ struct CustomTextEditor: NSViewRepresentable {
                     tv.textStorage?.beginEditing()
                     // Clear previous coloring and apply base color
                     tv.textStorage?.removeAttribute(.foregroundColor, range: fullRange)
+                    // Clear previous background/underline artifacts so caret-line highlight doesn't accumulate.
+                    tv.textStorage?.removeAttribute(.backgroundColor, range: fullRange)
+                    tv.textStorage?.removeAttribute(.underlineStyle, range: fullRange)
                     tv.textStorage?.addAttribute(.foregroundColor, value: baseColor, range: fullRange)
                     // Apply colored ranges
                     for (range, color) in coloredRanges {

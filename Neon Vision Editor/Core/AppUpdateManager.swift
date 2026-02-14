@@ -109,6 +109,9 @@ final class AppUpdateManager: ObservableObject {
     @Published private(set) var automaticPromptToken: Int = 0
     @Published private(set) var isInstalling: Bool = false
     @Published private(set) var installMessage: String?
+    @Published private(set) var installProgress: Double = 0
+    @Published private(set) var installPhase: String = ""
+    @Published private(set) var awaitingInstallCompletionAction: Bool = false
     @Published private(set) var lastCheckResultSummary: String = "Never checked"
 
     private let owner: String
@@ -250,7 +253,7 @@ final class AppUpdateManager: ObservableObject {
                             automaticPromptToken &+= 1
                             installMessage = "Automatic install is disabled while running from Xcode/DerivedData."
                         } else {
-                            await attemptAutoInstall()
+                            await attemptAutoInstall(interactive: false)
                         }
                     } else {
                         pendingAutomaticPrompt = true
@@ -321,6 +324,9 @@ final class AppUpdateManager: ObservableObject {
 
     func clearInstallMessage() {
         installMessage = nil
+        installProgress = 0
+        installPhase = ""
+        awaitingInstallCompletionAction = false
     }
 
     func installUpdateNow() async {
@@ -332,7 +338,24 @@ final class AppUpdateManager: ObservableObject {
             installMessage = "Install now is disabled while running from Xcode/DerivedData. Use Download Update instead."
             return
         }
-        await attemptAutoInstall()
+        await attemptAutoInstall(interactive: true)
+    }
+
+    func completeInstalledUpdate(restart: Bool) {
+#if os(macOS)
+        guard awaitingInstallCompletionAction else { return }
+        let currentApp = Bundle.main.bundleURL.standardizedFileURL
+        if restart {
+            installMessage = "Restarting app…"
+            NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+        } else {
+            installMessage = "Closing app to finish update…"
+        }
+        awaitingInstallCompletionAction = false
+        NSApp.terminate(nil)
+#else
+        installMessage = "Automatic install is supported on macOS only."
+#endif
     }
 
     private func shouldRunInitialCheckNow() -> Bool {
@@ -486,7 +509,7 @@ final class AppUpdateManager: ObservableObject {
         }
     }
 
-    private func attemptAutoInstall() async {
+    private func attemptAutoInstall(interactive: Bool) async {
 #if os(macOS)
         guard !isInstalling else { return }
         guard let release = latestRelease else { return }
@@ -500,6 +523,9 @@ final class AppUpdateManager: ObservableObject {
         }
 
         isInstalling = true
+        installProgress = 0.01
+        installPhase = "Preparing installer…"
+        awaitingInstallCompletionAction = false
         defer { isInstalling = false }
 
         do {
@@ -507,11 +533,15 @@ final class AppUpdateManager: ObservableObject {
             // 1) verify artifact checksum from release metadata
             // 2) verify code signature validity + signing identity
             let expectedHash = try Self.extractSHA256(from: release.notes, preferredAssetName: assetName)
+            installProgress = 0.12
+            installPhase = "Downloading release asset…"
             let (tmpURL, response) = try await session.download(from: downloadURL)
             guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
                 throw URLError(.badServerResponse)
             }
 
+            installProgress = 0.40
+            installPhase = "Verifying checksum…"
             let actualHash = try Self.sha256Hex(of: tmpURL)
             guard actualHash.caseInsensitiveCompare(expectedHash) == .orderedSame else {
                 throw UpdateError.checksumMismatch
@@ -525,6 +555,8 @@ final class AppUpdateManager: ObservableObject {
             let downloadedZip = workDir.appendingPathComponent(assetName)
             try fileManager.moveItem(at: tmpURL, to: downloadedZip)
 
+            installProgress = 0.56
+            installPhase = "Unpacking update…"
             let unzipStatus = try Self.unzip(zipURL: downloadedZip, to: unzipDir)
             guard unzipStatus == 0 else {
                 throw UpdateError.installUnsupported("Failed to unpack update archive.")
@@ -533,6 +565,8 @@ final class AppUpdateManager: ObservableObject {
             guard let appBundle = Self.findFirstAppBundle(in: unzipDir) else {
                 throw UpdateError.installUnsupported("No .app bundle found in downloaded update.")
             }
+            installProgress = 0.70
+            installPhase = "Verifying app signature…"
             guard try Self.verifyCodeSignatureStrictCLI(of: appBundle) else {
                 throw UpdateError.invalidCodeSignature
             }
@@ -556,6 +590,8 @@ final class AppUpdateManager: ObservableObject {
             let backupApp = targetDir.appendingPathComponent("\(currentApp.deletingPathExtension().lastPathComponent)-backup-\(Int(Date().timeIntervalSince1970)).app")
 
             do {
+                installProgress = 0.86
+                installPhase = "Installing app update…"
                 try fileManager.moveItem(at: currentApp, to: backupApp)
                 try fileManager.moveItem(at: appBundle, to: currentApp)
             } catch {
@@ -565,10 +601,19 @@ final class AppUpdateManager: ObservableObject {
                 throw UpdateError.installUnsupported("Automatic install failed due to file permissions. Use Download Update for manual install.")
             }
 
-            installMessage = "Update installed. Relaunching…"
-            NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
-            NSApp.terminate(nil)
+            installProgress = 1.0
+            installPhase = "Install complete."
+            if interactive {
+                awaitingInstallCompletionAction = true
+                installMessage = "Update installed. Choose “Restart App” or “Install & Close App”."
+            } else {
+                installMessage = "Update installed. Relaunching…"
+                NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+                NSApp.terminate(nil)
+            }
         } catch {
+            installProgress = 0
+            installPhase = ""
             installMessage = error.localizedDescription
             if let release = latestRelease {
                 openURL(release.downloadURL ?? release.releaseURL)

@@ -155,7 +155,8 @@ struct NeonSettingsView: View {
         .background(
             SettingsWindowConfigurator(
                 minSize: NSSize(width: 900, height: 820),
-                idealSize: NSSize(width: 980, height: 880)
+                idealSize: NSSize(width: 980, height: 880),
+                translucentEnabled: supportsTranslucency && translucentWindow
             )
         )
 #endif
@@ -1056,6 +1057,7 @@ final class FontPickerController: NSObject, NSFontChanging {
 struct SettingsWindowConfigurator: NSViewRepresentable {
     let minSize: NSSize
     let idealSize: NSSize
+    let translucentEnabled: Bool
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
@@ -1077,10 +1079,26 @@ struct SettingsWindowConfigurator: NSViewRepresentable {
             width: max(window.minSize.width, minSize.width),
             height: max(window.minSize.height, minSize.height)
         )
+        // Match native macOS Settings layout: centered preference tabs and hidden title text.
+        window.toolbarStyle = .preference
+        window.titleVisibility = .hidden
         let targetWidth = max(window.frame.size.width, idealSize.width)
         let targetHeight = max(window.frame.size.height, idealSize.height)
         if targetWidth != window.frame.size.width || targetHeight != window.frame.size.height {
             window.setContentSize(NSSize(width: targetWidth, height: targetHeight))
+        }
+
+        // Keep settings-window translucency in sync without relying on editor view events.
+        window.isOpaque = !translucentEnabled
+        window.backgroundColor = translucentEnabled ? .clear : NSColor.windowBackgroundColor
+        window.titlebarAppearsTransparent = translucentEnabled
+        if translucentEnabled {
+            window.styleMask.insert(.fullSizeContentView)
+        } else {
+            window.styleMask.remove(.fullSizeContentView)
+        }
+        if #available(macOS 13.0, *) {
+            window.titlebarSeparatorStyle = translucentEnabled ? .none : .automatic
         }
     }
 }

@@ -1838,9 +1838,9 @@ struct ContentView: View {
                     highlightRefreshToken: highlightRefreshToken
                 )
                 .id(currentLanguage)
-                .frame(maxWidth: viewModel.isBrainDumpMode ? 800 : .infinity)
+                .frame(maxWidth: viewModel.isBrainDumpMode ? 920 : .infinity)
                 .frame(maxHeight: .infinity)
-                .padding(.horizontal, viewModel.isBrainDumpMode ? 100 : 0)
+                .padding(.horizontal, viewModel.isBrainDumpMode ? 24 : 0)
                 .padding(.vertical, viewModel.isBrainDumpMode ? 40 : 0)
                 .background(
                     Group {
@@ -1856,6 +1856,11 @@ struct ContentView: View {
                     wordCountView
                 }
             }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: viewModel.isBrainDumpMode ? .top : .topLeading
+            )
 
             if showProjectStructureSidebar && !viewModel.isBrainDumpMode {
                 Divider()
@@ -1872,6 +1877,15 @@ struct ContentView: View {
                 .frame(minWidth: 220, idealWidth: 260, maxWidth: 340)
             }
         }
+        .background(
+            Group {
+                if viewModel.isBrainDumpMode && enableTranslucentWindow {
+                    Color.clear.background(.ultraThinMaterial)
+                } else {
+                    Color.clear
+                }
+            }
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
         let withEvents = withTypingEvents(

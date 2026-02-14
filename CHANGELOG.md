@@ -4,6 +4,11 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.15] - 2026-02-14
+
+### Fixed
+- Fixed the editor `Highlight Current Line` behavior on macOS so previous line background highlights are cleared and only the active line remains highlighted.
+
 ## [v0.4.14] - 2026-02-14
 
 ### Added
