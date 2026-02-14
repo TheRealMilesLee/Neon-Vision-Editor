@@ -81,7 +81,11 @@ if [[ ! -f "$PBXPROJ_FILE" ]]; then
   exit 1
 fi
 CURRENT_VERSION="$(
-  rg --no-filename --only-matching 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PBXPROJ_FILE" \
+  if command -v rg >/dev/null 2>&1; then
+    rg --no-filename --only-matching 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PBXPROJ_FILE"
+  else
+    grep -Eo 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PBXPROJ_FILE"
+  fi \
     | awk '{print $3}' \
     | sort -u \
     | head -n1
