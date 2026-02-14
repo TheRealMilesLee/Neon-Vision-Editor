@@ -62,7 +62,12 @@ jobs:
           set -euo pipefail
           SERVER_HOST="${SERVER_URL#https://}"
           git init
-          git remote add origin "https://x-access-token:${GH_TOKEN}@${SERVER_HOST}/${REPO}.git"
+          REMOTE_URL="https://x-access-token:${GH_TOKEN}@${SERVER_HOST}/${REPO}.git"
+          if git remote get-url origin >/dev/null 2>&1; then
+            git remote set-url origin "$REMOTE_URL"
+          else
+            git remote add origin "$REMOTE_URL"
+          fi
           git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
           git checkout FETCH_HEAD
 
