@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.16**
+> Latest release: **v0.4.17**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.16**
+- Latest release: **v0.4.17**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,12 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.17 (summary)
+
+- Added translucency-toggle highlight refresh wiring so editor recoloring is explicitly re-triggered when window translucency changes.
+- Improved syntax-highlighting stability during appearance/translucency transitions by forcing an immediate refresh instead of waiting for unrelated edits.
+- Fixed a macOS editor bug where toggling translucent window mode could temporarily hide syntax highlighting until another action (for example changing font size) forced a rehighlight.
+
 ### v0.4.16 (summary)
 
 - Added a release-doc synchronization gate to `release_all.sh` via `prepare_release_docs.py --check` so releases fail fast when docs are stale.
@@ -133,14 +139,6 @@ If macOS blocks first launch:
 ### v0.4.15 (summary)
 
 - Fixed the editor `Highlight Current Line` behavior on macOS so previous line background highlights are cleared and only the active line remains highlighted.
-
-### v0.4.14 (summary)
-
-- Added centralized theme canonicalization with an explicit `Custom` option in settings so legacy/case-variant values resolve consistently across launches.
-- Added a fallback GitHub Releases URL path in the updater dialog so `View Releases` always opens, even when no latest-release payload is cached.
-- Added keychain-state restore/cleanup steps to notarized release workflows (and workflow templates) to prevent user keychain list/default/login mutations after signing jobs.
-- Improved macOS translucent-window rendering by enforcing unified toolbar style and full-size content behavior when translucency is enabled.
-- Improved cross-platform theme application so iOS/macOS editor text + syntax colors respect the selected settings theme in both translucent and non-translucent modes.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -161,12 +159,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.16`
+- Tag: `v0.4.17`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.16
+git rev-parse --verify v0.4.17
 ```
 
 - Verify downloaded artifact checksum locally:

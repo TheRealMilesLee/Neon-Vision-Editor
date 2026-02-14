@@ -1897,6 +1897,8 @@ struct ContentView: View {
         return withEvents
         .onChange(of: enableTranslucentWindow) { _, newValue in
             applyWindowTranslucency(newValue)
+            // Force immediate recolor when translucency changes so syntax highlighting stays visible.
+            highlightRefreshToken &+= 1
         }
         .toolbar {
             editorToolbarContent

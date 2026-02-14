@@ -220,12 +220,11 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.15:",
+            subtitle: "Major changes since v0.4.16:",
             bullets: [
-                "Added a release-doc synchronization gate to `release_all.sh` via `prepare_release_docs.py --check` so releases fail fast when docs are stale.",
-                "Added a delegate-based updater download service that reports live progress into the update dialog.",
-                "Improved updater install flow to stay user-driven/manual after verification, with Finder handoff instead of in-place app replacement.",
-                "Improved editor appearance switching so base text colors are enforced immediately on light/dark mode changes across macOS and iOS."
+                "Added translucency-toggle highlight refresh wiring so editor recoloring is explicitly re-triggered when window translucency changes.",
+                "Improved syntax-highlighting stability during appearance/translucency transitions by forcing an immediate refresh instead of waiting for unrelated edits.",
+                "Fixed a macOS editor bug where toggling translucent window mode could temporarily hide syntax highlighting until another action (for example changing font size) forced a rehighlight."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

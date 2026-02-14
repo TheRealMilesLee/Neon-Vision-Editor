@@ -4,6 +4,17 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.17] - 2026-02-15
+
+### Added
+- Added translucency-toggle highlight refresh wiring so editor recoloring is explicitly re-triggered when window translucency changes.
+
+### Improved
+- Improved syntax-highlighting stability during appearance/translucency transitions by forcing an immediate refresh instead of waiting for unrelated edits.
+
+### Fixed
+- Fixed a macOS editor bug where toggling translucent window mode could temporarily hide syntax highlighting until another action (for example changing font size) forced a rehighlight.
+
 ## [v0.4.16] - 2026-02-14
 
 ### Added
