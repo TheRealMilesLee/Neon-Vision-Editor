@@ -7,6 +7,18 @@ import UIKit
 #endif
 
 extension ContentView {
+    func showUpdaterDialog(checkNow: Bool = true) {
+#if os(macOS)
+        guard ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution else { return }
+        showUpdateDialog = true
+        if checkNow {
+            Task {
+                await appUpdateManager.checkForUpdates(source: .manual)
+            }
+        }
+#endif
+    }
+
     func openSettings(tab: String? = nil) {
         settingsActiveTab = ReleaseRuntimePolicy.settingsTab(from: tab)
 #if os(macOS)

@@ -2,7 +2,7 @@
 // Main SwiftUI container for Neon Vision Editor. Hosts the single-document editor UI,
 // toolbar actions, AI integration, syntax highlighting, line numbers, and sidebar TOC.
 
-// MARK: - Imports
+///MARK: - Imports
 import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
@@ -27,12 +27,13 @@ extension String {
 #endif
 }
 
-// MARK: - Root view for the editor.
+///MARK: - Root View
 //Manages the editor area, toolbar, popovers, and bridges to the view model for file I/O and metrics.
 struct ContentView: View {
     // Environment-provided view model and theme/error bindings
     @EnvironmentObject var viewModel: EditorViewModel
     @EnvironmentObject private var supportPurchaseManager: SupportPurchaseManager
+    @EnvironmentObject var appUpdateManager: AppUpdateManager
     @Environment(\.colorScheme) var colorScheme
 #if os(iOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -78,10 +79,10 @@ struct ContentView: View {
     @State private var highlightRefreshToken: Int = 0
 
     // Persisted API tokens for external providers
-    @State var grokAPIToken: String = SecureTokenStore.token(for: .grok)
-    @State var openAIAPIToken: String = SecureTokenStore.token(for: .openAI)
-    @State var geminiAPIToken: String = SecureTokenStore.token(for: .gemini)
-    @State var anthropicAPIToken: String = SecureTokenStore.token(for: .anthropic)
+    @State var grokAPIToken: String = ""
+    @State var openAIAPIToken: String = ""
+    @State var geminiAPIToken: String = ""
+    @State var anthropicAPIToken: String = ""
 
     // Debounce handle for inline completion
     @State var lastCompletionWorkItem: DispatchWorkItem?
@@ -90,6 +91,7 @@ struct ContentView: View {
 
     @State var showFindReplace: Bool = false
     @State var showSettingsSheet: Bool = false
+    @State var showUpdateDialog: Bool = false
     @State var findQuery: String = ""
     @State var replaceQuery: String = ""
     @State var findUsesRegex: Bool = false
@@ -145,8 +147,6 @@ struct ContentView: View {
         set { selectedModelRaw = newValue.rawValue }
     }
 
-    /// Prompts the user for a Grok token if none is saved. Persists to Keychain.
-    /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGrokTokenIfNeeded() -> Bool {
         if !grokAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
 #if os(macOS)
@@ -171,8 +171,6 @@ struct ContentView: View {
         return false
     }
 
-    /// Prompts the user for an OpenAI token if none is saved. Persists to Keychain.
-    /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForOpenAITokenIfNeeded() -> Bool {
         if !openAIAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
 #if os(macOS)
@@ -197,8 +195,6 @@ struct ContentView: View {
         return false
     }
 
-    /// Prompts the user for a Gemini token if none is saved. Persists to Keychain.
-    /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForGeminiTokenIfNeeded() -> Bool {
         if !geminiAPIToken.isEmpty { return true }
 #if os(macOS)
@@ -223,8 +219,6 @@ struct ContentView: View {
         return false
     }
 
-    /// Prompts the user for an Anthropic API token if none is saved. Persists to Keychain.
-    /// Returns true if a token is present/was saved; false if cancelled or empty.
     private func promptForAnthropicTokenIfNeeded() -> Bool {
         if !anthropicAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
 #if os(macOS)
@@ -1018,6 +1012,11 @@ struct ContentView: View {
                 guard matchesCurrentWindow(notif) else { return }
                 openAPISettings()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .showUpdaterRequested)) { notif in
+                guard matchesCurrentWindow(notif) else { return }
+                let shouldCheckNow = (notif.object as? Bool) ?? true
+                showUpdaterDialog(checkNow: shouldCheckNow)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .selectAIModelRequested)) { notif in
                 guard matchesCurrentWindow(notif) else { return }
                 guard let modelRawValue = notif.object as? String,
@@ -1084,7 +1083,7 @@ struct ContentView: View {
 
     // Layout: NavigationSplitView with optional sidebar and the primary code editor.
     var body: some View {
-        platformLayout
+        AnyView(platformLayout)
         .alert("AI Error", isPresented: showGrokError) {
             Button("OK") { }
         } message: {
@@ -1128,6 +1127,11 @@ struct ContentView: View {
                 settingsLineWrapEnabled = enabled
             }
         }
+        .onChange(of: appUpdateManager.automaticPromptToken) { _, _ in
+            if appUpdateManager.consumeAutomaticPromptIfNeeded() {
+                showUpdaterDialog(checkNow: false)
+            }
+        }
         .onChange(of: settingsThemeName) { _, _ in
             highlightRefreshToken += 1
         }
@@ -1146,123 +1150,7 @@ struct ContentView: View {
         .onReceive(viewModel.$tabs) { _ in
             persistSessionIfReady()
         }
-        .sheet(isPresented: $showFindReplace) {
-            FindReplacePanel(
-                findQuery: $findQuery,
-                replaceQuery: $replaceQuery,
-                useRegex: $findUsesRegex,
-                caseSensitive: $findCaseSensitive,
-                statusMessage: $findStatusMessage,
-                onFindNext: { findNext() },
-                onReplace: { replaceSelection() },
-                onReplaceAll: { replaceAll() }
-            )
-#if canImport(UIKit)
-                .frame(maxWidth: 420)
-#if os(iOS)
-                .presentationDetents([.height(280), .medium])
-                .presentationDragIndicator(.visible)
-                .presentationContentInteraction(.scrolls)
-#endif
-#else
-                .frame(width: 420)
-#endif
-        }
-#if canImport(UIKit)
-        .sheet(isPresented: $showSettingsSheet) {
-            NeonSettingsView(
-                supportsOpenInTabs: false,
-                supportsTranslucency: false
-            )
-            .environmentObject(supportPurchaseManager)
-#if os(iOS)
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationContentInteraction(.scrolls)
-#endif
-        }
-#endif
-#if os(iOS)
-        .sheet(isPresented: $showCompactSidebarSheet) {
-            NavigationStack {
-                SidebarView(content: currentContent, language: currentLanguage)
-                    .navigationTitle("Sidebar")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") {
-                                showCompactSidebarSheet = false
-                            }
-                        }
-                    }
-            }
-            .presentationDetents([.medium, .large])
-        }
-#endif
-        #if canImport(UIKit)
-        .sheet(isPresented: $showProjectFolderPicker) {
-            ProjectFolderPicker(
-                onPick: { url in
-                    setProjectFolder(url)
-                    showProjectFolderPicker = false
-                },
-                onCancel: { showProjectFolderPicker = false }
-            )
-        }
-        #endif
-        .sheet(isPresented: $showQuickSwitcher) {
-            QuickFileSwitcherPanel(
-                query: $quickSwitcherQuery,
-                items: quickSwitcherItems,
-                onSelect: { selectQuickSwitcherItem($0) }
-            )
-        }
-        .sheet(isPresented: $showLanguageSetupPrompt) {
-            languageSetupSheet
-        }
-        .sheet(isPresented: $showWelcomeTour) {
-            WelcomeTourView {
-                hasSeenWelcomeTourV1 = true
-                welcomeTourSeenRelease = WelcomeTourView.releaseID
-                showWelcomeTour = false
-            }
-        }
-        .confirmationDialog("Save changes before closing?", isPresented: $showUnsavedCloseDialog, titleVisibility: .visible) {
-            Button("Save") { saveAndClosePendingTab() }
-            Button("Don't Save", role: .destructive) { discardAndClosePendingTab() }
-            Button("Cancel", role: .cancel) {
-                pendingCloseTabID = nil
-            }
-        } message: {
-            if let pendingCloseTabID,
-               let tab = viewModel.tabs.first(where: { $0.id == pendingCloseTabID }) {
-                Text("\"\(tab.name)\" has unsaved changes.")
-            } else {
-                Text("This file has unsaved changes.")
-            }
-        }
-        .confirmationDialog("Clear editor content?", isPresented: $showClearEditorConfirmDialog, titleVisibility: .visible) {
-            Button("Clear", role: .destructive) { clearEditorContent() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will remove all text in the current editor.")
-        }
-#if canImport(UIKit)
-        .fileImporter(
-            isPresented: $showIOSFileImporter,
-            allowedContentTypes: [.text, .plainText, .sourceCode, .json, .xml, .yaml],
-            allowsMultipleSelection: false
-        ) { result in
-            handleIOSImportResult(result)
-        }
-        .fileExporter(
-            isPresented: $showIOSFileExporter,
-            document: iosExportDocument,
-            contentType: .plainText,
-            defaultFilename: iosExportFilename
-        ) { result in
-            handleIOSExportResult(result)
-        }
-#endif
+        .modifier(ModalPresentationModifier(contentView: self))
         .onAppear {
             // Start with sidebar collapsed by default
             viewModel.showSidebar = false
@@ -1295,6 +1183,135 @@ struct ContentView: View {
             }
         }
 #endif
+    }
+
+    private struct ModalPresentationModifier: ViewModifier {
+        let contentView: ContentView
+
+        func body(content: Content) -> some View {
+            content
+                .sheet(isPresented: contentView.$showFindReplace) {
+                    FindReplacePanel(
+                        findQuery: contentView.$findQuery,
+                        replaceQuery: contentView.$replaceQuery,
+                        useRegex: contentView.$findUsesRegex,
+                        caseSensitive: contentView.$findCaseSensitive,
+                        statusMessage: contentView.$findStatusMessage,
+                        onFindNext: { contentView.findNext() },
+                        onReplace: { contentView.replaceSelection() },
+                        onReplaceAll: { contentView.replaceAll() }
+                    )
+#if canImport(UIKit)
+                    .frame(maxWidth: 420)
+#if os(iOS)
+                    .presentationDetents([.height(280), .medium])
+                    .presentationDragIndicator(.visible)
+                    .presentationContentInteraction(.scrolls)
+#endif
+#else
+                    .frame(width: 420)
+#endif
+                }
+#if canImport(UIKit)
+                .sheet(isPresented: contentView.$showSettingsSheet) {
+                    NeonSettingsView(
+                        supportsOpenInTabs: false,
+                        supportsTranslucency: false
+                    )
+                    .environmentObject(contentView.supportPurchaseManager)
+#if os(iOS)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationContentInteraction(.scrolls)
+#endif
+                }
+#endif
+#if os(iOS)
+                .sheet(isPresented: contentView.$showCompactSidebarSheet) {
+                    NavigationStack {
+                        SidebarView(content: contentView.currentContent, language: contentView.currentLanguage)
+                            .navigationTitle("Sidebar")
+                            .toolbar {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Done") {
+                                        contentView.$showCompactSidebarSheet.wrappedValue = false
+                                    }
+                                }
+                            }
+                    }
+                    .presentationDetents([.medium, .large])
+                }
+#endif
+#if canImport(UIKit)
+                .sheet(isPresented: contentView.$showProjectFolderPicker) {
+                    ProjectFolderPicker(
+                        onPick: { url in
+                            contentView.setProjectFolder(url)
+                            contentView.$showProjectFolderPicker.wrappedValue = false
+                        },
+                        onCancel: { contentView.$showProjectFolderPicker.wrappedValue = false }
+                    )
+                }
+#endif
+                .sheet(isPresented: contentView.$showQuickSwitcher) {
+                    QuickFileSwitcherPanel(
+                        query: contentView.$quickSwitcherQuery,
+                        items: contentView.quickSwitcherItems,
+                        onSelect: { contentView.selectQuickSwitcherItem($0) }
+                    )
+                }
+                .sheet(isPresented: contentView.$showLanguageSetupPrompt) {
+                    contentView.languageSetupSheet
+                }
+                .sheet(isPresented: contentView.$showWelcomeTour) {
+                    WelcomeTourView {
+                        contentView.$hasSeenWelcomeTourV1.wrappedValue = true
+                        contentView.$welcomeTourSeenRelease.wrappedValue = WelcomeTourView.releaseID
+                        contentView.$showWelcomeTour.wrappedValue = false
+                    }
+                }
+                .sheet(isPresented: contentView.$showUpdateDialog) {
+                    AppUpdaterDialog(isPresented: contentView.$showUpdateDialog)
+                        .environmentObject(contentView.appUpdateManager)
+                }
+                .confirmationDialog("Save changes before closing?", isPresented: contentView.$showUnsavedCloseDialog, titleVisibility: .visible) {
+                    Button("Save") { contentView.saveAndClosePendingTab() }
+                    Button("Don't Save", role: .destructive) { contentView.discardAndClosePendingTab() }
+                    Button("Cancel", role: .cancel) {
+                        contentView.$pendingCloseTabID.wrappedValue = nil
+                    }
+                } message: {
+                    if let pendingCloseTabID = contentView.pendingCloseTabID,
+                       let tab = contentView.viewModel.tabs.first(where: { $0.id == pendingCloseTabID }) {
+                        Text("\"\(tab.name)\" has unsaved changes.")
+                    } else {
+                        Text("This file has unsaved changes.")
+                    }
+                }
+                .confirmationDialog("Clear editor content?", isPresented: contentView.$showClearEditorConfirmDialog, titleVisibility: .visible) {
+                    Button("Clear", role: .destructive) { contentView.clearEditorContent() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will remove all text in the current editor.")
+                }
+#if canImport(UIKit)
+                .fileImporter(
+                    isPresented: contentView.$showIOSFileImporter,
+                    allowedContentTypes: [.text, .plainText, .sourceCode, .json, .xml, .yaml],
+                    allowsMultipleSelection: false
+                ) { result in
+                    contentView.handleIOSImportResult(result)
+                }
+                .fileExporter(
+                    isPresented: contentView.$showIOSFileExporter,
+                    document: contentView.iosExportDocument,
+                    contentType: .plainText,
+                    defaultFilename: contentView.iosExportFilename
+                ) { result in
+                    contentView.handleIOSExportResult(result)
+                }
+#endif
+        }
     }
 
     private var shouldUseSplitView: Bool {
@@ -1639,8 +1656,6 @@ struct ContentView: View {
         }
     }
 
-    /// Detects language using Apple Foundation Models when available, with a heuristic fallback.
-    /// Returns a supported language string used by syntax highlighting and the language picker.
     private func detectLanguageWithAppleIntelligence(_ text: String) async -> String {
         // Supported languages in our picker
         let supported = ["swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust", "cobol", "dotenv", "proto", "graphql", "rst", "nginx", "sql", "html", "expressionengine", "css", "c", "cpp", "objective-c", "csharp", "json", "xml", "yaml", "toml", "csv", "ini", "vim", "log", "ipynb", "markdown", "bash", "zsh", "powershell", "standard", "plain"]
@@ -1793,7 +1808,7 @@ struct ContentView: View {
         return "standard"
     }
 
-    // MARK: Main editor stack: hosts the NSTextView-backed editor, status line, and toolbar.
+    ///MARK: - Main Editor Stack
     var editorView: some View {
         let content = HStack(spacing: 0) {
             VStack(spacing: 0) {

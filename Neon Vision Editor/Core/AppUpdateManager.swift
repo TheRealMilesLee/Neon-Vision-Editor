@@ -1,0 +1,859 @@
+import Foundation
+import SwiftUI
+import Combine
+import CryptoKit
+#if canImport(Security)
+import Security
+#endif
+#if canImport(AppKit)
+import AppKit
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
+
+enum AppUpdateCheckInterval: String, CaseIterable, Identifiable {
+    case hourly = "hourly"
+    case daily = "daily"
+    case weekly = "weekly"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .hourly: return "Hourly"
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        }
+    }
+
+    var seconds: TimeInterval {
+        switch self {
+        case .hourly: return 3600
+        case .daily: return 86400
+        case .weekly: return 604800
+        }
+    }
+}
+
+@MainActor
+final class AppUpdateManager: ObservableObject {
+    enum CheckSource {
+        case automatic
+        case manual
+    }
+
+    enum Status {
+        case idle
+        case checking
+        case updateAvailable
+        case upToDate
+        case failed
+    }
+
+    struct ReleaseInfo: Codable, Equatable {
+        let version: String
+        let title: String
+        let notes: String
+        let publishedAt: Date?
+        let releaseURL: URL
+        let downloadURL: URL?
+        let assetName: String?
+    }
+
+    private enum UpdateError: LocalizedError {
+        case invalidReleaseSource
+        case prereleaseRejected
+        case draftRejected
+        case rateLimited(until: Date?)
+        case missingCachedRelease
+        case installUnsupported(String)
+        case checksumMissing(String)
+        case checksumMismatch
+        case invalidCodeSignature
+        case noDownloadAsset
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidReleaseSource:
+                return "Release source validation failed."
+            case .prereleaseRejected:
+                return "Latest GitHub release is marked as prerelease and was skipped."
+            case .draftRejected:
+                return "Latest GitHub release is a draft and was skipped."
+            case .rateLimited(let until):
+                if let until {
+                    return "GitHub API rate limit reached. Retry after \(until.formatted(date: .abbreviated, time: .shortened))."
+                }
+                return "GitHub API rate limit reached."
+            case .missingCachedRelease:
+                return "No cached release metadata found for ETag response."
+            case .installUnsupported(let reason):
+                return reason
+            case .checksumMissing(let asset):
+                return "Checksum missing for \(asset)."
+            case .checksumMismatch:
+                return "Downloaded update checksum does not match release metadata."
+            case .invalidCodeSignature:
+                return "Downloaded app signature validation failed."
+            case .noDownloadAsset:
+                return "No downloadable ZIP asset found for this release."
+            }
+        }
+    }
+
+    @Published private(set) var status: Status = .idle
+    @Published private(set) var latestRelease: ReleaseInfo?
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var lastCheckedAt: Date?
+    @Published private(set) var automaticPromptToken: Int = 0
+    @Published private(set) var isInstalling: Bool = false
+    @Published private(set) var installMessage: String?
+    @Published private(set) var lastCheckResultSummary: String = "Never checked"
+
+    private let owner: String
+    private let repo: String
+    private let defaults: UserDefaults
+    private let session: URLSession
+    private let appLaunchDate: Date
+    private var automaticTask: Task<Void, Never>?
+    private var pendingAutomaticPrompt: Bool = false
+
+    let currentVersion: String
+
+    static let autoCheckEnabledKey = "SettingsAutoCheckForUpdates"
+    static let updateIntervalKey = "SettingsUpdateCheckInterval"
+    static let autoDownloadEnabledKey = "SettingsAutoDownloadUpdates"
+    static let skippedVersionKey = "SettingsSkippedUpdateVersion"
+    static let lastCheckedAtKey = "SettingsLastUpdateCheckAt"
+    static let remindUntilKey = "SettingsUpdateRemindUntil"
+    static let etagKey = "SettingsUpdateETag"
+    static let cachedReleaseKey = "SettingsCachedReleaseInfo"
+    static let consecutiveFailuresKey = "SettingsUpdateConsecutiveFailures"
+    static let pauseUntilKey = "SettingsUpdatePauseUntil"
+    static let lastCheckSummaryKey = "SettingsUpdateLastCheckSummary"
+
+    private static let minAutoPromptUptime: TimeInterval = 90
+    private static let circuitBreakerThreshold = 3
+    private static let circuitBreakerPause: TimeInterval = 3600
+
+    init(
+        owner: String = "h3pdesign",
+        repo: String = "Neon-Vision-Editor",
+        defaults: UserDefaults = .standard,
+        session: URLSession = .shared
+    ) {
+        self.owner = owner
+        self.repo = repo
+        self.defaults = defaults
+        self.session = session
+        self.appLaunchDate = Date()
+        self.currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
+
+        if let timestamp = defaults.object(forKey: Self.lastCheckedAtKey) as? TimeInterval {
+            self.lastCheckedAt = Date(timeIntervalSince1970: timestamp)
+        }
+        if let summary = defaults.string(forKey: Self.lastCheckSummaryKey), !summary.isEmpty {
+            self.lastCheckResultSummary = summary
+        }
+        if Self.isDevelopmentRuntime {
+            // Prevent persisted settings from triggering relaunch/install loops during local debugging.
+            defaults.set(false, forKey: Self.autoDownloadEnabledKey)
+        }
+    }
+
+    var autoCheckEnabled: Bool {
+        defaults.object(forKey: Self.autoCheckEnabledKey) as? Bool ?? true
+    }
+
+    var autoDownloadEnabled: Bool {
+        defaults.object(forKey: Self.autoDownloadEnabledKey) as? Bool ?? false
+    }
+
+    var updateInterval: AppUpdateCheckInterval {
+        let raw = defaults.string(forKey: Self.updateIntervalKey) ?? AppUpdateCheckInterval.daily.rawValue
+        return AppUpdateCheckInterval(rawValue: raw) ?? .daily
+    }
+
+    var pausedUntil: Date? {
+        guard let ts = defaults.object(forKey: Self.pauseUntilKey) as? TimeInterval else { return nil }
+        return Date(timeIntervalSince1970: ts)
+    }
+
+    var consecutiveFailureCount: Int {
+        defaults.object(forKey: Self.consecutiveFailuresKey) as? Int ?? 0
+    }
+
+    func setAutoCheckEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Self.autoCheckEnabledKey)
+        rescheduleAutomaticChecks()
+    }
+
+    func setAutoDownloadEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Self.autoDownloadEnabledKey)
+    }
+
+    func setUpdateInterval(_ interval: AppUpdateCheckInterval) {
+        defaults.set(interval.rawValue, forKey: Self.updateIntervalKey)
+        rescheduleAutomaticChecks()
+    }
+
+    func startAutomaticChecks() {
+        guard ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution else { return }
+        rescheduleAutomaticChecks()
+
+        guard autoCheckEnabled else { return }
+        if shouldRunInitialCheckNow() {
+            Task { await checkForUpdates(source: .automatic) }
+        }
+    }
+
+    func checkForUpdates(source: CheckSource) async {
+        guard ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution else {
+            status = .idle
+            errorMessage = "Updater is disabled for this distribution channel."
+            return
+        }
+        guard status != .checking else { return }
+
+        if source == .automatic,
+           let pausedUntil,
+           pausedUntil > Date() {
+            // Respect circuit-breaker/rate-limit pause windows for background checks.
+            updateLastSummary("Auto-check paused until \(pausedUntil.formatted(date: .abbreviated, time: .shortened))")
+            return
+        }
+
+        status = .checking
+        errorMessage = nil
+
+        do {
+            let release = try await fetchLatestRelease()
+            let now = Date()
+            lastCheckedAt = now
+            defaults.set(now.timeIntervalSince1970, forKey: Self.lastCheckedAtKey)
+            defaults.set(0, forKey: Self.consecutiveFailuresKey)
+            defaults.removeObject(forKey: Self.pauseUntilKey)
+
+            if Self.compareVersions(release.version, currentVersion) == .orderedDescending {
+                latestRelease = release
+                status = .updateAvailable
+                installMessage = nil
+                updateLastSummary("Update available: \(release.version)")
+
+                if source == .automatic,
+                   shouldAutoPrompt(for: release.version) {
+                    if autoDownloadEnabled {
+                        if Self.isDevelopmentRuntime {
+                            // Avoid relaunch loops while running from Xcode/DerivedData.
+                            pendingAutomaticPrompt = true
+                            automaticPromptToken &+= 1
+                            installMessage = "Automatic install is disabled while running from Xcode/DerivedData."
+                        } else {
+                            await attemptAutoInstall()
+                        }
+                    } else {
+                        pendingAutomaticPrompt = true
+                        automaticPromptToken &+= 1
+                    }
+                }
+            } else {
+                latestRelease = nil
+                status = .upToDate
+                updateLastSummary("Up to date")
+            }
+        } catch {
+            latestRelease = nil
+            status = .failed
+            errorMessage = error.localizedDescription
+            if case let UpdateError.rateLimited(until) = error, let until, until > Date() {
+                // Use GitHub-provided reset time when available.
+                defaults.set(until.timeIntervalSince1970, forKey: Self.pauseUntilKey)
+                updateLastSummary("Rate limited by GitHub. Auto-check paused until \(until.formatted(date: .abbreviated, time: .shortened)).")
+            } else {
+                let failures = (defaults.object(forKey: Self.consecutiveFailuresKey) as? Int ?? 0) + 1
+                defaults.set(failures, forKey: Self.consecutiveFailuresKey)
+
+                if failures >= Self.circuitBreakerThreshold {
+                    let until = Date().addingTimeInterval(Self.circuitBreakerPause)
+                    defaults.set(until.timeIntervalSince1970, forKey: Self.pauseUntilKey)
+                    updateLastSummary("Checks paused after \(failures) failures (until \(until.formatted(date: .abbreviated, time: .shortened))).")
+                } else {
+                    updateLastSummary("Update check failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func consumeAutomaticPromptIfNeeded() -> Bool {
+        guard pendingAutomaticPrompt else { return false }
+        pendingAutomaticPrompt = false
+        return true
+    }
+
+    func skipCurrentVersion() {
+        guard let version = latestRelease?.version else { return }
+        defaults.set(version, forKey: Self.skippedVersionKey)
+    }
+
+    func remindMeTomorrow() {
+        let until = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date().addingTimeInterval(86400)
+        defaults.set(until.timeIntervalSince1970, forKey: Self.remindUntilKey)
+    }
+
+    func clearSkippedVersion() {
+        defaults.removeObject(forKey: Self.skippedVersionKey)
+    }
+
+    func openDownloadPage() {
+        guard let release = latestRelease else { return }
+        openURL(release.downloadURL ?? release.releaseURL)
+    }
+
+    func openReleasePage() {
+        guard let release = latestRelease else { return }
+        openURL(release.releaseURL)
+    }
+
+    func clearInstallMessage() {
+        installMessage = nil
+    }
+
+    func installUpdateNow() async {
+        guard ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution else {
+            installMessage = "Updater is disabled for this distribution channel."
+            return
+        }
+        guard !Self.isDevelopmentRuntime else {
+            installMessage = "Install now is disabled while running from Xcode/DerivedData. Use Download Update instead."
+            return
+        }
+        await attemptAutoInstall()
+    }
+
+    private func shouldRunInitialCheckNow() -> Bool {
+        guard let lastCheckedAt else { return true }
+        return Date().timeIntervalSince(lastCheckedAt) >= updateInterval.seconds
+    }
+
+    private func shouldAutoPrompt(for version: String) -> Bool {
+        if defaults.string(forKey: Self.skippedVersionKey) == version { return false }
+        if let remindTS = defaults.object(forKey: Self.remindUntilKey) as? TimeInterval,
+           Date(timeIntervalSince1970: remindTS) > Date() {
+            return false
+        }
+        let uptime = Date().timeIntervalSince(appLaunchDate)
+        return uptime >= Self.minAutoPromptUptime
+    }
+
+    private func rescheduleAutomaticChecks() {
+        automaticTask?.cancel()
+        automaticTask = nil
+
+        guard autoCheckEnabled else { return }
+        let intervalSeconds = updateInterval.seconds
+
+        automaticTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                let nanos = UInt64(intervalSeconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanos)
+                if Task.isCancelled { break }
+                await self.checkForUpdates(source: .automatic)
+            }
+        }
+    }
+
+    private func updateLastSummary(_ summary: String) {
+        lastCheckResultSummary = summary
+        defaults.set(summary, forKey: Self.lastCheckSummaryKey)
+    }
+
+    private func fetchLatestRelease() async throws -> ReleaseInfo {
+        let endpoint = "https://api.github.com/repos/\(owner)/\(repo)/releases/latest"
+        guard let url = URL(string: endpoint) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("NeonVisionEditorUpdater", forHTTPHeaderField: "User-Agent")
+        if let etag = defaults.string(forKey: Self.etagKey), !etag.isEmpty {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        if http.statusCode == 304 {
+            // ETag hit: reuse previously cached release payload.
+            if let cached = cachedReleaseInfo() {
+                return cached
+            }
+            throw UpdateError.missingCachedRelease
+        }
+
+        if http.statusCode == 403,
+           (http.value(forHTTPHeaderField: "X-RateLimit-Remaining") ?? "") == "0" {
+            let until = Self.rateLimitResetDate(from: http)
+            throw UpdateError.rateLimited(until: until)
+        }
+
+        guard 200..<300 ~= http.statusCode else {
+            throw NSError(
+                domain: "AppUpdater",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "GitHub update check failed (HTTP \(http.statusCode))."]
+            )
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let payload = try decoder.decode(GitHubReleasePayload.self, from: data)
+
+        // Enforce repository identity from API payload before using any release data.
+        if let apiURL = payload.apiURL,
+           !Self.matchesExpectedRepository(url: apiURL, expectedOwner: owner, expectedRepo: repo) {
+            throw UpdateError.invalidReleaseSource
+        }
+        guard !payload.draft else { throw UpdateError.draftRejected }
+        guard !payload.prerelease else { throw UpdateError.prereleaseRejected }
+
+        guard let releaseURL = URL(string: payload.htmlURL),
+              isTrustedGitHubURL(releaseURL),
+              Self.matchesExpectedRepository(url: releaseURL, expectedOwner: owner, expectedRepo: repo) else {
+            throw UpdateError.invalidReleaseSource
+        }
+
+        let selectedAssetURL = preferredAsset(from: payload.assets)
+        let selectedAssetName = selectedAssetName(from: payload.assets)
+
+        let release = ReleaseInfo(
+            version: Self.normalizedVersion(from: payload.tagName),
+            title: payload.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? (payload.name ?? payload.tagName)
+                : payload.tagName,
+            notes: payload.body ?? "",
+            publishedAt: payload.publishedAt,
+            releaseURL: releaseURL,
+            downloadURL: selectedAssetURL,
+            assetName: selectedAssetName
+        )
+
+        if let etag = http.value(forHTTPHeaderField: "ETag"), !etag.isEmpty {
+            defaults.set(etag, forKey: Self.etagKey)
+        }
+        persistCachedReleaseInfo(release)
+
+        return release
+    }
+
+    private func selectedAssetName(from assets: [GitHubAssetPayload]) -> String? {
+        let names = assets.map { $0.name }
+        return Self.selectPreferredAssetName(from: names)
+    }
+
+    private func preferredAsset(from assets: [GitHubAssetPayload]) -> URL? {
+        guard let selectedName = selectedAssetName(from: assets),
+              let asset = assets.first(where: { $0.name == selectedName }),
+              let url = URL(string: asset.browserDownloadURL),
+              isTrustedGitHubURL(url),
+              Self.matchesExpectedAssetURL(url: url, expectedOwner: owner, expectedRepo: repo) else {
+            return nil
+        }
+        return url
+    }
+
+    private func cachedReleaseInfo() -> ReleaseInfo? {
+        guard let data = defaults.data(forKey: Self.cachedReleaseKey) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(ReleaseInfo.self, from: data)
+    }
+
+    private func persistCachedReleaseInfo(_ release: ReleaseInfo) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(release) {
+            defaults.set(data, forKey: Self.cachedReleaseKey)
+        }
+    }
+
+    private func attemptAutoInstall() async {
+#if os(macOS)
+        guard !isInstalling else { return }
+        guard let release = latestRelease else { return }
+        guard let downloadURL = release.downloadURL else {
+            installMessage = UpdateError.noDownloadAsset.localizedDescription
+            return
+        }
+        guard let assetName = release.assetName else {
+            installMessage = UpdateError.noDownloadAsset.localizedDescription
+            return
+        }
+
+        isInstalling = true
+        defer { isInstalling = false }
+
+        do {
+            // Defense-in-depth:
+            // 1) verify artifact checksum from release metadata
+            // 2) verify code signature validity + signing identity
+            let expectedHash = try Self.extractSHA256(from: release.notes, preferredAssetName: assetName)
+            let (tmpURL, response) = try await session.download(from: downloadURL)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw URLError(.badServerResponse)
+            }
+
+            let actualHash = try Self.sha256Hex(of: tmpURL)
+            guard actualHash.caseInsensitiveCompare(expectedHash) == .orderedSame else {
+                throw UpdateError.checksumMismatch
+            }
+
+            let fileManager = FileManager.default
+            let workDir = fileManager.temporaryDirectory.appendingPathComponent("nve-update-\(UUID().uuidString)", isDirectory: true)
+            let unzipDir = workDir.appendingPathComponent("unzipped", isDirectory: true)
+            try fileManager.createDirectory(at: unzipDir, withIntermediateDirectories: true)
+
+            let downloadedZip = workDir.appendingPathComponent(assetName)
+            try fileManager.moveItem(at: tmpURL, to: downloadedZip)
+
+            let unzipStatus = try Self.unzip(zipURL: downloadedZip, to: unzipDir)
+            guard unzipStatus == 0 else {
+                throw UpdateError.installUnsupported("Failed to unpack update archive.")
+            }
+
+            guard let appBundle = Self.findFirstAppBundle(in: unzipDir) else {
+                throw UpdateError.installUnsupported("No .app bundle found in downloaded update.")
+            }
+            guard try Self.verifyCodeSignatureStrictCLI(of: appBundle) else {
+                throw UpdateError.invalidCodeSignature
+            }
+            // Require the downloaded app to match current Team ID and bundle identifier.
+            guard try Self.verifyCodeSignatureStrictCLI(of: Bundle.main.bundleURL) else {
+                throw UpdateError.installUnsupported("Current app signature is invalid. Reinstall the app manually before auto-install updates.")
+            }
+            guard let expectedTeamID = try Self.readTeamIdentifier(of: Bundle.main.bundleURL) else {
+                throw UpdateError.installUnsupported("Could not determine local signing team. Use Download Update for manual install.")
+            }
+            guard try Self.verifyCodeSignature(
+                of: appBundle,
+                expectedTeamID: expectedTeamID,
+                expectedBundleID: Bundle.main.bundleIdentifier
+            ) else {
+                throw UpdateError.invalidCodeSignature
+            }
+
+            let currentApp = Bundle.main.bundleURL.standardizedFileURL
+            let targetDir = currentApp.deletingLastPathComponent()
+            let backupApp = targetDir.appendingPathComponent("\(currentApp.deletingPathExtension().lastPathComponent)-backup-\(Int(Date().timeIntervalSince1970)).app")
+
+            do {
+                try fileManager.moveItem(at: currentApp, to: backupApp)
+                try fileManager.moveItem(at: appBundle, to: currentApp)
+            } catch {
+                if fileManager.fileExists(atPath: backupApp.path), !fileManager.fileExists(atPath: currentApp.path) {
+                    try? fileManager.moveItem(at: backupApp, to: currentApp)
+                }
+                throw UpdateError.installUnsupported("Automatic install failed due to file permissions. Use Download Update for manual install.")
+            }
+
+            installMessage = "Update installed. Relaunching…"
+            NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+            NSApp.terminate(nil)
+        } catch {
+            installMessage = error.localizedDescription
+            if let release = latestRelease {
+                openURL(release.downloadURL ?? release.releaseURL)
+            }
+        }
+#else
+        installMessage = "Automatic install is supported on macOS only."
+#endif
+    }
+
+#if os(macOS)
+    private nonisolated static func unzip(zipURL: URL, to destination: URL) throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-xk", zipURL.path, destination.path]
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    private nonisolated static func findFirstAppBundle(in directory: URL) -> URL? {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey]) else { return nil }
+        for case let url as URL in enumerator {
+            if url.pathExtension.lowercased() == "app" {
+                return url
+            }
+        }
+        return nil
+    }
+#endif
+
+    private func openURL(_ url: URL) {
+#if canImport(AppKit)
+        NSWorkspace.shared.open(url)
+#elseif canImport(UIKit)
+        UIApplication.shared.open(url)
+#endif
+    }
+
+    private func isTrustedGitHubURL(_ url: URL) -> Bool {
+        guard url.scheme == "https" else { return false }
+        return Self.isTrustedGitHubHost(url.host)
+    }
+
+    nonisolated static func isTrustedGitHubHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return host == "github.com"
+            || host == "objects.githubusercontent.com"
+            || host == "github-releases.githubusercontent.com"
+    }
+
+    nonisolated static func selectPreferredAssetName(from names: [String]) -> String? {
+        if let exact = names.first(where: { $0.caseInsensitiveCompare("Neon.Vision.Editor.app.zip") == .orderedSame }) {
+            return exact
+        }
+        if let appZip = names.first(where: { $0.lowercased().hasSuffix(".app.zip") }) {
+            return appZip
+        }
+        if let neonZip = names.first(where: { $0.lowercased().contains("neon") && $0.lowercased().hasSuffix(".zip") }) {
+            return neonZip
+        }
+        return names.first(where: { $0.lowercased().hasSuffix(".zip") })
+    }
+
+    nonisolated static func normalizedVersion(from tag: String) -> String {
+        var cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("v") || cleaned.hasPrefix("V") {
+            cleaned.removeFirst()
+        }
+        if let dash = cleaned.firstIndex(of: "-") {
+            cleaned = String(cleaned[..<dash])
+        }
+        return cleaned
+    }
+
+    nonisolated static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let leftParts = normalizedVersion(from: lhs).split(separator: ".").map { Int($0) ?? 0 }
+        let rightParts = normalizedVersion(from: rhs).split(separator: ".").map { Int($0) ?? 0 }
+        let maxCount = max(leftParts.count, rightParts.count)
+
+        for index in 0..<maxCount {
+            let l = index < leftParts.count ? leftParts[index] : 0
+            let r = index < rightParts.count ? rightParts[index] : 0
+            if l < r { return .orderedAscending }
+            if l > r { return .orderedDescending }
+        }
+
+        let leftIsPrerelease = isPrereleaseVersionTag(lhs)
+        let rightIsPrerelease = isPrereleaseVersionTag(rhs)
+        if leftIsPrerelease && !rightIsPrerelease { return .orderedAscending }
+        if !leftIsPrerelease && rightIsPrerelease { return .orderedDescending }
+        return .orderedSame
+    }
+
+    nonisolated static func isVersionSkipped(_ version: String, skippedValue: String?) -> Bool {
+        skippedValue == version
+    }
+
+    nonisolated private static func isPrereleaseVersionTag(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).contains("-")
+    }
+
+    nonisolated private static func matchesExpectedRepository(url: URL, expectedOwner: String, expectedRepo: String) -> Bool {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 2 else { return false }
+        if parts[0].caseInsensitiveCompare(expectedOwner) == .orderedSame,
+           parts[1].caseInsensitiveCompare(expectedRepo) == .orderedSame {
+            return true
+        }
+        // GitHub REST API paths are /repos/{owner}/{repo}/...
+        if parts.count >= 3,
+           parts[0].caseInsensitiveCompare("repos") == .orderedSame,
+           parts[1].caseInsensitiveCompare(expectedOwner) == .orderedSame,
+           parts[2].caseInsensitiveCompare(expectedRepo) == .orderedSame {
+            return true
+        }
+        return false
+    }
+
+    nonisolated private static func matchesExpectedAssetURL(url: URL, expectedOwner: String, expectedRepo: String) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        if host == "github.com" {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count >= 4 else { return false }
+            guard parts[0].caseInsensitiveCompare(expectedOwner) == .orderedSame,
+                  parts[1].caseInsensitiveCompare(expectedRepo) == .orderedSame else {
+                return false
+            }
+            return parts[2].lowercased() == "releases" && parts[3].lowercased() == "download"
+        }
+        return host == "github-releases.githubusercontent.com"
+            || host == "objects.githubusercontent.com"
+    }
+
+    nonisolated private static func rateLimitResetDate(from response: HTTPURLResponse) -> Date? {
+        guard let reset = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+              let epoch = TimeInterval(reset) else { return nil }
+        return Date(timeIntervalSince1970: epoch)
+    }
+
+    nonisolated private static func extractSHA256(from notes: String, preferredAssetName: String) throws -> String {
+        let escapedAsset = NSRegularExpression.escapedPattern(for: preferredAssetName)
+        let exactAssetPattern = "(?im)\\b\(escapedAsset)\\b[^\\n]*?([A-Fa-f0-9]{64})"
+        if let hash = firstMatchGroup(in: notes, pattern: exactAssetPattern) {
+            return hash
+        }
+
+        let genericPattern = "(?im)sha[- ]?256[^A-Fa-f0-9]*([A-Fa-f0-9]{64})"
+        if let hash = firstMatchGroup(in: notes, pattern: genericPattern) {
+            return hash
+        }
+
+        throw UpdateError.checksumMissing(preferredAssetName)
+    }
+
+    nonisolated private static func firstMatchGroup(in text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = text as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        guard let match = regex.firstMatch(in: text, options: [], range: range), match.numberOfRanges > 1 else { return nil }
+        let captured = ns.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return captured.isEmpty ? nil : captured
+    }
+
+    nonisolated private static func sha256Hex(of fileURL: URL) throws -> String {
+        // Stream hashing avoids loading large zip files fully into memory.
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while true {
+            let chunk = handle.readData(ofLength: 64 * 1024)
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    nonisolated private static var isDevelopmentRuntime: Bool {
+#if DEBUG
+        return true
+#else
+        let bundlePath = Bundle.main.bundleURL.path
+        if bundlePath.contains("/DerivedData/") { return true }
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return true }
+        return false
+#endif
+    }
+
+#if os(macOS)
+    nonisolated private static func verifyCodeSignatureStrictCLI(of appBundle: URL) throws -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = ["--verify", "--deep", "--strict", appBundle.path]
+        let outputPipe = Pipe()
+        process.standardError = outputPipe
+        process.standardOutput = outputPipe
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
+
+    nonisolated private static func readTeamIdentifier(of appBundle: URL) throws -> String? {
+#if canImport(Security)
+        var staticCode: SecStaticCode?
+        let createStatus = SecStaticCodeCreateWithPath(appBundle as CFURL, [], &staticCode)
+        guard createStatus == errSecSuccess, let staticCode else { return nil }
+
+        var signingInfoRef: CFDictionary?
+        let infoStatus = SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &signingInfoRef)
+        guard infoStatus == errSecSuccess,
+              let signingInfo = signingInfoRef as? [String: Any] else {
+            return nil
+        }
+        return signingInfo[kSecCodeInfoTeamIdentifier as String] as? String
+#else
+        return nil
+#endif
+    }
+
+    nonisolated private static func verifyCodeSignature(
+        of appBundle: URL,
+        expectedTeamID: String,
+        expectedBundleID: String?
+    ) throws -> Bool {
+#if canImport(Security)
+        var staticCode: SecStaticCode?
+        let createStatus = SecStaticCodeCreateWithPath(appBundle as CFURL, [], &staticCode)
+        guard createStatus == errSecSuccess, let staticCode else { return false }
+        let checkStatus = SecStaticCodeCheckValidity(staticCode, SecCSFlags(), nil)
+        guard checkStatus == errSecSuccess else { return false }
+
+        var signingInfoRef: CFDictionary?
+        let infoStatus = SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &signingInfoRef)
+        guard infoStatus == errSecSuccess,
+              let signingInfo = signingInfoRef as? [String: Any] else {
+            return false
+        }
+
+        guard let teamID = signingInfo[kSecCodeInfoTeamIdentifier as String] as? String,
+              teamID == expectedTeamID else {
+            return false
+        }
+
+        if let expectedBundleID, !expectedBundleID.isEmpty {
+            guard let actualBundleID = signingInfo[kSecCodeInfoIdentifier as String] as? String,
+                  actualBundleID == expectedBundleID else {
+                return false
+            }
+        }
+        return true
+#else
+        return false
+#endif
+    }
+#endif
+}
+
+private struct GitHubReleasePayload: Decodable {
+    let apiURL: URL?
+    let tagName: String
+    let name: String?
+    let body: String?
+    let htmlURL: String
+    let publishedAt: Date?
+    let draft: Bool
+    let prerelease: Bool
+    let assets: [GitHubAssetPayload]
+
+    enum CodingKeys: String, CodingKey {
+        case apiURL = "url"
+        case tagName = "tag_name"
+        case name
+        case body
+        case htmlURL = "html_url"
+        case publishedAt = "published_at"
+        case draft
+        case prerelease
+        case assets
+    }
+}
+
+private struct GitHubAssetPayload: Decodable {
+    let name: String
+    let browserDownloadURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
+}

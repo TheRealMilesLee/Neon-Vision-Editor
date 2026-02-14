@@ -1,10 +1,13 @@
 import SwiftUI
 import Foundation
 
+///MARK: - Paste Notifications
 extension Notification.Name {
     static let pastedFileURL = Notification.Name("pastedFileURL")
 }
 
+///MARK: - Scope Match Models
+// Bracket-based scope data used for highlighting and guide rendering.
 private struct BracketScopeMatch {
     let openRange: NSRange
     let closeRange: NSRange
@@ -12,11 +15,13 @@ private struct BracketScopeMatch {
     let guideMarkerRanges: [NSRange]
 }
 
+// Indentation-based scope data used for Python/YAML style highlighting.
 private struct IndentationScopeMatch {
     let scopeRange: NSRange
     let guideMarkerRanges: [NSRange]
 }
 
+///MARK: - Bracket/Indent Scope Helpers
 private func matchingOpeningBracket(for closing: unichar) -> unichar? {
     switch UnicodeScalar(closing) {
     case "}": return unichar(UnicodeScalar("{").value)
@@ -442,7 +447,7 @@ final class AcceptingTextView: NSTextView {
         forceDisableInvisibleGlyphRendering()
     }
 
-    // MARK: - Drag & Drop: insert file contents instead of file path
+    ///MARK: - Drag and Drop
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let pb = sender.draggingPasteboard
         let canReadFileURL = pb.canReadObject(forClasses: [NSURL.self], options: [
@@ -699,7 +704,7 @@ final class AcceptingTextView: NSTextView {
         return Self.sanitizePlainText(String(decoding: data, as: UTF8.self))
     }
 
-    // MARK: - Typing helpers (existing behavior)
+    ///MARK: - Typing Helpers
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
         if !isApplyingInlineSuggestion {
             clearInlineSuggestion()
@@ -740,8 +745,8 @@ final class AcceptingTextView: NSTextView {
         super.insertText(sanitized, replacementRange: replacementRange)
     }
 
-    /// Remove control/format characters that render as visible placeholders and normalize NBSP/CR to safe whitespace.
     static func sanitizePlainText(_ input: String) -> String {
+        // Reuse model-level sanitizer to keep all text paths consistent.
         EditorTextSanitizer.sanitize(input)
     }
 
@@ -1714,8 +1719,6 @@ struct CustomTextEditor: NSViewRepresentable {
             lastSelectionLocation = -1
         }
 
-        /// Schedules highlighting if text/language/theme changed. Skips very large documents
-        /// and defers when a modal sheet is presented.
         func scheduleHighlightIfNeeded(currentText: String? = nil, immediate: Bool = false) {
             guard textView != nil else { return }
 
@@ -1803,7 +1806,6 @@ struct CustomTextEditor: NSViewRepresentable {
             rehighlight(token: token, generation: generation, immediate: shouldRunImmediate)
         }
 
-        /// Perform regex-based token coloring off-main, then apply attributes on the main thread.
         func rehighlight(token: Int, generation: Int, immediate: Bool = false) {
             guard let textView = textView else { return }
             // Snapshot current state
@@ -2009,7 +2011,6 @@ struct CustomTextEditor: NSViewRepresentable {
             scheduleHighlightIfNeeded(currentText: tv.string, immediate: true)
         }
 
-        /// Move caret to a 1-based line number, clamping to bounds, and emphasize the line.
         @objc func moveToLine(_ notification: Notification) {
             guard let lineOneBased = notification.object as? Int,
                   let textView = textView else { return }

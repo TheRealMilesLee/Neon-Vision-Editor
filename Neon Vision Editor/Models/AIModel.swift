@@ -1,9 +1,6 @@
-//
 //  AIModel.swift
 //  Neon Vision Editor
-//
 //  Created by Hilthart Pedersen on 06.02.26.
-//
 
 
 import Foundation

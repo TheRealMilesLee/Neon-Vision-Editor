@@ -8,6 +8,7 @@ struct NeonSettingsView: View {
     let supportsOpenInTabs: Bool
     let supportsTranslucency: Bool
     @EnvironmentObject private var supportPurchaseManager: SupportPurchaseManager
+    @EnvironmentObject private var appUpdateManager: AppUpdateManager
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("SettingsOpenInTabs") private var openInTabs: String = "system"
     @AppStorage("SettingsEditorFontName") private var editorFontName: String = ""
@@ -21,6 +22,9 @@ struct NeonSettingsView: View {
     @AppStorage("SettingsDefaultNewFileLanguage") private var defaultNewFileLanguage: String = "plain"
     @AppStorage("SettingsConfirmCloseDirtyTab") private var confirmCloseDirtyTab: Bool = true
     @AppStorage("SettingsConfirmClearEditor") private var confirmClearEditor: Bool = true
+    @AppStorage(AppUpdateManager.autoCheckEnabledKey) private var autoCheckForUpdates: Bool = true
+    @AppStorage(AppUpdateManager.updateIntervalKey) private var updateCheckIntervalRaw: String = AppUpdateCheckInterval.daily.rawValue
+    @AppStorage(AppUpdateManager.autoDownloadEnabledKey) private var autoDownloadUpdates: Bool = false
 
     @AppStorage("SettingsShowLineNumbers") private var showLineNumbers: Bool = true
     @AppStorage("SettingsHighlightCurrentLine") private var highlightCurrentLine: Bool = false
@@ -45,10 +49,10 @@ struct NeonSettingsView: View {
     @State private var fontPicker = FontPickerController()
 #endif
 
-    @State private var grokAPIToken: String = SecureTokenStore.token(for: .grok)
-    @State private var openAIAPIToken: String = SecureTokenStore.token(for: .openAI)
-    @State private var geminiAPIToken: String = SecureTokenStore.token(for: .gemini)
-    @State private var anthropicAPIToken: String = SecureTokenStore.token(for: .anthropic)
+    @State private var grokAPIToken: String = ""
+    @State private var openAIAPIToken: String = ""
+    @State private var geminiAPIToken: String = ""
+    @State private var anthropicAPIToken: String = ""
     @State private var showSupportPurchaseDialog: Bool = false
     @State private var availableEditorFonts: [String] = []
     private let privacyPolicyURL = URL(string: "https://github.com/h3pdesign/Neon-Vision-Editor/blob/main/PRIVACY.md")
@@ -151,6 +155,13 @@ struct NeonSettingsView: View {
             supportTab
                 .tabItem { Label("Support", systemImage: "heart") }
                 .tag("support")
+#if os(macOS)
+            if ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution {
+                updatesTab
+                    .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath.circle") }
+                    .tag("updates")
+            }
+#endif
         }
 #if os(macOS)
         .frame(minWidth: 900, idealWidth: 980, minHeight: 820, idealHeight: 880)
@@ -168,6 +179,9 @@ struct NeonSettingsView: View {
             if supportPurchaseManager.supportProduct == nil {
                 Task { await supportPurchaseManager.refreshStoreState() }
             }
+            appUpdateManager.setAutoCheckEnabled(autoCheckForUpdates)
+            appUpdateManager.setUpdateInterval(selectedUpdateInterval)
+            appUpdateManager.setAutoDownloadEnabled(autoDownloadUpdates)
 #if os(macOS)
             fontPicker.onChange = { selected in
                 useSystemFont = false
@@ -198,6 +212,20 @@ struct NeonSettingsView: View {
                 highlightScopeBackground = false
             }
         }
+        .onChange(of: autoCheckForUpdates) { _, enabled in
+            appUpdateManager.setAutoCheckEnabled(enabled)
+        }
+        .onChange(of: updateCheckIntervalRaw) { _, _ in
+            appUpdateManager.setUpdateInterval(selectedUpdateInterval)
+        }
+        .onChange(of: autoDownloadUpdates) { _, enabled in
+            appUpdateManager.setAutoDownloadEnabled(enabled)
+        }
+        .onChange(of: settingsActiveTab) { _, newValue in
+            if newValue == "ai" {
+                loadAPITokensIfNeeded()
+            }
+        }
         .confirmationDialog("Support Neon Vision Editor", isPresented: $showSupportPurchaseDialog, titleVisibility: .visible) {
             Button("Support \(supportPurchaseManager.supportPriceLabel)") {
                 Task { await supportPurchaseManager.purchaseSupport() }
@@ -220,6 +248,13 @@ struct NeonSettingsView: View {
         } message: {
             Text(supportPurchaseManager.statusMessage ?? "")
         }
+    }
+
+    private func loadAPITokensIfNeeded() {
+        if grokAPIToken.isEmpty { grokAPIToken = SecureTokenStore.token(for: .grok) }
+        if openAIAPIToken.isEmpty { openAIAPIToken = SecureTokenStore.token(for: .openAI) }
+        if geminiAPIToken.isEmpty { geminiAPIToken = SecureTokenStore.token(for: .gemini) }
+        if anthropicAPIToken.isEmpty { anthropicAPIToken = SecureTokenStore.token(for: .anthropic) }
     }
 
     private var preferredColorSchemeOverride: ColorScheme? {
@@ -447,6 +482,10 @@ struct NeonSettingsView: View {
         Self.cachedEditorFonts = merged
         availableEditorFonts = merged
         selectedFontValue = useSystemFont ? systemFontSentinel : (editorFontName.isEmpty ? systemFontSentinel : editorFontName)
+    }
+
+    private var selectedUpdateInterval: AppUpdateCheckInterval {
+        AppUpdateCheckInterval(rawValue: updateCheckIntervalRaw) ?? .daily
     }
 
     private var editorTab: some View {
@@ -767,6 +806,63 @@ struct NeonSettingsView: View {
             }
         }
     }
+
+#if os(macOS)
+    private var updatesTab: some View {
+        settingsContainer(maxWidth: 620) {
+            GroupBox("GitHub Release Updates") {
+                VStack(alignment: .leading, spacing: UI.space12) {
+                    Toggle("Automatically check for updates", isOn: $autoCheckForUpdates)
+
+                    HStack(alignment: .center, spacing: UI.space12) {
+                        Text("Check Interval")
+                            .frame(width: isCompactSettingsLayout ? nil : 140, alignment: .leading)
+                        Picker("", selection: $updateCheckIntervalRaw) {
+                            ForEach(AppUpdateCheckInterval.allCases) { interval in
+                                Text(interval.title).tag(interval.rawValue)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: isCompactSettingsLayout ? .infinity : 220, alignment: .leading)
+                    }
+                    .disabled(!autoCheckForUpdates)
+
+                    Toggle("Automatically install updates when available", isOn: $autoDownloadUpdates)
+                        .disabled(!autoCheckForUpdates)
+
+                    HStack(spacing: UI.space8) {
+                        Button("Check Now") {
+                            Task { await appUpdateManager.checkForUpdates(source: .manual) }
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        if let checkedAt = appUpdateManager.lastCheckedAt {
+                            Text("Last checked: \(checkedAt.formatted(date: .abbreviated, time: .shortened))")
+                                .font(Typography.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: UI.space6) {
+                        Text("Last check result: \(appUpdateManager.lastCheckResultSummary)")
+                            .font(Typography.footnote)
+                            .foregroundStyle(.secondary)
+                        if let pausedUntil = appUpdateManager.pausedUntil, pausedUntil > Date() {
+                            Text("Auto-check pause active until \(pausedUntil.formatted(date: .abbreviated, time: .shortened)) (\(appUpdateManager.consecutiveFailureCount) consecutive failures).")
+                                .font(Typography.footnote)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+
+                    Text("Uses GitHub release assets only. App Store Connect releases are not used by this updater.")
+                        .font(Typography.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(UI.groupPadding)
+            }
+        }
+    }
+#endif
 
     private func settingsContainer<Content: View>(maxWidth: CGFloat = 560, @ViewBuilder _ content: () -> Content) -> some View {
         ScrollView {

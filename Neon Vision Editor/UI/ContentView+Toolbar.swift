@@ -330,6 +330,15 @@ extension ContentView {
             }
             .help("Settings")
 
+            if ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution {
+                Button(action: {
+                    showUpdaterDialog(checkNow: true)
+                }) {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle")
+                }
+                .help("Check for Updates")
+            }
+
             Button(action: { adjustEditorFontSize(-1) }) {
                 Image(systemName: "textformat.size.smaller")
             }

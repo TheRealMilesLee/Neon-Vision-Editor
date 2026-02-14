@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 private struct DetachedWindowContentView: View {
     @StateObject private var viewModel = EditorViewModel()
     @ObservedObject var supportPurchaseManager: SupportPurchaseManager
+    @ObservedObject var appUpdateManager: AppUpdateManager
     @Binding var showGrokError: Bool
     @Binding var grokErrorMessage: String
 
@@ -65,6 +66,7 @@ private struct DetachedWindowContentView: View {
         ContentView()
             .environmentObject(viewModel)
             .environmentObject(supportPurchaseManager)
+            .environmentObject(appUpdateManager)
             .environment(\.showGrokError, $showGrokError)
             .environment(\.grokErrorMessage, $grokErrorMessage)
             .frame(minWidth: 600, minHeight: 400)
@@ -76,6 +78,7 @@ private struct DetachedWindowContentView: View {
 struct NeonVisionEditorApp: App {
     @StateObject private var viewModel = EditorViewModel()
     @StateObject private var supportPurchaseManager = SupportPurchaseManager()
+    @StateObject private var appUpdateManager = AppUpdateManager()
     @AppStorage("SettingsAppearance") private var appearance: String = "system"
     @AppStorage("SettingsOpenInTabs") private var openInTabs: String = "system"
 #if os(macOS)
@@ -173,7 +176,6 @@ struct NeonVisionEditorApp: App {
 
     init() {
         let defaults = UserDefaults.standard
-        SecureTokenStore.migrateLegacyUserDefaultsTokens()
         // Safety reset: avoid stale NORMAL-mode state making editor appear non-editable.
         defaults.set(false, forKey: "EditorVimModeEnabled")
         // Force-disable invisible/control character rendering.
@@ -205,7 +207,10 @@ struct NeonVisionEditorApp: App {
             "SettingsOpenWithBlankDocument": true,
             "SettingsDefaultNewFileLanguage": "plain",
             "SettingsConfirmCloseDirtyTab": true,
-            "SettingsConfirmClearEditor": true
+            "SettingsConfirmClearEditor": true,
+            "SettingsAutoCheckForUpdates": true,
+            "SettingsUpdateCheckInterval": AppUpdateCheckInterval.daily.rawValue,
+            "SettingsAutoDownloadUpdates": false
         ])
         let whitespaceMigrationKey = "SettingsMigrationWhitespaceGlyphResetV1"
         if !defaults.bool(forKey: whitespaceMigrationKey) {
@@ -244,6 +249,7 @@ struct NeonVisionEditorApp: App {
             ContentView()
                 .environmentObject(viewModel)
                 .environmentObject(supportPurchaseManager)
+                .environmentObject(appUpdateManager)
                 .onAppear { appDelegate.viewModel = viewModel }
                 .onAppear { applyGlobalAppearanceOverride() }
                 .onAppear { applyOpenInTabsPreference() }
@@ -254,6 +260,9 @@ struct NeonVisionEditorApp: App {
                 .preferredColorScheme(preferredAppearance)
                 .frame(minWidth: 600, minHeight: 400)
                 .task {
+                    if ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution {
+                        appUpdateManager.startAutomaticChecks()
+                    }
                     #if USE_FOUNDATION_MODELS && canImport(FoundationModels)
                     do {
                         let start = Date()
@@ -276,6 +285,7 @@ struct NeonVisionEditorApp: App {
         WindowGroup("New Window", id: "blank-window") {
             DetachedWindowContentView(
                 supportPurchaseManager: supportPurchaseManager,
+                appUpdateManager: appUpdateManager,
                 showGrokError: $showGrokError,
                 grokErrorMessage: $grokErrorMessage
             )
@@ -291,6 +301,7 @@ struct NeonVisionEditorApp: App {
         Settings {
             NeonSettingsView()
                 .environmentObject(supportPurchaseManager)
+                .environmentObject(appUpdateManager)
                 .onAppear { applyGlobalAppearanceOverride() }
                 .onAppear { applyOpenInTabsPreference() }
                 .onChange(of: appearance) { _, _ in applyGlobalAppearanceOverride() }
@@ -300,6 +311,14 @@ struct NeonVisionEditorApp: App {
 
         .commands {
             CommandGroup(replacing: .appSettings) {
+                if ReleaseRuntimePolicy.isUpdaterEnabledForCurrentDistribution {
+                    Button("Check for Updates…") {
+                        postWindowCommand(.showUpdaterRequested, object: true)
+                    }
+                }
+
+                Divider()
+
                 Button("Settings…") {
                     showSettingsWindow()
                 }
@@ -544,6 +563,7 @@ struct NeonVisionEditorApp: App {
             ContentView()
                 .environmentObject(viewModel)
                 .environmentObject(supportPurchaseManager)
+                .environmentObject(appUpdateManager)
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
                 .onAppear { applyIOSAppearanceOverride() }

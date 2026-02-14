@@ -2,6 +2,8 @@ import Foundation
 import Combine
 import StoreKit
 
+///MARK: - Support Purchase Manager
+// Handles optional support purchase and entitlement state via StoreKit.
 @MainActor
 final class SupportPurchaseManager: ObservableObject {
     static let supportProductID = "h3p.neon-vision-editor.support.optional"
@@ -17,6 +19,7 @@ final class SupportPurchaseManager: ObservableObject {
     private var transactionUpdatesTask: Task<Void, Never>?
     private let bypassDefaultsKey = "SupportPurchaseBypassEnabled"
     
+    // Allows bypass in simulator/debug environments for testing purchase-gated UI.
     private func shouldAllowTestingBypass(environment: AppStore.Environment) -> Bool {
 #if targetEnvironment(simulator)
         return true
@@ -47,12 +50,14 @@ final class SupportPurchaseManager: ObservableObject {
         allowsTestingBypass
     }
 
+    // Refreshes StoreKit capability, product metadata, and entitlement state.
     func refreshStoreState() async {
         await refreshBypassEligibility()
         await refreshProducts(showStatusOnFailure: false)
         await refreshSupportEntitlement()
     }
 
+    // Enables testing bypass where allowed.
     func bypassForTesting() {
         guard canBypassInCurrentBuild else { return }
         UserDefaults.standard.set(true, forKey: bypassDefaultsKey)
@@ -60,11 +65,13 @@ final class SupportPurchaseManager: ObservableObject {
         statusMessage = "Support purchase bypass enabled for TestFlight/Sandbox testing."
     }
 
+    // Clears testing bypass and re-evaluates current entitlement.
     func clearBypassForTesting() {
         UserDefaults.standard.removeObject(forKey: bypassDefaultsKey)
         Task { await refreshSupportEntitlement() }
     }
 
+    // Loads support product metadata from App Store.
     func refreshProducts(showStatusOnFailure: Bool = true) async {
         guard canUseInAppPurchases else {
             supportProduct = nil
@@ -86,6 +93,7 @@ final class SupportPurchaseManager: ObservableObject {
         }
     }
 
+    // Starts purchase flow for the optional support product.
     func purchaseSupport() async {
         guard canUseInAppPurchases else {
             statusMessage = "In-app purchase is only available in App Store/TestFlight builds."
@@ -119,6 +127,7 @@ final class SupportPurchaseManager: ObservableObject {
         }
     }
 
+    // Triggers App Store restore flow and refreshes entitlement state.
     func restorePurchases() async {
         guard canUseInAppPurchases else {
             statusMessage = "Restore is only available in App Store/TestFlight builds."
@@ -134,6 +143,7 @@ final class SupportPurchaseManager: ObservableObject {
         }
     }
 
+    // Recomputes support entitlement from current verified transactions.
     private func refreshSupportEntitlement() async {
         if canBypassInCurrentBuild && UserDefaults.standard.bool(forKey: bypassDefaultsKey) {
             hasSupported = true
@@ -150,6 +160,7 @@ final class SupportPurchaseManager: ObservableObject {
         hasSupported = supported
     }
 
+    // Detects whether this build/environment can use in-app purchases.
     private func refreshBypassEligibility() async {
         do {
             let appTransactionResult = try await AppTransaction.shared
@@ -167,6 +178,7 @@ final class SupportPurchaseManager: ObservableObject {
         }
     }
 
+    // Listens for transaction updates and applies verified changes.
     private func observeTransactionUpdates() -> Task<Void, Never> {
         Task { [weak self] in
             guard let self else { return }
@@ -184,6 +196,7 @@ final class SupportPurchaseManager: ObservableObject {
         }
     }
 
+    // Enforces StoreKit verification before using transaction payloads.
     private func verify<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
         case .verified(let safe):
@@ -194,6 +207,7 @@ final class SupportPurchaseManager: ObservableObject {
     }
 }
 
+///MARK: - StoreKit Errors
 enum SupportPurchaseError: LocalizedError {
     case failedVerification
 

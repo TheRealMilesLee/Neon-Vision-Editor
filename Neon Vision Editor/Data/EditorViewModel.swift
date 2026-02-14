@@ -6,7 +6,10 @@ import Foundation
 import UIKit
 #endif
 
+///MARK: - Text Sanitization
+// Normalizes pasted and loaded text before it reaches editor state.
 enum EditorTextSanitizer {
+    // Converts control/marker glyphs into safe spaces/newlines and removes unsupported scalars.
     static func sanitize(_ input: String) -> String {
         // Normalize line endings first so CRLF does not become double newlines.
         let normalized = input
@@ -49,6 +52,8 @@ enum EditorTextSanitizer {
     }
 }
 
+///MARK: - Tab Model
+// Represents one editor tab and its mutable editing state.
 struct TabData: Identifiable {
     let id = UUID()
     var name: String
@@ -59,6 +64,8 @@ struct TabData: Identifiable {
     var isDirty: Bool = false
 }
 
+///MARK: - Editor View Model
+// Owns tab lifecycle, file IO, and language-detection behavior.
 @MainActor
 class EditorViewModel: ObservableObject {
     @Published var tabs: [TabData] = []
@@ -142,20 +149,23 @@ class EditorViewModel: ObservableObject {
     init() {
         addNewTab()
     }
-    
+
+    // Creates and selects a new untitled tab.
     func addNewTab() {
         // Keep language discovery active for new untitled tabs.
         let newTab = TabData(name: "Untitled \(tabs.count + 1)", content: "", language: defaultNewTabLanguage(), fileURL: nil, languageLocked: false)
         tabs.append(newTab)
         selectedTabID = newTab.id
     }
-    
+
+    // Renames an existing tab.
     func renameTab(tab: TabData, newName: String) {
         if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
             tabs[index].name = newName
         }
     }
-    
+
+    // Updates tab text and applies language detection/locking heuristics.
     func updateTabContent(tab: TabData, content: String) {
         if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
             let previous = tabs[index].content
@@ -280,14 +290,16 @@ class EditorViewModel: ObservableObject {
             }
         }
     }
-    
+
+    // Manually sets language and locks automatic switching.
     func updateTabLanguage(tab: TabData, language: String) {
         if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
             tabs[index].language = language
             tabs[index].languageLocked = true
         }
     }
-    
+
+    // Closes a tab while guaranteeing one tab remains open.
     func closeTab(tab: TabData) {
         tabs.removeAll { $0.id == tab.id }
         if tabs.isEmpty {
@@ -296,7 +308,8 @@ class EditorViewModel: ObservableObject {
             selectedTabID = tabs.first?.id
         }
     }
-    
+
+    // Saves tab content to the existing file URL or falls back to Save As.
     func saveFile(tab: TabData) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if let url = tabs[index].fileURL {
@@ -312,7 +325,8 @@ class EditorViewModel: ObservableObject {
             saveFileAs(tab: tab)
         }
     }
-    
+
+    // Saves tab content to a user-selected path on macOS.
     func saveFileAs(tab: TabData) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
 #if os(macOS)
@@ -353,7 +367,8 @@ class EditorViewModel: ObservableObject {
         debugLog("Save As is currently only available on macOS.")
 #endif
     }
-    
+
+    // Opens file-picker UI on macOS.
     func openFile() {
 #if os(macOS)
         let panel = NSOpenPanel()
@@ -372,7 +387,8 @@ class EditorViewModel: ObservableObject {
         debugLog("Open File panel is currently only available on macOS.")
 #endif
     }
-    
+
+    // Loads a file into a new tab unless the file is already open.
     func openFile(url: URL) {
         if focusTabIfOpen(for: url) { return }
         do {
@@ -402,6 +418,7 @@ class EditorViewModel: ObservableObject {
         indexOfOpenTab(for: url) != nil
     }
 
+    // Focuses an existing tab for URL if present.
     func focusTabIfOpen(for url: URL) -> Bool {
         if let existingIndex = indexOfOpenTab(for: url) {
             selectedTabID = tabs[existingIndex].id
@@ -418,6 +435,7 @@ class EditorViewModel: ObservableObject {
         }
     }
 
+    // Marks a tab clean after successful save/export and updates URL-derived metadata.
     func markTabSaved(tabID: UUID, fileURL: URL? = nil) {
         guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
         if let fileURL {
@@ -430,7 +448,8 @@ class EditorViewModel: ObservableObject {
         }
         tabs[index].isDirty = false
     }
-    
+
+    // Returns whitespace-delimited word count for status display.
     func wordCount(for text: String) -> Int {
         text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }.count
@@ -442,6 +461,7 @@ class EditorViewModel: ObservableObject {
 #endif
     }
 
+    // Reads user preference for default language of newly created tabs.
     private func defaultNewTabLanguage() -> String {
         let stored = UserDefaults.standard.string(forKey: "SettingsDefaultNewFileLanguage") ?? "plain"
         let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
