@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.13**
+> Latest release: **v0.4.14**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.13**
+- Latest release: **v0.4.14**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,14 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.14 (summary)
+
+- Added centralized theme canonicalization with an explicit `Custom` option in settings so legacy/case-variant values resolve consistently across launches.
+- Added a fallback GitHub Releases URL path in the updater dialog so `View Releases` always opens, even when no latest-release payload is cached.
+- Added keychain-state restore/cleanup steps to notarized release workflows (and workflow templates) to prevent user keychain list/default/login mutations after signing jobs.
+- Improved macOS translucent-window rendering by enforcing unified toolbar style and full-size content behavior when translucency is enabled.
+- Improved cross-platform theme application so iOS/macOS editor text + syntax colors respect the selected settings theme in both translucent and non-translucent modes.
+
 ### v0.4.13 (summary)
 
 - Added `scripts/run_selfhosted_notarized_release.sh` helper to trigger/watch the self-hosted notarized release workflow and verify uploaded assets.
@@ -136,14 +144,6 @@ If macOS blocks first launch:
 - Hosted notarized release workflow now enforces Xcode 17+ to preserve the Tahoe light/dark `AppIcon.icon` pipeline.
 - Release asset verification now runs in strict iconstack mode to ensure published assets contain `AppIcon.iconstack`.
 - Removed Xcode 16 fallback icon-copy path that could produce Sequoia/non-light-dark icon payloads in release assets.
-
-### v0.4.11 (summary)
-
-- ExpressionEngine language support in the editor language set.
-- Plain text drag-and-drop support so dropped string content opens correctly in the editor.
-- Release/docs metadata with TestFlight beta link surfaced in project documentation and download guidance.
-- Release pipeline compatibility for hosted environments with Xcode 16 fallback handling.
-- Notarized release publishing now hard-fails when icon payload validation fails, preventing bad assets from being published.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -164,12 +164,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.13`
+- Tag: `v0.4.14`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.13
+git rev-parse --verify v0.4.14
 ```
 
 - Verify downloaded artifact checksum locally:

@@ -2173,13 +2173,14 @@ struct CustomTextEditor: UIViewRepresentable {
     func makeUIView(context: Context) -> LineNumberedTextViewContainer {
         let container = LineNumberedTextViewContainer()
         let textView = container.textView
+        let theme = currentEditorTheme(colorScheme: colorScheme)
 
         textView.delegate = context.coordinator
         let initialFont = resolvedUIFont()
         textView.font = initialFont
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineHeightMultiple = max(0.9, lineHeightMultiple)
-        let baseColor: UIColor = colorScheme == .dark ? .white : .label
+        let baseColor = UIColor(theme.text)
         var typing = textView.typingAttributes
         typing[.paragraphStyle] = paragraphStyle
         typing[.foregroundColor] = baseColor
@@ -2335,7 +2336,8 @@ struct CustomTextEditor: UIViewRepresentable {
         private func rehighlight(text: String, language: String, colorScheme: ColorScheme, token: Int, generation: Int) {
             let nsText = text as NSString
             let fullRange = NSRange(location: 0, length: nsText.length)
-            let baseColor: UIColor = colorScheme == .dark ? .white : .label
+            let theme = currentEditorTheme(colorScheme: colorScheme)
+            let baseColor = UIColor(theme.text)
             let baseFont: UIFont
             if parent.useSystemFont {
                 baseFont = UIFont.systemFont(ofSize: parent.fontSize)
@@ -2353,7 +2355,21 @@ struct CustomTextEditor: UIViewRepresentable {
                 ]
             )
 
-            let colors = SyntaxColors.fromVibrantLightTheme(colorScheme: colorScheme)
+            let colors = SyntaxColors(
+                keyword: theme.syntax.keyword,
+                string: theme.syntax.string,
+                number: theme.syntax.number,
+                comment: theme.syntax.comment,
+                attribute: theme.syntax.attribute,
+                variable: theme.syntax.variable,
+                def: theme.syntax.def,
+                property: theme.syntax.property,
+                meta: theme.syntax.meta,
+                tag: theme.syntax.tag,
+                atom: theme.syntax.atom,
+                builtin: theme.syntax.builtin,
+                type: theme.syntax.type
+            )
             let patterns = getSyntaxPatterns(for: language, colors: colors)
 
             for (pattern, color) in patterns {

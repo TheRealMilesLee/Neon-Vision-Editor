@@ -311,8 +311,12 @@ final class AppUpdateManager: ObservableObject {
     }
 
     func openReleasePage() {
-        guard let release = latestRelease else { return }
-        openURL(release.releaseURL)
+        if let release = latestRelease {
+            openURL(release.releaseURL)
+            return
+        }
+        guard let url = URL(string: "https://github.com/\(owner)/\(repo)/releases") else { return }
+        openURL(url)
     }
 
     func clearInstallMessage() {

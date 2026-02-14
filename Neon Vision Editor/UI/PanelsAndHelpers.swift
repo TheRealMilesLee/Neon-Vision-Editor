@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.12:",
+            subtitle: "Major changes since v0.4.13:",
             bullets: [
-                "Added `scripts/run_selfhosted_notarized_release.sh` helper to trigger/watch the self-hosted notarized release workflow and verify uploaded assets.",
-                "Hardened updater repository-source validation to accept both `github.com/{owner}/{repo}` and GitHub REST API paths (`api.github.com/repos/{owner}/{repo}`).",
-                "Improved updater behavior in local Xcode/DerivedData runs by disabling automatic install/relaunch in development runtime.",
-                "Fixed update dialog failures caused by over-strict GitHub release-source path validation."
+                "Added centralized theme canonicalization with an explicit `Custom` option in settings so legacy/case-variant values resolve consistently across launches.",
+                "Added a fallback GitHub Releases URL path in the updater dialog so `View Releases` always opens, even when no latest-release payload is cached.",
+                "Added keychain-state restore/cleanup steps to notarized release workflows (and workflow templates) to prevent user keychain list/default/login mutations after signing jobs.",
+                "Improved macOS translucent-window rendering by enforcing unified toolbar style and full-size content behavior when translucency is enabled."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

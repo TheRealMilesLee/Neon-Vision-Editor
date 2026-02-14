@@ -62,13 +62,25 @@ jobs:
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          ORIGINAL_LIST="$RUNNER_TEMP/original-user-keychains.txt"
+          ORIGINAL_DEFAULT="$RUNNER_TEMP/original-default-keychain.txt"
+          ORIGINAL_LOGIN="$RUNNER_TEMP/original-login-keychain.txt"
 
           echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+
+          security list-keychains -d user > "$ORIGINAL_LIST" || true
+          security default-keychain -d user > "$ORIGINAL_DEFAULT" || true
+          security login-keychain -d user > "$ORIGINAL_LOGIN" || true
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security import cert.p12 -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -d user -s "$KEYCHAIN"
+          mapfile -t EXISTING_KEYCHAINS < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' | awk 'NF')
+          if (( ${#EXISTING_KEYCHAINS[@]} > 0 )); then
+            security list-keychains -d user -s "$KEYCHAIN" "${EXISTING_KEYCHAINS[@]}"
+          else
+            security list-keychains -d user -s "$KEYCHAIN"
+          fi
 
       - name: Build archive
         env:
@@ -231,3 +243,36 @@ jobs:
           gh api repos/h3pdesign/homebrew-tap/dispatches \
             -f event_type=notarized_release \
             -f client_payload[tag]="$TAG_NAME"
+
+      - name: Restore user keychain state
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          ORIGINAL_LIST="$RUNNER_TEMP/original-user-keychains.txt"
+          ORIGINAL_DEFAULT="$RUNNER_TEMP/original-default-keychain.txt"
+          ORIGINAL_LOGIN="$RUNNER_TEMP/original-login-keychain.txt"
+
+          if [[ -f "$ORIGINAL_LIST" ]]; then
+            mapfile -t RESTORE_LIST < <(sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' "$ORIGINAL_LIST" | awk 'NF')
+            if (( ${#RESTORE_LIST[@]} > 0 )); then
+              security list-keychains -d user -s "${RESTORE_LIST[@]}" || true
+            fi
+          fi
+
+          if [[ -f "$ORIGINAL_DEFAULT" ]]; then
+            DEFAULT_KEYCHAIN="$(sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' "$ORIGINAL_DEFAULT" | head -n1)"
+            if [[ -n "${DEFAULT_KEYCHAIN:-}" ]]; then
+              security default-keychain -d user -s "$DEFAULT_KEYCHAIN" || true
+            fi
+          fi
+
+          if [[ -f "$ORIGINAL_LOGIN" ]]; then
+            LOGIN_KEYCHAIN="$(sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' "$ORIGINAL_LOGIN" | head -n1)"
+            if [[ -n "${LOGIN_KEYCHAIN:-}" ]]; then
+              security login-keychain -d user -s "$LOGIN_KEYCHAIN" || true
+            fi
+          fi
+
+          security delete-keychain "$KEYCHAIN" || true
+          rm -f cert.p12

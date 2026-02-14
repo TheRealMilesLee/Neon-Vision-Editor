@@ -75,20 +75,7 @@ struct NeonSettingsView: View {
 #endif
     }
 
-    private let themes: [String] = [
-        "Neon Glow",
-        "Arc",
-        "Dusk",
-        "Aurora",
-        "Horizon",
-        "Midnight",
-        "Mono",
-        "Paper",
-        "Solar",
-        "Pulse",
-        "Mocha",
-        "Custom"
-    ]
+    private let themes: [String] = editorThemeNames
 
     private let templateLanguages: [String] = [
         "swift", "python", "javascript", "typescript", "php", "java", "kotlin", "go", "ruby", "rust",
@@ -175,6 +162,7 @@ struct NeonSettingsView: View {
         .preferredColorScheme(preferredColorSchemeOverride)
         .onAppear {
             settingsActiveTab = "general"
+            selectedTheme = canonicalThemeName(selectedTheme)
             loadAvailableEditorFontsIfNeeded()
             if supportPurchaseManager.supportProduct == nil {
                 Task { await supportPurchaseManager.refreshStoreState() }
@@ -224,6 +212,12 @@ struct NeonSettingsView: View {
         .onChange(of: settingsActiveTab) { _, newValue in
             if newValue == "ai" {
                 loadAPITokensIfNeeded()
+            }
+        }
+        .onChange(of: selectedTheme) { _, newValue in
+            let canonical = canonicalThemeName(newValue)
+            if canonical != newValue {
+                selectedTheme = canonical
             }
         }
         .confirmationDialog("Support Neon Vision Editor", isPresented: $showSupportPurchaseDialog, titleVisibility: .visible) {

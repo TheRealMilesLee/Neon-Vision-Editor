@@ -566,6 +566,7 @@ struct NeonVisionEditorApp: App {
                 .environmentObject(appUpdateManager)
                 .environment(\.showGrokError, $showGrokError)
                 .environment(\.grokErrorMessage, $grokErrorMessage)
+                .tint(.blue)
                 .onAppear { applyIOSAppearanceOverride() }
                 .onChange(of: appearance) { _, _ in applyIOSAppearanceOverride() }
                 .preferredColorScheme(preferredAppearance)

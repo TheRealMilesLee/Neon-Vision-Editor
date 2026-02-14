@@ -44,9 +44,44 @@ struct ThemePaletteColors {
     let builtin: Color
 }
 
+///MARK: Theme Name Canonicalization
+
+// Canonical theme names shown in settings and used for palette lookup.
+let editorThemeNames: [String] = [
+    "Neon Glow",
+    "Arc",
+    "Dusk",
+    "Aurora",
+    "Horizon",
+    "Midnight",
+    "Mono",
+    "Paper",
+    "Solar",
+    "Pulse",
+    "Mocha",
+    "Custom"
+]
+
+// Normalize persisted theme values so legacy/case variants still resolve correctly.
+func canonicalThemeName(_ rawName: String) -> String {
+    let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "Neon Glow" }
+
+    if let exact = editorThemeNames.first(where: { $0 == trimmed }) {
+        return exact
+    }
+
+    if let caseInsensitive = editorThemeNames.first(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+        return caseInsensitive
+    }
+
+    return "Neon Glow"
+}
+
 private func paletteForThemeName(_ name: String, defaults: UserDefaults) -> ThemePalette {
+    let canonicalName = canonicalThemeName(name)
     let palette: ThemePalette = {
-        switch name {
+        switch canonicalName {
         case "Neon Glow":
             return ThemePalette(
                 text: Color(red: 0.93, green: 0.95, blue: 0.98),
@@ -243,7 +278,7 @@ private func paletteForThemeName(_ name: String, defaults: UserDefaults) -> Them
 }
 
 func themePaletteColors(for name: String, defaults: UserDefaults = .standard) -> ThemePaletteColors {
-    let palette = paletteForThemeName(name, defaults: defaults)
+    let palette = paletteForThemeName(canonicalThemeName(name), defaults: defaults)
     return ThemePaletteColors(
         text: palette.text,
         background: palette.background,
@@ -261,14 +296,8 @@ func themePaletteColors(for name: String, defaults: UserDefaults = .standard) ->
 
 func currentEditorTheme(colorScheme: ColorScheme) -> EditorTheme {
     let defaults = UserDefaults.standard
-    let requested = defaults.string(forKey: "SettingsThemeName") ?? "Neon Glow"
-    // In light mode, default to a light palette unless the user explicitly chose Custom.
-    let name: String = {
-        if colorScheme == .light {
-            return requested == "Custom" ? requested : "Paper"
-        }
-        return requested
-    }()
+    // Always respect the user's selected theme across iOS and macOS.
+    let name = canonicalThemeName(defaults.string(forKey: "SettingsThemeName") ?? "Neon Glow")
     let palette = paletteForThemeName(name, defaults: defaults)
 
     let syntax = SyntaxColors(

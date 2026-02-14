@@ -4,6 +4,23 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.14] - 2026-02-14
+
+### Added
+- Added centralized theme canonicalization with an explicit `Custom` option in settings so legacy/case-variant values resolve consistently across launches.
+- Added a fallback GitHub Releases URL path in the updater dialog so `View Releases` always opens, even when no latest-release payload is cached.
+- Added keychain-state restore/cleanup steps to notarized release workflows (and workflow templates) to prevent user keychain list/default/login mutations after signing jobs.
+
+### Improved
+- Improved macOS translucent-window rendering by enforcing unified toolbar style and full-size content behavior when translucency is enabled.
+- Improved cross-platform theme application so iOS/macOS editor text + syntax colors respect the selected settings theme in both translucent and non-translucent modes.
+- Improved iOS settings/action tint parity to use blue accent coloring consistent with macOS.
+
+### Fixed
+- Fixed updater release-source validation regression that could block manual update checks in local/Xcode runs.
+- Fixed toolbar/titlebar visual mismatch where toolbar areas rendered too opaque/white when translucency was enabled.
+- Fixed settings theme-selection drift by normalizing persisted theme values and applying canonical names on read/write.
+
 ## [v0.4.13] - 2026-02-14
 
 ### Added

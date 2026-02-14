@@ -87,7 +87,7 @@ struct ContentView: View {
     // Debounce handle for inline completion
     @State var lastCompletionWorkItem: DispatchWorkItem?
     @State private var isApplyingCompletion: Bool = false
-    @State var enableTranslucentWindow: Bool = UserDefaults.standard.bool(forKey: "EnableTranslucentWindow")
+    @AppStorage("EnableTranslucentWindow") var enableTranslucentWindow: Bool = false
 
     @State var showFindReplace: Bool = false
     @State var showSettingsSheet: Bool = false
@@ -1910,7 +1910,8 @@ struct ContentView: View {
             }
         }
 #if os(macOS)
-        .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: ToolbarPlacement.windowToolbar)
+        .toolbarBackground(AnyShapeStyle(Color(nsColor: .windowBackgroundColor)), for: ToolbarPlacement.windowToolbar)
+        .toolbarBackgroundVisibility(enableTranslucentWindow ? .hidden : .visible, for: ToolbarPlacement.windowToolbar)
 #else
         .toolbarBackground(enableTranslucentWindow ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.systemBackground)), for: ToolbarPlacement.navigationBar)
 #endif
