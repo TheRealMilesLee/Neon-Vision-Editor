@@ -112,7 +112,10 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security import cert.p12 -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          mapfile -t EXISTING_KEYCHAINS < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' | awk 'NF')
+          EXISTING_KEYCHAINS=()
+          while IFS= read -r keychain_path; do
+            [[ -n "$keychain_path" ]] && EXISTING_KEYCHAINS+=("$keychain_path")
+          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' | awk 'NF')
           if (( ${#EXISTING_KEYCHAINS[@]} > 0 )); then
             security list-keychains -d user -s "$KEYCHAIN" "${EXISTING_KEYCHAINS[@]}"
           else
@@ -291,7 +294,10 @@ jobs:
           ORIGINAL_LOGIN="$RUNNER_TEMP/original-login-keychain.txt"
 
           if [[ -f "$ORIGINAL_LIST" ]]; then
-            mapfile -t RESTORE_LIST < <(sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' "$ORIGINAL_LIST" | awk 'NF')
+            RESTORE_LIST=()
+            while IFS= read -r keychain_path; do
+              [[ -n "$keychain_path" ]] && RESTORE_LIST+=("$keychain_path")
+            done < <(sed -E 's/^[[:space:]]*"?(.*)"?[[:space:]]*$/\1/' "$ORIGINAL_LIST" | awk 'NF')
             if (( ${#RESTORE_LIST[@]} > 0 )); then
               security list-keychains -d user -s "${RESTORE_LIST[@]}" || true
             fi
