@@ -36,49 +36,23 @@ jobs:
           git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
           git checkout FETCH_HEAD
 
-      - name: Select Xcode (prefer 17+, fallback to hosted default)
+      - name: Select Xcode 17+ (required for Tahoe AppIcon.icon)
         id: xcode_mode
         run: |
           set -euo pipefail
           if [[ -x scripts/ci/select_xcode17.sh ]]; then
-            if scripts/ci/select_xcode17.sh; then
-              echo "Using Xcode 17+."
-            else
-              echo "Xcode 17+ is unavailable on this GitHub-hosted runner; continuing with hosted default toolchain." >&2
-            fi
+            scripts/ci/select_xcode17.sh
           else
-            echo "No Xcode selector script in tag; continuing with hosted default toolchain."
+            echo "Missing scripts/ci/select_xcode17.sh in tag; cannot guarantee Tahoe AppIcon.icon output." >&2
+            exit 1
           fi
           xcodebuild -version
           XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2,v,"."); print v[1]}' | head -n1)"
-          if [[ -z "${XCODE_MAJOR}" ]]; then
-            echo "Could not determine Xcode major version." >&2
+          if [[ -z "${XCODE_MAJOR}" || "${XCODE_MAJOR}" -lt 17 ]]; then
+            echo "Xcode 17+ is required for notarized release to preserve Tahoe AppIcon.icon." >&2
             exit 1
           fi
-          if (( XCODE_MAJOR >= 17 )); then
-            echo "require_iconstack=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "require_iconstack=0" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Prepare AppIcon fallback for hosted Xcode 16
-        run: |
-          set -euo pipefail
-          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/ {split($2,v,"."); print v[1]}' | head -n1)"
-          if [[ -z "${XCODE_MAJOR}" ]]; then
-            echo "Could not determine Xcode major version." >&2
-            exit 1
-          fi
-
-          APPICONSET_DIR="Neon Vision Editor/Resources/Assets.xcassets/AppIcon.appiconset"
-          IOS_ICONSET_DIR="Neon Vision Editor/Resources/Assets.xcassets/AppIcon-iOS.appiconset"
-
-          if (( XCODE_MAJOR < 17 )); then
-            if [[ ! -d "$APPICONSET_DIR" && -d "$IOS_ICONSET_DIR" ]]; then
-              echo "Xcode ${XCODE_MAJOR} detected. Creating AppIcon fallback from AppIcon-iOS.appiconset."
-              cp -R "$IOS_ICONSET_DIR" "$APPICONSET_DIR"
-            fi
-          fi
+          echo "require_iconstack=1" >> "$GITHUB_OUTPUT"
 
       - name: Import signing certificate
         env:

@@ -6,10 +6,11 @@ usage() {
 Run end-to-end release flow in one command.
 
 Usage:
-  scripts/release_all.sh <tag> [--date YYYY-MM-DD] [--skip-notarized] [--self-hosted] [--github-hosted] [--enterprise-selfhosted] [--dry-run]
+  scripts/release_all.sh <tag> [notarized] [--date YYYY-MM-DD] [--skip-notarized] [--self-hosted] [--github-hosted] [--enterprise-selfhosted] [--dry-run]
 
 Examples:
   scripts/release_all.sh v0.4.9
+  scripts/release_all.sh v0.4.9 notarized
   scripts/release_all.sh 0.4.9 --date 2026-02-12
   scripts/release_all.sh v0.4.9 --self-hosted
   scripts/release_all.sh v0.4.9 --enterprise-selfhosted
@@ -49,6 +50,9 @@ DRY_RUN=0
 
 while [[ "${1:-}" != "" ]]; do
   case "$1" in
+    notarized|--notarized)
+      TRIGGER_NOTARIZED=1
+      ;;
     --date)
       shift
       if [[ -z "${1:-}" ]]; then
