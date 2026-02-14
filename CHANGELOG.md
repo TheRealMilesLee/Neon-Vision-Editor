@@ -4,6 +4,18 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.12] - 2026-02-14
+
+### Added
+- `scripts/release_all.sh` now accepts `notarized` as a positional alias, so `scripts/release_all.sh v0.4.12 notarized` works directly.
+
+### Improved
+- Hosted notarized release workflow now enforces Xcode 17+ to preserve the Tahoe light/dark `AppIcon.icon` pipeline.
+- Release asset verification now runs in strict iconstack mode to ensure published assets contain `AppIcon.iconstack`.
+
+### Fixed
+- Removed Xcode 16 fallback icon-copy path that could produce Sequoia/non-light-dark icon payloads in release assets.
+
 ## [v0.4.11] - 2026-02-13
 
 ### Added

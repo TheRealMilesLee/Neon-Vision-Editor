@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.10:",
+            subtitle: "Major changes since v0.4.11:",
             bullets: [
-                "ExpressionEngine language support in the editor language set.",
-                "Plain text drag-and-drop support so dropped string content opens correctly in the editor.",
-                "Release/docs metadata with TestFlight beta link surfaced in project documentation and download guidance.",
-                "Release pipeline compatibility for hosted environments with Xcode 16 fallback handling."
+                "`scripts/release_all.sh` now accepts `notarized` as a positional alias, so `scripts/release_all.sh v0.4.12 notarized` works directly.",
+                "Hosted notarized release workflow now enforces Xcode 17+ to preserve the Tahoe light/dark `AppIcon.icon` pipeline.",
+                "Release asset verification now runs in strict iconstack mode to ensure published assets contain `AppIcon.iconstack`.",
+                "Removed Xcode 16 fallback icon-copy path that could produce Sequoia/non-light-dark icon payloads in release assets."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],

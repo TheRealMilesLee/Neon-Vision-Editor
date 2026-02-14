@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.11**
+> Latest release: **v0.4.12**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.11**
+- Latest release: **v0.4.12**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,13 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.12 (summary)
+
+- `scripts/release_all.sh` now accepts `notarized` as a positional alias, so `scripts/release_all.sh v0.4.12 notarized` works directly.
+- Hosted notarized release workflow now enforces Xcode 17+ to preserve the Tahoe light/dark `AppIcon.icon` pipeline.
+- Release asset verification now runs in strict iconstack mode to ensure published assets contain `AppIcon.iconstack`.
+- Removed Xcode 16 fallback icon-copy path that could produce Sequoia/non-light-dark icon payloads in release assets.
+
 ### v0.4.11 (summary)
 
 - ExpressionEngine language support in the editor language set.
@@ -136,14 +143,6 @@ If macOS blocks first launch:
 - Hosted notarized workflow now allows an explicit Xcode 16+ fallback path when Xcode 17 is unavailable on GitHub-hosted runners.
 - Settings window responsiveness on macOS by deferring/caching editor font list loading.
 - Reduced settings-open latency by removing forced full-window redraw calls during appearance application.
-
-### v0.4.9 (summary)
-
-- Pre-release CI workflow on `main`/PR with critical runtime checks, docs validation, and icon payload verification.
-- Release dry-run workflow and local `scripts/release_dry_run.sh` command for pre-tag validation.
-- Release runtime policy test suite (`ReleaseRuntimePolicyTests`) covering settings-tab routing, theme mapping, find-next cursor behavior, and subscription button state logic.
-- Unified release automation in `scripts/release_all.sh` to run preflight checks before tagging and to verify uploaded release assets after notarized publish.
-- README changelog summary automation now keeps release summaries version-sorted and limited to the latest three entries.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -164,12 +163,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.11`
+- Tag: `v0.4.12`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.11
+git rev-parse --verify v0.4.12
 ```
 
 - Verify downloaded artifact checksum locally:
