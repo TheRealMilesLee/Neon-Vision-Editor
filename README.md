@@ -142,13 +142,6 @@ If macOS blocks first launch:
 - Fixed update dialog failures caused by over-strict GitHub release-source path validation.
 - Fixed startup reliability by removing eager Keychain token reads/migration on launch paths and treating missing-keychain datastore statuses as non-fatal token-missing cases.
 
-### v0.4.12 (summary)
-
-- `scripts/release_all.sh` now accepts `notarized` as a positional alias, so `scripts/release_all.sh v0.4.12 notarized` works directly.
-- Hosted notarized release workflow now enforces Xcode 17+ to preserve the Tahoe light/dark `AppIcon.icon` pipeline.
-- Release asset verification now runs in strict iconstack mode to ensure published assets contain `AppIcon.iconstack`.
-- Removed Xcode 16 fallback icon-copy path that could produce Sequoia/non-light-dark icon payloads in release assets.
-
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Known Limitations
