@@ -220,12 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.11:",
+            subtitle: "Major changes since v0.4.12:",
             bullets: [
-                "`scripts/release_all.sh` now accepts `notarized` as a positional alias, so `scripts/release_all.sh v0.4.12 notarized` works directly.",
-                "Hosted notarized release workflow now enforces Xcode 17+ to preserve the Tahoe light/dark `AppIcon.icon` pipeline.",
-                "Release asset verification now runs in strict iconstack mode to ensure published assets contain `AppIcon.iconstack`.",
-                "Removed Xcode 16 fallback icon-copy path that could produce Sequoia/non-light-dark icon payloads in release assets."
+                "Added `scripts/run_selfhosted_notarized_release.sh` helper to trigger/watch the self-hosted notarized release workflow and verify uploaded assets.",
+                "Hardened updater repository-source validation to accept both `github.com/{owner}/{repo}` and GitHub REST API paths (`api.github.com/repos/{owner}/{repo}`).",
+                "Improved updater behavior in local Xcode/DerivedData runs by disabling automatic install/relaunch in development runtime.",
+                "Fixed update dialog failures caused by over-strict GitHub release-source path validation."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],
@@ -572,6 +572,7 @@ extension Notification.Name {
     static let zoomEditorFontRequested = Notification.Name("zoomEditorFontRequested")
     static let inspectWhitespaceScalarsRequested = Notification.Name("inspectWhitespaceScalarsRequested")
     static let whitespaceScalarInspectionResult = Notification.Name("whitespaceScalarInspectionResult")
+    static let showUpdaterRequested = Notification.Name("showUpdaterRequested")
 }
 
 extension NSRange {
@@ -583,6 +584,7 @@ enum EditorCommandUserInfo {
     static let inspectionMessage = "inspectionMessage"
     static let rangeLocation = "rangeLocation"
     static let rangeLength = "rangeLength"
+    static let updaterCheckNow = "updaterCheckNow"
 }
 
 #if os(macOS)

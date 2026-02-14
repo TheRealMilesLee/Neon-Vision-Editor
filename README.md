@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.12**
+> Latest release: **v0.4.13**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.12**
+- Latest release: **v0.4.13**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,14 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.13 (summary)
+
+- Added `scripts/run_selfhosted_notarized_release.sh` helper to trigger/watch the self-hosted notarized release workflow and verify uploaded assets.
+- Hardened updater repository-source validation to accept both `github.com/{owner}/{repo}` and GitHub REST API paths (`api.github.com/repos/{owner}/{repo}`).
+- Improved updater behavior in local Xcode/DerivedData runs by disabling automatic install/relaunch in development runtime.
+- Fixed update dialog failures caused by over-strict GitHub release-source path validation.
+- Fixed startup reliability by removing eager Keychain token reads/migration on launch paths and treating missing-keychain datastore statuses as non-fatal token-missing cases.
+
 ### v0.4.12 (summary)
 
 - `scripts/release_all.sh` now accepts `notarized` as a positional alias, so `scripts/release_all.sh v0.4.12 notarized` works directly.
@@ -136,13 +144,6 @@ If macOS blocks first launch:
 - Release/docs metadata with TestFlight beta link surfaced in project documentation and download guidance.
 - Release pipeline compatibility for hosted environments with Xcode 16 fallback handling.
 - Notarized release publishing now hard-fails when icon payload validation fails, preventing bad assets from being published.
-
-### v0.4.10 (summary)
-
-- Release gate in `scripts/release_all.sh` now waits for a successful `Pre-release CI` run on the pushed commit before triggering notarization.
-- Hosted notarized workflow now allows an explicit Xcode 16+ fallback path when Xcode 17 is unavailable on GitHub-hosted runners.
-- Settings window responsiveness on macOS by deferring/caching editor font list loading.
-- Reduced settings-open latency by removing forced full-window redraw calls during appearance application.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -163,12 +164,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.12`
+- Tag: `v0.4.13`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.12
+git rev-parse --verify v0.4.13
 ```
 
 - Verify downloaded artifact checksum locally:

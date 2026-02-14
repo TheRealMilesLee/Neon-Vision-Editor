@@ -4,6 +4,20 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.13] - 2026-02-14
+
+### Added
+- Added `scripts/run_selfhosted_notarized_release.sh` helper to trigger/watch the self-hosted notarized release workflow and verify uploaded assets.
+
+### Improved
+- Hardened updater repository-source validation to accept both `github.com/{owner}/{repo}` and GitHub REST API paths (`api.github.com/repos/{owner}/{repo}`).
+- Improved updater behavior in local Xcode/DerivedData runs by disabling automatic install/relaunch in development runtime.
+
+### Fixed
+- Fixed update dialog failures caused by over-strict GitHub release-source path validation.
+- Fixed startup reliability by removing eager Keychain token reads/migration on launch paths and treating missing-keychain datastore statuses as non-fatal token-missing cases.
+- Fixed local debug key handling by using `UserDefaults` fallback in `DEBUG` builds to avoid blocking `SecItemCopyMatching` behavior during local runs.
+
 ## [v0.4.12] - 2026-02-14
 
 ### Added
