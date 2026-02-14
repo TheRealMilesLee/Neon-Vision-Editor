@@ -46,7 +46,7 @@ jobs:
           else
             git remote add origin "$REMOTE_URL"
           fi
-          git fetch --depth=1 origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          git fetch --force --depth=1 origin "+refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
           git fetch --depth=1 origin "refs/heads/main:refs/remotes/origin/main"
           TAG_SHA="$(git rev-list -n1 "refs/tags/${TAG_NAME}")"
           MAIN_SHA="$(git rev-list -n1 "refs/remotes/origin/main")"
