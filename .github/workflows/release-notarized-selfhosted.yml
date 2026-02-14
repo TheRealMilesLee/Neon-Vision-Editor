@@ -76,6 +76,12 @@ jobs:
           git fetch --depth=1 origin "refs/tags/${TAG_NAME}"
           git checkout FETCH_HEAD
 
+      - name: Normalize shell script line endings
+        run: |
+          set -euo pipefail
+          find scripts -type f -name "*.sh" -exec perl -pi -e 's/\r$//' {} +
+          chmod +x scripts/ci/select_xcode17.sh
+
       - name: Select/verify Xcode 17+
         run: |
           set -euo pipefail
@@ -83,7 +89,7 @@ jobs:
             echo "Missing scripts/ci/select_xcode17.sh in checked-out tag. Production notarized release requires Xcode 17+ selection." >&2
             exit 1
           fi
-          scripts/ci/select_xcode17.sh
+          bash scripts/ci/select_xcode17.sh
 
       - name: Import signing certificate
         env:
