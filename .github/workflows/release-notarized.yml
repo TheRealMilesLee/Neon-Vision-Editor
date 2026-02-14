@@ -19,7 +19,8 @@ jobs:
     concurrency:
       group: release-${{ inputs.tag }}
       cancel-in-progress: true
-    runs-on: macos-15
+    # Force Tahoe image to preserve AppIcon.icon/AppIcon.iconstack output in release assets.
+    runs-on: macos-26
 
     steps:
       - name: Checkout tag
