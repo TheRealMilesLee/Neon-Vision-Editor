@@ -299,6 +299,10 @@ func currentEditorTheme(colorScheme: ColorScheme) -> EditorTheme {
     // Always respect the user's selected theme across iOS and macOS.
     let name = canonicalThemeName(defaults.string(forKey: "SettingsThemeName") ?? "Neon Glow")
     let palette = paletteForThemeName(name, defaults: defaults)
+    // Keep base editor text legible and consistent across all themes.
+    let baseTextColor: Color = (colorScheme == .light)
+        ? .black
+        : Color(red: 0.90, green: 0.90, blue: 0.90)
 
     let syntax = SyntaxColors(
         keyword: palette.keyword,
@@ -317,7 +321,7 @@ func currentEditorTheme(colorScheme: ColorScheme) -> EditorTheme {
     )
 
     return EditorTheme(
-        text: palette.text,
+        text: baseTextColor,
         background: palette.background,
         cursor: palette.cursor,
         selection: palette.selection,

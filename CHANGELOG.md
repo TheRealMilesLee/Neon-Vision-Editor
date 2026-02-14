@@ -4,6 +4,21 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.16] - 2026-02-14
+
+### Added
+- Added a release-doc synchronization gate to `release_all.sh` via `prepare_release_docs.py --check` so releases fail fast when docs are stale.
+- Added a delegate-based updater download service that reports live progress into the update dialog.
+
+### Improved
+- Improved updater install flow to stay user-driven/manual after verification, with Finder handoff instead of in-place app replacement.
+- Improved editor appearance switching so base text colors are enforced immediately on light/dark mode changes across macOS and iOS.
+
+### Fixed
+- Fixed light-mode editor base text color to consistently use dark text across themes.
+- Fixed dark-mode editor base text color to consistently use light text across themes.
+- Fixed updater dialog post-download actions to show manual install choices (`Show in Finder`/`View Releases`) with accurate progress and phase updates.
+
 ## [v0.4.15] - 2026-02-14
 
 ### Fixed

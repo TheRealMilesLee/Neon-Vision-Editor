@@ -112,6 +112,7 @@ final class AppUpdateManager: ObservableObject {
     @Published private(set) var installProgress: Double = 0
     @Published private(set) var installPhase: String = ""
     @Published private(set) var awaitingInstallCompletionAction: Bool = false
+    @Published private(set) var preparedUpdateAppURL: URL?
     @Published private(set) var lastCheckResultSummary: String = "Never checked"
 
     private let owner: String
@@ -119,6 +120,7 @@ final class AppUpdateManager: ObservableObject {
     private let defaults: UserDefaults
     private let session: URLSession
     private let appLaunchDate: Date
+    private let downloadService = ReleaseAssetDownloadService()
     private var automaticTask: Task<Void, Never>?
     private var pendingAutomaticPrompt: Bool = false
 
@@ -246,19 +248,9 @@ final class AppUpdateManager: ObservableObject {
 
                 if source == .automatic,
                    shouldAutoPrompt(for: release.version) {
-                    if autoDownloadEnabled {
-                        if Self.isDevelopmentRuntime {
-                            // Avoid relaunch loops while running from Xcode/DerivedData.
-                            pendingAutomaticPrompt = true
-                            automaticPromptToken &+= 1
-                            installMessage = "Automatic install is disabled while running from Xcode/DerivedData."
-                        } else {
-                            await attemptAutoInstall(interactive: false)
-                        }
-                    } else {
-                        pendingAutomaticPrompt = true
-                        automaticPromptToken &+= 1
-                    }
+                    // Keep install user-driven to avoid replacing app bundles in background.
+                    pendingAutomaticPrompt = true
+                    automaticPromptToken &+= 1
                 }
             } else {
                 latestRelease = nil
@@ -327,6 +319,7 @@ final class AppUpdateManager: ObservableObject {
         installProgress = 0
         installPhase = ""
         awaitingInstallCompletionAction = false
+        preparedUpdateAppURL = nil
     }
 
     func installUpdateNow() async {
@@ -341,17 +334,29 @@ final class AppUpdateManager: ObservableObject {
         await attemptAutoInstall(interactive: true)
     }
 
+    func revealPreparedUpdateInFinder() {
+#if os(macOS)
+        guard let preparedUpdateAppURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([preparedUpdateAppURL])
+        installMessage = "Replace the app in Applications with the downloaded app, then relaunch."
+#else
+        installMessage = "Manual install handoff is supported on macOS only."
+#endif
+    }
+
+    func dismissPreparedUpdatePrompt() {
+        awaitingInstallCompletionAction = false
+    }
+
     func completeInstalledUpdate(restart: Bool) {
 #if os(macOS)
-        guard awaitingInstallCompletionAction else { return }
-        let currentApp = Bundle.main.bundleURL.standardizedFileURL
-        if restart {
-            installMessage = "Restarting app…"
-            NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
-        } else {
-            installMessage = "Closing app to finish update…"
+        if awaitingInstallCompletionAction {
+            revealPreparedUpdateInFinder()
+            return
         }
-        awaitingInstallCompletionAction = false
+        guard restart else { return }
+        let currentApp = Bundle.main.bundleURL.standardizedFileURL
+        NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
         NSApp.terminate(nil)
 #else
         installMessage = "Automatic install is supported on macOS only."
@@ -535,7 +540,13 @@ final class AppUpdateManager: ObservableObject {
             let expectedHash = try Self.extractSHA256(from: release.notes, preferredAssetName: assetName)
             installProgress = 0.12
             installPhase = "Downloading release asset…"
-            let (tmpURL, response) = try await session.download(from: downloadURL)
+            let (tmpURL, response) = try await downloadService.download(from: downloadURL) { [weak self] fraction in
+                Task { @MainActor in
+                    guard let self else { return }
+                    let clamped = min(max(fraction, 0), 1)
+                    self.installProgress = 0.12 + (clamped * 0.28)
+                }
+            }
             guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
                 throw URLError(.badServerResponse)
             }
@@ -585,35 +596,21 @@ final class AppUpdateManager: ObservableObject {
                 throw UpdateError.invalidCodeSignature
             }
 
-            let currentApp = Bundle.main.bundleURL.standardizedFileURL
-            let targetDir = currentApp.deletingLastPathComponent()
-            let backupApp = targetDir.appendingPathComponent("\(currentApp.deletingPathExtension().lastPathComponent)-backup-\(Int(Date().timeIntervalSince1970)).app")
-
-            do {
-                installProgress = 0.86
-                installPhase = "Installing app update…"
-                try fileManager.moveItem(at: currentApp, to: backupApp)
-                try fileManager.moveItem(at: appBundle, to: currentApp)
-            } catch {
-                if fileManager.fileExists(atPath: backupApp.path), !fileManager.fileExists(atPath: currentApp.path) {
-                    try? fileManager.moveItem(at: backupApp, to: currentApp)
-                }
-                throw UpdateError.installUnsupported("Automatic install failed due to file permissions. Use Download Update for manual install.")
-            }
-
+            installProgress = 0.88
+            installPhase = "Preparing manual install…"
+            preparedUpdateAppURL = appBundle
             installProgress = 1.0
-            installPhase = "Install complete."
+            installPhase = "Ready to install."
+            awaitingInstallCompletionAction = true
             if interactive {
-                awaitingInstallCompletionAction = true
-                installMessage = "Update installed. Choose “Restart App” or “Install & Close App”."
+                installMessage = "Download complete. Click “Show in Finder”, then replace the app in Applications manually."
             } else {
-                installMessage = "Update installed. Relaunching…"
-                NSWorkspace.shared.openApplication(at: currentApp, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
-                NSApp.terminate(nil)
+                installMessage = "Update downloaded. Open the app package in Finder and install manually."
             }
         } catch {
             installProgress = 0
             installPhase = ""
+            preparedUpdateAppURL = nil
             installMessage = error.localizedDescription
             if let release = latestRelease {
                 openURL(release.downloadURL ?? release.releaseURL)
@@ -906,3 +903,73 @@ private struct GitHubAssetPayload: Decodable {
         case browserDownloadURL = "browser_download_url"
     }
 }
+
+#if os(macOS)
+private final class ReleaseAssetDownloadService: NSObject, URLSessionDownloadDelegate {
+    private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
+    private var progressHandler: ((Double) -> Void)?
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.waitsForConnectivity = true
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
+
+    deinit {
+        session.invalidateAndCancel()
+    }
+
+    func download(from url: URL, progress: @escaping (Double) -> Void) async throws -> (URL, URLResponse) {
+        guard continuation == nil else {
+            throw URLError(.cannotLoadFromNetwork)
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 120
+
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            self.progressHandler = progress
+            let task = session.downloadTask(with: request)
+            task.resume()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard totalBytesExpectedToWrite > 0 else { return }
+        let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        progressHandler?(fraction)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let continuation else { return }
+        guard let response = downloadTask.response else {
+            self.continuation = nil
+            self.progressHandler = nil
+            continuation.resume(throwing: URLError(.badServerResponse))
+            return
+        }
+        self.continuation = nil
+        self.progressHandler = nil
+        continuation.resume(returning: (location, response))
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let error, let continuation else { return }
+        self.continuation = nil
+        self.progressHandler = nil
+        continuation.resume(throwing: error)
+    }
+}
+#else
+private final class ReleaseAssetDownloadService {
+    func download(from url: URL, progress: @escaping (Double) -> Void) async throws -> (URL, URLResponse) {
+        progress(0)
+        return try await URLSession.shared.download(from: url)
+    }
+}
+#endif

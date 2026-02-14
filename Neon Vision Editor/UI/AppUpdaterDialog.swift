@@ -148,14 +148,19 @@ struct AppUpdaterDialog: View {
             switch appUpdateManager.status {
             case .updateAvailable:
                 if appUpdateManager.awaitingInstallCompletionAction {
-                    Spacer()
-
-                    Button("Install & Close App") {
-                        appUpdateManager.completeInstalledUpdate(restart: false)
+                    Button("Close") {
+                        appUpdateManager.dismissPreparedUpdatePrompt()
+                        isPresented = false
                     }
 
-                    Button("Restart App") {
-                        appUpdateManager.completeInstalledUpdate(restart: true)
+                    Spacer()
+
+                    Button("View Releases") {
+                        appUpdateManager.openReleasePage()
+                    }
+
+                    Button("Show in Finder") {
+                        appUpdateManager.revealPreparedUpdateInFinder()
                     }
                     .buttonStyle(.borderedProminent)
                 } else {

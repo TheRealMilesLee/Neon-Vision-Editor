@@ -133,6 +133,13 @@ wait_for_pre_release_ci() {
   return 1
 }
 
+echo "Verifying release docs are up to date for ${TAG}..."
+docs_check_cmd=(scripts/prepare_release_docs.py "$TAG" --check)
+if [[ ${#DATE_ARG[@]} -gt 0 ]]; then
+  docs_check_cmd+=("${DATE_ARG[@]}")
+fi
+"${docs_check_cmd[@]}"
+
 echo "Running release preflight for ${TAG}..."
 scripts/ci/release_preflight.sh "$TAG"
 

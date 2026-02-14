@@ -1612,6 +1612,9 @@ struct CustomTextEditor: NSViewRepresentable {
             if textView.insertionPointColor != caretColor {
                 textView.insertionPointColor = caretColor
             }
+            if textView.textColor != baseTextColor {
+                textView.textColor = baseTextColor
+            }
             textView.typingAttributes[.foregroundColor] = baseTextColor
             textView.selectedTextAttributes = [
                 .backgroundColor: NSColor(theme.selection)
@@ -2239,10 +2242,13 @@ struct CustomTextEditor: UIViewRepresentable {
             context.coordinator.lastLineHeight = lineHeightMultiple
         }
         let theme = currentEditorTheme(colorScheme: colorScheme)
+        let baseColor = UIColor(theme.text)
+        textView.textColor = baseColor
         textView.tintColor = UIColor(theme.cursor)
         textView.backgroundColor = translucentBackgroundEnabled ? .clear : UIColor(theme.background)
         textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
         textView.textContainer.widthTracksTextView = isLineWrapEnabled && !isLargeFileMode
+        textView.typingAttributes[.foregroundColor] = baseColor
         if isLargeFileMode || !showLineNumbers {
             uiView.lineNumberView.isHidden = true
         } else {

@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.15**
+> Latest release: **v0.4.16**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.15**
+- Latest release: **v0.4.16**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,14 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.16 (summary)
+
+- Added a release-doc synchronization gate to `release_all.sh` via `prepare_release_docs.py --check` so releases fail fast when docs are stale.
+- Added a delegate-based updater download service that reports live progress into the update dialog.
+- Improved updater install flow to stay user-driven/manual after verification, with Finder handoff instead of in-place app replacement.
+- Improved editor appearance switching so base text colors are enforced immediately on light/dark mode changes across macOS and iOS.
+- Fixed light-mode editor base text color to consistently use dark text across themes.
+
 ### v0.4.15 (summary)
 
 - Fixed the editor `Highlight Current Line` behavior on macOS so previous line background highlights are cleared and only the active line remains highlighted.
@@ -133,14 +141,6 @@ If macOS blocks first launch:
 - Added keychain-state restore/cleanup steps to notarized release workflows (and workflow templates) to prevent user keychain list/default/login mutations after signing jobs.
 - Improved macOS translucent-window rendering by enforcing unified toolbar style and full-size content behavior when translucency is enabled.
 - Improved cross-platform theme application so iOS/macOS editor text + syntax colors respect the selected settings theme in both translucent and non-translucent modes.
-
-### v0.4.13 (summary)
-
-- Added `scripts/run_selfhosted_notarized_release.sh` helper to trigger/watch the self-hosted notarized release workflow and verify uploaded assets.
-- Hardened updater repository-source validation to accept both `github.com/{owner}/{repo}` and GitHub REST API paths (`api.github.com/repos/{owner}/{repo}`).
-- Improved updater behavior in local Xcode/DerivedData runs by disabling automatic install/relaunch in development runtime.
-- Fixed update dialog failures caused by over-strict GitHub release-source path validation.
-- Fixed startup reliability by removing eager Keychain token reads/migration on launch paths and treating missing-keychain datastore statuses as non-fatal token-missing cases.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -161,12 +161,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.15`
+- Tag: `v0.4.16`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.15
+git rev-parse --verify v0.4.16
 ```
 
 - Verify downloaded artifact checksum locally:
