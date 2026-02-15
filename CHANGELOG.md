@@ -4,6 +4,18 @@ All notable changes to **Neon Vision Editor** are documented in this file.
 
 The format follows *Keep a Changelog*. Versions use semantic versioning with prerelease tags.
 
+## [v0.4.18] - 2026-02-15
+
+### Added
+- Added iOS/macOS regression coverage in the editor refresh path so syntax highlighting remains stable across toolbar/menu and focus transitions.
+
+### Improved
+- Improved editor rendering consistency by preventing view-update color assignments from overriding attributed syntax token colors.
+
+### Fixed
+- Fixed iOS issue where opening the toolbar `...` menu could temporarily drop syntax highlighting.
+- Fixed macOS issue where moving focus away from the editor/window could temporarily drop syntax highlighting.
+
 ## [v0.4.17] - 2026-02-15
 
 ### Added

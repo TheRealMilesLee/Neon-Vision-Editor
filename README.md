@@ -17,7 +17,7 @@
 </p>
 
 > Status: **active release**  
-> Latest release: **v0.4.17**
+> Latest release: **v0.4.18**
 > Platform target: **macOS 26 (Tahoe)** compatible with **macOS Sequoia**
 > Apple Silicon: tested / Intel: not tested
 
@@ -25,7 +25,7 @@
 
 Prebuilt binaries are available on [GitHub Releases](https://github.com/h3pdesign/Neon-Vision-Editor/releases).
 
-- Latest release: **v0.4.17**
+- Latest release: **v0.4.18**
 - TestFlight beta: [Join here](https://testflight.apple.com/join/YWB2fGAP)
 - Architecture: Apple Silicon (Intel not tested)
 - Notarization: *is finally there*
@@ -122,6 +122,13 @@ If macOS blocks first launch:
 
 ## Changelog
 
+### v0.4.18 (summary)
+
+- Added iOS/macOS regression coverage in the editor refresh path so syntax highlighting remains stable across toolbar/menu and focus transitions.
+- Improved editor rendering consistency by preventing view-update color assignments from overriding attributed syntax token colors.
+- Fixed iOS issue where opening the toolbar `...` menu could temporarily drop syntax highlighting.
+- Fixed macOS issue where moving focus away from the editor/window could temporarily drop syntax highlighting.
+
 ### v0.4.17 (summary)
 
 - Added translucency-toggle highlight refresh wiring so editor recoloring is explicitly re-triggered when window translucency changes.
@@ -135,10 +142,6 @@ If macOS blocks first launch:
 - Improved updater install flow to stay user-driven/manual after verification, with Finder handoff instead of in-place app replacement.
 - Improved editor appearance switching so base text colors are enforced immediately on light/dark mode changes across macOS and iOS.
 - Fixed light-mode editor base text color to consistently use dark text across themes.
-
-### v0.4.15 (summary)
-
-- Fixed the editor `Highlight Current Line` behavior on macOS so previous line background highlights are cleared and only the active line remains highlighted.
 
 Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
@@ -159,12 +162,12 @@ Full release history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Release Integrity
 
-- Tag: `v0.4.17`
+- Tag: `v0.4.18`
 - Tagged commit: `TBD`
 - Verify local tag target:
 
 ```bash
-git rev-parse --verify v0.4.17
+git rev-parse --verify v0.4.18
 ```
 
 - Verify downloaded artifact checksum locally:

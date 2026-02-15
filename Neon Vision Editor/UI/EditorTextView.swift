@@ -1612,9 +1612,6 @@ struct CustomTextEditor: NSViewRepresentable {
             if textView.insertionPointColor != caretColor {
                 textView.insertionPointColor = caretColor
             }
-            if textView.textColor != baseTextColor {
-                textView.textColor = baseTextColor
-            }
             textView.typingAttributes[.foregroundColor] = baseTextColor
             textView.selectedTextAttributes = [
                 .backgroundColor: NSColor(theme.selection)
@@ -1700,6 +1697,7 @@ struct CustomTextEditor: NSViewRepresentable {
         var lastLineHeight: CGFloat?
         private var lastHighlightToken: Int = 0
         private var lastSelectionLocation: Int = -1
+        private var lastTranslucencyEnabled: Bool?
         private var isApplyingHighlight = false
         private var highlightGeneration: Int = 0
 
@@ -1720,6 +1718,7 @@ struct CustomTextEditor: NSViewRepresentable {
             lastLineHeight = nil
             lastHighlightToken = 0
             lastSelectionLocation = -1
+            lastTranslucencyEnabled = nil
         }
 
         func scheduleHighlightIfNeeded(currentText: String? = nil, immediate: Bool = false) {
@@ -1750,6 +1749,7 @@ struct CustomTextEditor: NSViewRepresentable {
             let scheme = parent.colorScheme
             let lineHeightValue: CGFloat = parent.lineHeightMultiple
             let token = parent.highlightRefreshToken
+            let translucencyEnabled = parent.translucentBackgroundEnabled
             let selectionLocation: Int = {
                 if Thread.isMainThread {
                     return textView?.selectedRange().location ?? 0
@@ -1783,6 +1783,7 @@ struct CustomTextEditor: NSViewRepresentable {
                 self.lastLineHeight = lineHeightValue
                 self.lastHighlightToken = token
                 self.lastSelectionLocation = selectionLocation
+                self.lastTranslucencyEnabled = self.parent.translucentBackgroundEnabled
                 return
             }
 
@@ -1800,7 +1801,8 @@ struct CustomTextEditor: NSViewRepresentable {
                 lastColorScheme == scheme &&
                 lastLineHeight == lineHeightValue &&
                 lastHighlightToken == token &&
-                lastSelectionLocation == selectionLocation {
+                lastSelectionLocation == selectionLocation &&
+                lastTranslucencyEnabled == translucencyEnabled {
                 return
             }
             let shouldRunImmediate = immediate || lastHighlightedText.isEmpty || lastHighlightToken != token
@@ -1922,6 +1924,7 @@ struct CustomTextEditor: NSViewRepresentable {
                     self.lastLineHeight = lineHeightValue
                     self.lastHighlightToken = token
                     self.lastSelectionLocation = selectedLocation
+                    self.lastTranslucencyEnabled = self.parent.translucentBackgroundEnabled
 
                     // Re-apply visibility preference after recoloring.
                     self.parent.applyInvisibleCharacterPreference(tv)
@@ -2243,7 +2246,6 @@ struct CustomTextEditor: UIViewRepresentable {
         }
         let theme = currentEditorTheme(colorScheme: colorScheme)
         let baseColor = UIColor(theme.text)
-        textView.textColor = baseColor
         textView.tintColor = UIColor(theme.cursor)
         textView.backgroundColor = translucentBackgroundEnabled ? .clear : UIColor(theme.background)
         textView.textContainer.lineBreakMode = (isLineWrapEnabled && !isLargeFileMode) ? .byWordWrapping : .byClipping
@@ -2275,6 +2277,7 @@ struct CustomTextEditor: UIViewRepresentable {
         var lastLineHeight: CGFloat?
         private var lastHighlightToken: Int = 0
         private var lastSelectionLocation: Int = -1
+        private var lastTranslucencyEnabled: Bool?
         private var isApplyingHighlight = false
         private var highlightGeneration: Int = 0
 
@@ -2307,6 +2310,7 @@ struct CustomTextEditor: UIViewRepresentable {
             let scheme = parent.colorScheme
             let lineHeight = parent.lineHeightMultiple
             let token = parent.highlightRefreshToken
+            let translucencyEnabled = parent.translucentBackgroundEnabled
             let selectionLocation = textView.selectedRange.location
 
             if parent.isLargeFileMode {
@@ -2316,6 +2320,7 @@ struct CustomTextEditor: UIViewRepresentable {
                 lastLineHeight = lineHeight
                 lastHighlightToken = token
                 lastSelectionLocation = selectionLocation
+                lastTranslucencyEnabled = translucencyEnabled
                 return
             }
 
@@ -2324,7 +2329,8 @@ struct CustomTextEditor: UIViewRepresentable {
                 scheme == lastColorScheme &&
                 lineHeight == lastLineHeight &&
                 lastHighlightToken == token &&
-                lastSelectionLocation == selectionLocation {
+                lastSelectionLocation == selectionLocation &&
+                lastTranslucencyEnabled == translucencyEnabled {
                 return
             }
 
@@ -2453,6 +2459,7 @@ struct CustomTextEditor: UIViewRepresentable {
                 self.lastLineHeight = self.parent.lineHeightMultiple
                 self.lastHighlightToken = token
                 self.lastSelectionLocation = selectedRange.location
+                self.lastTranslucencyEnabled = self.parent.translucentBackgroundEnabled
                 self.container?.updateLineNumbers(for: text, fontSize: self.parent.fontSize)
                 self.syncLineNumberScroll()
             }

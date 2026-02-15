@@ -220,11 +220,12 @@ struct WelcomeTourView: View {
     private let pages: [TourPage] = [
         TourPage(
             title: "What’s New in This Release",
-            subtitle: "Major changes since v0.4.16:",
+            subtitle: "Major changes since v0.4.17:",
             bullets: [
-                "Added translucency-toggle highlight refresh wiring so editor recoloring is explicitly re-triggered when window translucency changes.",
-                "Improved syntax-highlighting stability during appearance/translucency transitions by forcing an immediate refresh instead of waiting for unrelated edits.",
-                "Fixed a macOS editor bug where toggling translucent window mode could temporarily hide syntax highlighting until another action (for example changing font size) forced a rehighlight."
+                "Added iOS/macOS regression coverage in the editor refresh path so syntax highlighting remains stable across toolbar/menu and focus transitions.",
+                "Improved editor rendering consistency by preventing view-update color assignments from overriding attributed syntax token colors.",
+                "Fixed iOS issue where opening the toolbar `...` menu could temporarily drop syntax highlighting.",
+                "Fixed macOS issue where moving focus away from the editor/window could temporarily drop syntax highlighting."
             ],
             iconName: "sparkles.rectangle.stack",
             colors: [Color(red: 0.40, green: 0.28, blue: 0.90), Color(red: 0.96, green: 0.46, blue: 0.55)],
